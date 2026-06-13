@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO artwork_cache\n             (profile_id, kind, remote_id, source_key, local_path, content_type,\n              etag, last_modified, downloaded_at, last_accessed_at)\n             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)\n             ON CONFLICT(profile_id, kind, remote_id) DO UPDATE SET\n               source_key = excluded.source_key,\n               local_path = excluded.local_path,\n               content_type = excluded.content_type,\n               etag = excluded.etag,\n               last_modified = excluded.last_modified,\n               downloaded_at = excluded.downloaded_at,\n               last_accessed_at = excluded.last_accessed_at",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 10
+    },
+    "nullable": []
+  },
+  "hash": "4bc5ca288775bed82a26ccb75ad5a155fd53c94a47a8d898fd413ecf75c64ea0"
+}

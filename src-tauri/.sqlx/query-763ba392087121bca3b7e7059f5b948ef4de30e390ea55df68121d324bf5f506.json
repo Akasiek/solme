@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT a.remote_id, a.name, a.artist_name, a.year, a.song_count,\n                    art.local_path AS artwork_path\n             FROM albums a\n             JOIN library_sync_state s\n               ON s.profile_id = a.profile_id\n              AND s.active_generation = a.generation\n             LEFT JOIN artwork_cache art\n               ON art.profile_id = a.profile_id\n              AND art.kind = 'album'\n              AND art.remote_id = a.remote_id\n             WHERE a.profile_id = ?\n             ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE\n             LIMIT ? OFFSET ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "year",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "name": "song_count",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "song_count"
+          }
+        }
+      },
+      {
+        "name": "artwork_path",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "763ba392087121bca3b7e7059f5b948ef4de30e390ea55df68121d324bf5f506"
+}

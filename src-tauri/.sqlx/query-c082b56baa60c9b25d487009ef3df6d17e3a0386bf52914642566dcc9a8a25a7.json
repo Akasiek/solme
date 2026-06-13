@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM artists WHERE profile_id = ? AND generation <> ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c082b56baa60c9b25d487009ef3df6d17e3a0386bf52914642566dcc9a8a25a7"
+}

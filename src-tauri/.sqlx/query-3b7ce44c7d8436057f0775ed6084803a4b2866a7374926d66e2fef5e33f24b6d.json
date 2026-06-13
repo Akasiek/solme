@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT artist_count, album_count, song_count, last_success_at\n             FROM library_sync_state WHERE profile_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "artist_count",
+        "ordinal": 0,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "artist_count"
+          }
+        }
+      },
+      {
+        "name": "album_count",
+        "ordinal": 1,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "album_count"
+          }
+        }
+      },
+      {
+        "name": "song_count",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "song_count"
+          }
+        }
+      },
+      {
+        "name": "last_success_at",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "last_success_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "3b7ce44c7d8436057f0775ed6084803a4b2866a7374926d66e2fef5e33f24b6d"
+}

@@ -1,0 +1,38 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT a.remote_id, a.cover_art_id AS \"cover_art_id!: String\"\n             FROM albums a\n             JOIN library_sync_state s\n               ON s.profile_id = a.profile_id\n              AND s.active_generation = a.generation\n             WHERE a.profile_id = ? AND a.cover_art_id IS NOT NULL",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "cover_art_id!: String",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "cover_art_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false,
+      true
+    ]
+  },
+  "hash": "b45aec6db295e4b5af4786d2e208ed396d1872fbf75c5b2fedcf5746f8eaa2e1"
+}

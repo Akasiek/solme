@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM albums WHERE profile_id = ? AND generation <> ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "c99280fd0172f1e135ef0479772268d4498233d219e3520be4a1f213eea36d81"
+}

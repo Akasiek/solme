@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "INSERT INTO library_sync_state\n             (profile_id, active_generation, server_revision, last_success_at,\n              artist_count, album_count, song_count)\n             VALUES (?, ?, ?, ?, ?, ?, ?)\n             ON CONFLICT(profile_id) DO UPDATE SET\n               active_generation = excluded.active_generation,\n               server_revision = excluded.server_revision,\n               last_success_at = excluded.last_success_at,\n               artist_count = excluded.artist_count,\n               album_count = excluded.album_count,\n               song_count = excluded.song_count",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 7
+    },
+    "nullable": []
+  },
+  "hash": "313ed99c4bd4c1b6a14465c956d902ff00f449056c43288df3f56e1b3d975acc"
+}

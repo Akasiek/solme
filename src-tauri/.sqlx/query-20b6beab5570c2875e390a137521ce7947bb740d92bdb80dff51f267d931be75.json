@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM genres WHERE profile_id = ? AND generation <> ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "20b6beab5570c2875e390a137521ce7947bb740d92bdb80dff51f267d931be75"
+}

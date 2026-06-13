@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT server_revision FROM library_sync_state WHERE profile_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "server_revision",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "server_revision"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      true
+    ]
+  },
+  "hash": "68f95e24e7cd64f8a4271a0b1a635f5b29d0351e980269d86195503419104f3e"
+}

@@ -1,0 +1,26 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT a.remote_id\n             FROM artists a\n             JOIN library_sync_state s\n               ON s.profile_id = a.profile_id\n              AND s.active_generation = a.generation\n             WHERE a.profile_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "remote_id"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 1
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "3749cdba3dc18fcbcd5b504619cb269b406aa2ebd235dad7d716b62ab77c5312"
+}

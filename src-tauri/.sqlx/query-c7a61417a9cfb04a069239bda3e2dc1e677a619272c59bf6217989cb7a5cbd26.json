@@ -1,0 +1,50 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT local_path, source_key, downloaded_at\n             FROM artwork_cache\n             WHERE profile_id = ? AND kind = ? AND remote_id = ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "local_path",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      },
+      {
+        "name": "source_key",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "source_key"
+          }
+        }
+      },
+      {
+        "name": "downloaded_at",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "downloaded_at"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      true,
+      true,
+      true
+    ]
+  },
+  "hash": "c7a61417a9cfb04a069239bda3e2dc1e677a619272c59bf6217989cb7a5cbd26"
+}
