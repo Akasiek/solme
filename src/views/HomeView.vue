@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onMounted, onUnmounted, ref } from "vue";
 
-import type { LibrarySummary, LibrarySyncStatus, SavedServerProfile, ServerInfo } from "../types";
+import type { LibrarySummary, LibrarySyncStatus, SavedServerProfile, ServerInfo } from "@/types";
 
 const serverType = ref("navidrome");
 const serverUrl = ref("");

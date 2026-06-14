@@ -2,8 +2,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { onMounted, onUnmounted, ref } from "vue";
 
-import { formatTime } from "../format";
-import type { PlayerStatus } from "../types";
+import type { PlayerStatus } from "@/types";
+import { formatTime } from "@/utils/format";
 
 const status = ref<PlayerStatus | null>(null);
 const message = ref("");

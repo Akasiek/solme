@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { ref, watch } from "vue";
 import { RouterLink, useRoute, useRouter } from "vue-router";
 
-import type { CachedAlbum } from "../types";
+import type { CachedAlbum } from "@/types";
 
 const route = useRoute();
 const router = useRouter();

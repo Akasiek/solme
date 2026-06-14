@@ -3,8 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
-import { formatTime } from "../format";
-import type { CachedAlbum, CachedSong } from "../types";
+import type { CachedAlbum, CachedSong } from "@/types";
+import { formatTime } from "@/utils/format";
 
 const props = defineProps<{ albumId: string }>();
 const router = useRouter();
