@@ -43,6 +43,11 @@ impl PlayerService {
         Ok(())
     }
 
+    fn append_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
+        self.lock_queue()?.extend(songs);
+        Ok(())
+    }
+
     fn clear_queue(&self) -> Result<(), String> {
         self.lock_queue()?.clear();
         Ok(())
@@ -73,6 +78,22 @@ impl PlayerService {
 
         self.audio.load_queue(&sources, start_index)?;
         self.replace_queue(songs)
+    }
+
+    pub async fn queue_album(&self, album_id: &str) -> Result<(), String> {
+        let (profile_id, server) = self.server.current_server()?;
+        let songs = self.repository.songs(&profile_id, album_id).await?;
+        if songs.is_empty() {
+            return Err("Album has no cached songs".to_string());
+        }
+
+        let sources = songs
+            .iter()
+            .map(|song| server.playback_uri(&song.remote_id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        self.audio.append_queue(&sources)?;
+        self.append_queue(songs)
     }
 
     pub fn pause(&self) -> Result<(), String> {
@@ -237,6 +258,51 @@ mod tests {
         });
     }
 
+    #[test]
+    fn appends_album_to_current_queue() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+
+            let songs = vec![song("song-1"), song("song-2")];
+            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+                songs: songs.clone(),
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+            );
+
+            player.play_album("album-1", Some("song-2")).await.unwrap();
+            player.queue_album("album-2").await.unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.start_index, 1);
+            assert_eq!(
+                audio.appended_sources,
+                [
+                    "https://music.example.com/song-1",
+                    "https://music.example.com/song-2"
+                ]
+            );
+            drop(audio);
+
+            let status = player.status().unwrap();
+            assert_eq!(status.current_song.unwrap().remote_id, "song-2");
+            assert_eq!(status.queue_position, Some(2));
+            assert_eq!(status.queue_length, 4);
+        });
+    }
+
     fn song(id: &str) -> CachedSong {
         CachedSong {
             remote_id: id.to_string(),
@@ -253,6 +319,7 @@ mod tests {
     #[derive(Default)]
     struct MockAudioState {
         sources: Vec<String>,
+        appended_sources: Vec<String>,
         start_index: usize,
         playing: bool,
         paused: bool,
@@ -270,6 +337,15 @@ mod tests {
             state.sources = sources.to_vec();
             state.start_index = start_index;
             state.playing = true;
+            Ok(())
+        }
+
+        fn append_queue(&self, sources: &[String]) -> Result<(), String> {
+            self.state
+                .lock()
+                .unwrap()
+                .appended_sources
+                .extend_from_slice(sources);
             Ok(())
         }
 

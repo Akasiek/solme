@@ -1,5 +1,6 @@
 pub trait AudioBackend: Send + Sync {
     fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String>;
+    fn append_queue(&self, sources: &[String]) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn resume(&self) -> Result<(), String>;
     fn stop(&self) -> Result<(), String>;

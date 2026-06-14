@@ -14,6 +14,14 @@ pub async fn play_album(
 }
 
 #[tauri::command]
+pub async fn queue_album(
+    album_id: String,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.queue_album(&album_id).await
+}
+
+#[tauri::command]
 pub fn pause(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.pause()
 }

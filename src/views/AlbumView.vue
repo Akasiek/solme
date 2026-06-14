@@ -35,6 +35,15 @@ async function play(startSongId?: string) {
   }
 }
 
+async function queueAlbum() {
+  try {
+    await invoke("queue_album", { albumId: props.albumId });
+    message.value = "Album added to queue";
+  } catch (error) {
+    message.value = String(error);
+  }
+}
+
 onMounted(loadAlbum);
 </script>
 
@@ -49,7 +58,10 @@ onMounted(loadAlbum);
       <span v-if="album.year">- {{ album.year }}</span>
     </p>
     <p>{{ album.songCount }} tracks</p>
-    <p><button type="button" @click="play()">Play album</button></p>
+    <p>
+      <button type="button" @click="play()">Play album</button>
+      <button type="button" @click="queueAlbum">Add album to queue</button>
+    </p>
 
     <ol>
       <li v-for="song in songs" :key="song.remoteId">

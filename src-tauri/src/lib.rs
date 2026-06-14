@@ -3,7 +3,8 @@ use crate::commands::library::{
     get_library_sync_status, search_cached_albums, sync_library,
 };
 use crate::commands::player::{
-    get_player_status, next, pause, play_album, previous, resume, seek, set_volume, stop,
+    get_player_status, next, pause, play_album, previous, queue_album, resume, seek, set_volume,
+    stop,
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, forget_saved_server_profile,
@@ -25,6 +26,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             play_album,
+            queue_album,
             pause,
             resume,
             stop,

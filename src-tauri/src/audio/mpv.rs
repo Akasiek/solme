@@ -80,6 +80,17 @@ impl AudioBackend for MpvBackend {
         self.set_paused(false, "start playback")
     }
 
+    fn append_queue(&self, sources: &[String]) -> Result<(), String> {
+        if sources.is_empty() {
+            return Err("Cannot append an empty queue".to_string());
+        }
+
+        for source in sources {
+            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
+        }
+        Ok(())
+    }
+
     fn pause(&self) -> Result<(), String> {
         self.set_paused(true, "pause playback")
     }
