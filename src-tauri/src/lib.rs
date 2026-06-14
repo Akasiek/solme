@@ -33,7 +33,7 @@ pub fn run() {
             let cache_dir = app.path().app_cache_dir()?;
             let server = Arc::new(MusicServerService::new(
                 config_dir.join("server-profile.json"),
-                Box::new(SystemCredentialStore),
+                Box::new(SystemCredentialStore::new().map_err(std::io::Error::other)?),
             ));
             let repository = Arc::new(
                 tauri::async_runtime::block_on(SqliteLibraryRepository::open(
