@@ -52,6 +52,7 @@ rand = "0.10"
 uuid = { version = "1", features = ["v4"] }
 
 # Audio
+libc = "0.2"
 libmpv2 = "6"
 
 # Credentials

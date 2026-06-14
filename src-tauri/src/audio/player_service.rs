@@ -1,31 +1,467 @@
-use super::backend::AudioBackend;
+use std::sync::{Arc, Mutex, MutexGuard};
+
+use crate::{
+    library::{CachedSong, LibraryRepository},
+    server::MusicServerService,
+};
+
+use super::{
+    backend::AudioBackend,
+    models::{PlaybackState, PlayerStatus},
+};
 
 pub struct PlayerService {
-    backend: Box<dyn AudioBackend>,
+    audio: Box<dyn AudioBackend>,
+    server: Arc<MusicServerService>,
+    repository: Arc<dyn LibraryRepository>,
+    queue: Mutex<Vec<CachedSong>>,
 }
 
 impl PlayerService {
-    pub fn new(backend: Box<dyn AudioBackend>) -> Self {
-        Self { backend }
+    pub fn new(
+        audio: Box<dyn AudioBackend>,
+        server: Arc<MusicServerService>,
+        repository: Arc<dyn LibraryRepository>,
+    ) -> Self {
+        Self {
+            audio,
+            server,
+            repository,
+            queue: Mutex::new(Vec::new()),
+        }
     }
 
-    pub fn play_file(&self, path: String) -> Result<(), String> {
-        self.backend.play_file(path)
+    fn lock_queue(&self) -> Result<MutexGuard<'_, Vec<CachedSong>>, String> {
+        self.queue
+            .lock()
+            .map_err(|_| "Player queue lock was poisoned".to_string())
+    }
+
+    fn replace_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
+        let mut queue = self.lock_queue()?;
+        *queue = songs;
+        Ok(())
+    }
+
+    fn clear_queue(&self) -> Result<(), String> {
+        self.lock_queue()?.clear();
+        Ok(())
+    }
+
+    pub async fn play_album(
+        &self,
+        album_id: &str,
+        start_song_id: Option<&str>,
+    ) -> Result<(), String> {
+        let (profile_id, server) = self.server.current_server()?;
+        let songs = self.repository.songs(&profile_id, album_id).await?;
+        if songs.is_empty() {
+            return Err("Album has no cached songs".to_string());
+        }
+
+        let start_index = match start_song_id {
+            Some(song_id) => songs
+                .iter()
+                .position(|song| song.remote_id == song_id)
+                .ok_or_else(|| "Selected song does not belong to this album".to_string())?,
+            None => 0,
+        };
+        let sources = songs
+            .iter()
+            .map(|song| server.playback_uri(&song.remote_id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        self.audio.load_queue(&sources, start_index)?;
+        self.replace_queue(songs)
     }
 
     pub fn pause(&self) -> Result<(), String> {
-        self.backend.pause()
+        self.audio.pause()
     }
 
     pub fn resume(&self) -> Result<(), String> {
-        self.backend.resume()
+        self.audio.resume()
     }
 
     pub fn stop(&self) -> Result<(), String> {
-        self.backend.stop()
+        self.audio.stop()?;
+        self.clear_queue()
+    }
+
+    pub fn next(&self) -> Result<(), String> {
+        self.audio.next()
+    }
+
+    pub fn previous(&self) -> Result<(), String> {
+        self.audio.previous()
+    }
+
+    pub fn seek(&self, position_seconds: f64) -> Result<(), String> {
+        self.audio.seek(position_seconds)
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
-        self.backend.set_volume(volume)
+        self.audio.set_volume(volume)
+    }
+
+    pub fn status(&self) -> Result<PlayerStatus, String> {
+        let audio_status = self.audio.status();
+        let queue = self.lock_queue()?;
+        let current_song = audio_status
+            .playlist_position
+            .and_then(|position| queue.get(position))
+            .cloned();
+        let state = if !audio_status.playing {
+            PlaybackState::Stopped
+        } else if audio_status.paused {
+            PlaybackState::Paused
+        } else {
+            PlaybackState::Playing
+        };
+
+        Ok(PlayerStatus {
+            state,
+            current_song,
+            position_seconds: audio_status.position_seconds,
+            duration_seconds: audio_status.duration_seconds,
+            queue_position: audio_status.playlist_position.map(|position| position + 1),
+            queue_length: queue.len(),
+            volume: audio_status.volume,
+        })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        path::PathBuf,
+        sync::{Arc, Mutex},
+    };
+
+    use async_trait::async_trait;
+
+    use super::PlayerService;
+    use crate::{
+        audio::{
+            backend::{AudioBackend, AudioBackendStatus},
+            models::PlaybackState,
+        },
+        credentials::CredentialStore,
+        library::{
+            models::{
+                Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
+                CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
+            },
+            LibraryRepository,
+        },
+        server::{backend::MusicServer, MusicServerService, ServerInfo},
+    };
+
+    #[test]
+    fn plays_full_album_from_selected_song() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+
+            let songs = vec![song("song-1"), song("song-2"), song("song-3")];
+            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+                songs: songs.clone(),
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+            );
+
+            player.play_album("album-1", Some("song-2")).await.unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.start_index, 1);
+            assert_eq!(
+                audio.sources,
+                [
+                    "https://music.example.com/song-1",
+                    "https://music.example.com/song-2",
+                    "https://music.example.com/song-3"
+                ]
+            );
+            drop(audio);
+
+            let status = player.status().unwrap();
+            assert_eq!(status.state, PlaybackState::Playing);
+            assert_eq!(
+                status.current_song.map(|song| song.remote_id).as_deref(),
+                Some("song-2")
+            );
+            assert_eq!(status.queue_position, Some(2));
+            assert_eq!(status.queue_length, 3);
+        });
+    }
+
+    #[test]
+    fn rejects_song_outside_selected_album() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+                songs: vec![song("song-1")],
+            });
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::new(Mutex::new(MockAudioState::default())),
+                }),
+                server_service,
+                repository,
+            );
+
+            assert_eq!(
+                player
+                    .play_album("album-1", Some("other-song"))
+                    .await
+                    .unwrap_err(),
+                "Selected song does not belong to this album"
+            );
+        });
+    }
+
+    fn song(id: &str) -> CachedSong {
+        CachedSong {
+            remote_id: id.to_string(),
+            album_id: "album-1".to_string(),
+            title: id.to_string(),
+            artist_name: "Artist".to_string(),
+            album_name: "Album".to_string(),
+            track_number: Some(1),
+            disc_number: Some(1),
+            duration_seconds: 180,
+        }
+    }
+
+    #[derive(Default)]
+    struct MockAudioState {
+        sources: Vec<String>,
+        start_index: usize,
+        playing: bool,
+        paused: bool,
+        position_seconds: f64,
+        volume: f64,
+    }
+
+    struct MockAudioBackend {
+        state: Arc<Mutex<MockAudioState>>,
+    }
+
+    impl AudioBackend for MockAudioBackend {
+        fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.sources = sources.to_vec();
+            state.start_index = start_index;
+            state.playing = true;
+            Ok(())
+        }
+
+        fn pause(&self) -> Result<(), String> {
+            self.state.lock().unwrap().paused = true;
+            Ok(())
+        }
+
+        fn resume(&self) -> Result<(), String> {
+            self.state.lock().unwrap().paused = false;
+            Ok(())
+        }
+
+        fn stop(&self) -> Result<(), String> {
+            self.state.lock().unwrap().playing = false;
+            Ok(())
+        }
+
+        fn next(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn previous(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn seek(&self, position_seconds: f64) -> Result<(), String> {
+            self.state.lock().unwrap().position_seconds = position_seconds;
+            Ok(())
+        }
+
+        fn set_volume(&self, volume: f64) -> Result<(), String> {
+            self.state.lock().unwrap().volume = volume;
+            Ok(())
+        }
+
+        fn status(&self) -> AudioBackendStatus {
+            let state = self.state.lock().unwrap();
+            AudioBackendStatus {
+                playing: state.playing,
+                paused: state.paused,
+                position_seconds: state.position_seconds,
+                duration_seconds: 180.0,
+                playlist_position: state.playing.then_some(state.start_index),
+                volume: state.volume,
+            }
+        }
+    }
+
+    struct MockMusicServer;
+
+    #[async_trait]
+    impl MusicServer for MockMusicServer {
+        async fn ping(&self) -> Result<ServerInfo, String> {
+            unimplemented!()
+        }
+
+        async fn library_revision(&self) -> Result<Option<String>, String> {
+            unimplemented!()
+        }
+
+        async fn artists(&self) -> Result<Vec<Artist>, String> {
+            unimplemented!()
+        }
+
+        async fn albums(&self) -> Result<Vec<Album>, String> {
+            unimplemented!()
+        }
+
+        async fn album(&self, _id: &str) -> Result<AlbumWithSongs, String> {
+            unimplemented!()
+        }
+
+        async fn genres(&self) -> Result<Vec<Genre>, String> {
+            unimplemented!()
+        }
+
+        fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+            Ok(format!("https://music.example.com/{song_id}"))
+        }
+
+        async fn album_artwork(
+            &self,
+            _cover_art_id: &str,
+        ) -> Result<Option<BinaryArtwork>, String> {
+            unimplemented!()
+        }
+
+        async fn artist_artwork(&self, _artist_id: &str) -> Result<Option<BinaryArtwork>, String> {
+            unimplemented!()
+        }
+    }
+
+    struct MockRepository {
+        songs: Vec<CachedSong>,
+    }
+
+    #[async_trait]
+    impl LibraryRepository for MockRepository {
+        async fn server_revision(&self, _profile_id: &str) -> Result<Option<String>, String> {
+            unimplemented!()
+        }
+
+        async fn activate_snapshot(
+            &self,
+            _profile_id: &str,
+            _generation: &str,
+            _revision: Option<&str>,
+            _snapshot: &LibrarySnapshot,
+            _completed_at: i64,
+        ) -> Result<(), String> {
+            unimplemented!()
+        }
+
+        async fn summary(&self, _profile_id: &str) -> Result<LibrarySummary, String> {
+            unimplemented!()
+        }
+
+        async fn albums(
+            &self,
+            _profile_id: &str,
+            _offset: i64,
+            _limit: i64,
+        ) -> Result<Vec<CachedAlbum>, String> {
+            unimplemented!()
+        }
+
+        async fn album(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Option<CachedAlbum>, String> {
+            unimplemented!()
+        }
+
+        async fn search_albums(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedAlbum>, String> {
+            unimplemented!()
+        }
+
+        async fn songs(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<CachedSong>, String> {
+            Ok(self.songs.clone())
+        }
+
+        async fn artwork_is_fresh(
+            &self,
+            _profile_id: &str,
+            _kind: &str,
+            _remote_id: &str,
+            _source_key: Option<&str>,
+            _fresh_after: i64,
+        ) -> Result<bool, String> {
+            unimplemented!()
+        }
+
+        async fn artwork_candidates(
+            &self,
+            _profile_id: &str,
+        ) -> Result<Vec<ArtworkCandidate>, String> {
+            unimplemented!()
+        }
+
+        async fn save_artwork(
+            &self,
+            _profile_id: &str,
+            _artwork: ArtworkCacheRecord,
+        ) -> Result<(), String> {
+            unimplemented!()
+        }
+    }
+
+    struct MemoryCredentialStore;
+
+    impl CredentialStore for MemoryCredentialStore {
+        fn save(&self, _id: &str, _password: &str) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn load(&self, _id: &str) -> Result<String, String> {
+            Ok("password".to_string())
+        }
+
+        fn delete(&self, _id: &str) -> Result<(), String> {
+            Ok(())
+        }
     }
 }

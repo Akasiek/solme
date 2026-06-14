@@ -12,6 +12,7 @@ pub trait MusicServer: Send + Sync {
     async fn albums(&self) -> Result<Vec<Album>, String>;
     async fn album(&self, id: &str) -> Result<AlbumWithSongs, String>;
     async fn genres(&self) -> Result<Vec<Genre>, String>;
+    fn playback_uri(&self, song_id: &str) -> Result<String, String>;
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String>;
     async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String>;
 }

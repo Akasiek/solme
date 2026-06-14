@@ -14,8 +14,8 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumWithSongs, CachedAlbum, LibrarySnapshot, LibrarySummary, LibrarySyncPhase,
-        LibrarySyncStatus,
+        Album, AlbumWithSongs, CachedAlbum, CachedSong, LibrarySnapshot, LibrarySummary,
+        LibrarySyncPhase, LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -101,6 +101,32 @@ impl LibrarySyncService {
             return Ok(Vec::new());
         };
         self.repository.albums(&profile_id, offset, limit).await
+    }
+
+    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbum>, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(None);
+        };
+        self.repository.album(&profile_id, album_id).await
+    }
+
+    pub async fn search_albums(&self, query: &str, limit: i64) -> Result<Vec<CachedAlbum>, String> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository
+            .search_albums(&profile_id, query, limit)
+            .await
+    }
+
+    pub async fn songs(&self, album_id: &str) -> Result<Vec<CachedSong>, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository.songs(&profile_id, album_id).await
     }
 
     async fn synchronize(&self, force: bool) -> Result<(), String> {
@@ -319,7 +345,8 @@ mod tests {
         library::{
             models::{
                 Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
-                CachedAlbum, Genre, LibrarySnapshot, LibrarySummary, LibrarySyncPhase, Song,
+                CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary, LibrarySyncPhase,
+                Song,
             },
             repository::LibraryRepository,
         },
@@ -575,6 +602,10 @@ mod tests {
             }])
         }
 
+        fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+            Ok(format!("https://music.example.com/stream/{song_id}"))
+        }
+
         async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
             if self.fail_artwork.load(Ordering::SeqCst) > 0 {
                 return Err("artwork failed".to_string());
@@ -649,6 +680,31 @@ mod tests {
             _offset: i64,
             _limit: i64,
         ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(Vec::new())
+        }
+
+        async fn album(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Option<CachedAlbum>, String> {
+            Ok(None)
+        }
+
+        async fn search_albums(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(Vec::new())
+        }
+
+        async fn songs(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<CachedSong>, String> {
             Ok(Vec::new())
         }
 

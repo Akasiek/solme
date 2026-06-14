@@ -64,7 +64,7 @@ impl NavidromeBackend {
         url
     }
 
-    fn auth_query(&self) -> Vec<(&'static str, String)> {
+    fn subsonic_request_parameters(&self) -> Vec<(&'static str, String)> {
         let salt = format!("{:016x}", random::<u64>());
         let token = format!("{:x}", md5::compute(format!("{}{}", self.password, salt)));
 
@@ -74,8 +74,13 @@ impl NavidromeBackend {
             ("s", salt),
             ("v", API_VERSION.to_string()),
             ("c", CLIENT_NAME.to_string()),
-            ("f", "json".to_string()),
         ]
+    }
+
+    fn subsonic_json_parameters(&self) -> Vec<(&'static str, String)> {
+        let mut query = self.subsonic_request_parameters();
+        query.push(("f", "json".to_string()));
+        query
     }
 
     async fn request_json<T>(
@@ -89,7 +94,7 @@ impl NavidromeBackend {
         let response = self
             .client
             .get(self.endpoint_url(endpoint))
-            .query(&self.auth_query())
+            .query(&self.subsonic_json_parameters())
             .query(parameters)
             .send()
             .await
@@ -123,13 +128,10 @@ impl NavidromeBackend {
         parameters: &[(&str, String)],
         source_key: String,
     ) -> Result<Option<BinaryArtwork>, String> {
-        let mut query = self.auth_query();
-        query.retain(|(key, _)| *key != "f");
-
         let response = self
             .client
             .get(url)
-            .query(&query)
+            .query(&self.subsonic_request_parameters())
             .query(parameters)
             .send()
             .await
@@ -237,6 +239,18 @@ impl MusicServer for NavidromeBackend {
             .collect())
     }
 
+    fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+        if song_id.is_empty() {
+            return Err("Song ID cannot be empty".to_string());
+        }
+
+        let mut url = self.endpoint_url("stream");
+        let mut query = self.subsonic_request_parameters();
+        query.push(("id", song_id.to_string()));
+        url.query_pairs_mut().extend_pairs(query);
+        Ok(url.into())
+    }
+
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
         self.request_binary(
             self.endpoint_url("getCoverArt"),
@@ -328,6 +342,8 @@ fn header_value(response: &Response, name: reqwest::header::HeaderName) -> Optio
 
 #[cfg(test)]
 mod tests {
+    use crate::server::backend::MusicServer;
+
     use super::{
         AlbumListPayload, ArtistsPayload, NavidromeBackend, PingPayload, SubsonicEnvelope,
     };
@@ -369,6 +385,25 @@ mod tests {
             result.err().as_deref(),
             Some("Server URL must use HTTP or HTTPS")
         );
+    }
+
+    #[test]
+    fn builds_authenticated_stream_url_without_transcoding() {
+        let backend = backend("https://example.com/music");
+        let url = reqwest::Url::parse(&backend.playback_uri("song-1").unwrap()).unwrap();
+        let query = url
+            .query_pairs()
+            .collect::<std::collections::HashMap<_, _>>();
+
+        assert_eq!(url.path(), "/music/rest/stream.view");
+        assert_eq!(query.get("id").map(|value| value.as_ref()), Some("song-1"));
+        assert_eq!(query.get("u").map(|value| value.as_ref()), Some("user"));
+        assert!(query.contains_key("t"));
+        assert!(query.contains_key("s"));
+        assert!(!query.contains_key("f"));
+        assert!(!query.contains_key("format"));
+        assert!(!query.contains_key("maxBitRate"));
+        assert!(!url.as_str().contains("password"));
     }
 
     #[test]

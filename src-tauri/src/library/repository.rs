@@ -7,7 +7,7 @@ use sqlx::{
 };
 
 use super::models::{
-    AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, Genre,
+    AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, Genre,
     LibrarySnapshot, LibrarySummary, Song,
 };
 
@@ -31,6 +31,14 @@ pub trait LibraryRepository: Send + Sync {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<CachedAlbum>, String>;
+    async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
+    async fn search_albums(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedAlbum>, String>;
+    async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String>;
     async fn artwork_is_fresh(
         &self,
         profile_id: &str,
@@ -427,6 +435,87 @@ impl LibraryRepository for SqliteLibraryRepository {
         .map_err(|error| format!("Failed to read cached albums: {error}"))
     }
 
+    async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
+        sqlx::query_as!(
+            CachedAlbum,
+            "SELECT album.remote_id, album.name, album.artist_name, album.year,
+                    album.song_count, artwork.local_path AS artwork_path
+             FROM albums album
+             JOIN library_sync_state state
+               ON state.profile_id = album.profile_id
+              AND state.active_generation = album.generation
+             LEFT JOIN artwork_cache artwork
+               ON artwork.profile_id = album.profile_id
+              AND artwork.kind = 'album'
+              AND artwork.remote_id = album.remote_id
+             WHERE album.profile_id = ? AND album.remote_id = ?",
+            profile_id,
+            album_id,
+        )
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album: {error}"))
+    }
+
+    async fn search_albums(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedAlbum>, String> {
+        let pattern = format!("%{}%", query.trim());
+        let limit = limit.clamp(1, 500);
+        sqlx::query_as!(
+            CachedAlbum,
+            "SELECT album.remote_id, album.name, album.artist_name, album.year,
+                    album.song_count, artwork.local_path AS artwork_path
+             FROM albums album
+             JOIN library_sync_state state
+               ON state.profile_id = album.profile_id
+              AND state.active_generation = album.generation
+             LEFT JOIN artwork_cache artwork
+               ON artwork.profile_id = album.profile_id
+              AND artwork.kind = 'album'
+              AND artwork.remote_id = album.remote_id
+             WHERE album.profile_id = ?
+               AND (album.name LIKE ? COLLATE NOCASE
+                    OR album.artist_name LIKE ? COLLATE NOCASE)
+             ORDER BY album.artist_name COLLATE NOCASE,
+                      album.year,
+                      album.name COLLATE NOCASE
+             LIMIT ?",
+            profile_id,
+            pattern,
+            pattern,
+            limit,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to search cached albums: {error}"))
+    }
+
+    async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {
+        sqlx::query_as!(
+            CachedSong,
+            "SELECT song.remote_id, song.album_id, song.title, song.artist_name,
+                    song.album_name, song.track_number, song.disc_number,
+                    song.duration_seconds
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             WHERE song.profile_id = ? AND song.album_id = ?
+             ORDER BY COALESCE(song.disc_number, 1),
+                      COALESCE(song.track_number, 2147483647),
+                      song.title COLLATE NOCASE",
+            profile_id,
+            album_id,
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached songs: {error}"))
+    }
+
     async fn artwork_is_fresh(
         &self,
         profile_id: &str,
@@ -642,6 +731,76 @@ mod tests {
         });
     }
 
+    #[test]
+    fn returns_cached_songs_in_disc_and_track_order() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            let album = &mut snapshot.albums[0];
+            album.songs = vec![
+                song("song-3", Some(1), Some(2)),
+                song("song-1", Some(1), Some(1)),
+                song("song-4", Some(2), Some(2)),
+                song("song-2", Some(2), Some(1)),
+            ];
+            album.album.song_count = album.songs.len() as i64;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let songs = repository.songs("profile", "album-1").await.unwrap();
+            let ids = songs
+                .into_iter()
+                .map(|song| song.remote_id)
+                .collect::<Vec<_>>();
+            assert_eq!(ids, ["song-1", "song-2", "song-3", "song-4"]);
+
+            repository.pool.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn searches_active_albums_by_album_or_artist_name() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Kind of Blue".to_string();
+            snapshot.albums[0].album.artist_name = "Miles Davis".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_album = repository
+                .search_albums("profile", "kind", 20)
+                .await
+                .unwrap();
+            let by_artist = repository
+                .search_albums("profile", "MILES", 20)
+                .await
+                .unwrap();
+            assert_eq!(by_album.len(), 1);
+            assert_eq!(by_artist.len(), 1);
+            assert_eq!(by_album[0].remote_id, "album-1");
+            assert_eq!(
+                repository
+                    .album("profile", "album-1")
+                    .await
+                    .unwrap()
+                    .map(|album| album.name)
+                    .as_deref(),
+                Some("Kind of Blue")
+            );
+
+            repository.pool.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
     async fn repository() -> (SqliteLibraryRepository, std::path::PathBuf) {
         let directory = std::env::temp_dir().join(format!("solme-library-{}", Uuid::new_v4()));
         let repository = SqliteLibraryRepository::open(&directory.join("library.sqlite"))
@@ -651,22 +810,7 @@ mod tests {
     }
 
     fn snapshot(duplicate_song: bool) -> LibrarySnapshot {
-        let song = Song {
-            remote_id: "song-1".to_string(),
-            album_id: "album-1".to_string(),
-            artist_id: Some("artist-1".to_string()),
-            title: "Song".to_string(),
-            artist_name: "Artist".to_string(),
-            album_name: "Album".to_string(),
-            track_number: Some(1),
-            disc_number: Some(1),
-            year: Some(2026),
-            duration_seconds: 180,
-            suffix: Some("opus".to_string()),
-            content_type: Some("audio/ogg".to_string()),
-            cover_art_id: Some("cover-1".to_string()),
-            genres: vec!["Jazz".to_string()],
-        };
+        let song = song("song-1", Some(1), Some(1));
         let mut songs = vec![song.clone()];
         if duplicate_song {
             songs.push(song);
@@ -697,6 +841,25 @@ mod tests {
                 song_count: 1,
                 album_count: 1,
             }],
+        }
+    }
+
+    fn song(remote_id: &str, track_number: Option<i64>, disc_number: Option<i64>) -> Song {
+        Song {
+            remote_id: remote_id.to_string(),
+            album_id: "album-1".to_string(),
+            artist_id: Some("artist-1".to_string()),
+            title: remote_id.to_string(),
+            artist_name: "Artist".to_string(),
+            album_name: "Album".to_string(),
+            track_number,
+            disc_number,
+            year: Some(2026),
+            duration_seconds: 180,
+            suffix: Some("opus".to_string()),
+            content_type: Some("audio/ogg".to_string()),
+            cover_art_id: Some("cover-1".to_string()),
+            genres: vec!["Jazz".to_string()],
         }
     }
 

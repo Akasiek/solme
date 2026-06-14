@@ -1,0 +1,110 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT song.remote_id, song.album_id, song.title, song.artist_name,\n                    song.album_name, song.track_number, song.disc_number,\n                    song.duration_seconds\n             FROM songs song\n             JOIN library_sync_state state\n               ON state.profile_id = song.profile_id\n              AND state.active_generation = song.generation\n             WHERE song.profile_id = ? AND song.album_id = ?\n             ORDER BY COALESCE(song.disc_number, 1),\n                      COALESCE(song.track_number, 2147483647),\n                      song.title COLLATE NOCASE",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "album_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "album_name",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "album_name"
+          }
+        }
+      },
+      {
+        "name": "track_number",
+        "ordinal": 5,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "track_number"
+          }
+        }
+      },
+      {
+        "name": "disc_number",
+        "ordinal": 6,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "disc_number"
+          }
+        }
+      },
+      {
+        "name": "duration_seconds",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "duration_seconds"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "0628ac9f822fec6b37bd3ffe63e5b13d1c26a55d37fc75c4c4bc75c5e6f920e1"
+}

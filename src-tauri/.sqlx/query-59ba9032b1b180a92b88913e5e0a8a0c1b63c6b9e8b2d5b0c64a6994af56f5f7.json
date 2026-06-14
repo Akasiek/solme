@@ -1,0 +1,86 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT album.remote_id, album.name, album.artist_name, album.year,\n                    album.song_count, artwork.local_path AS artwork_path\n             FROM albums album\n             JOIN library_sync_state state\n               ON state.profile_id = album.profile_id\n              AND state.active_generation = album.generation\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = album.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = album.remote_id\n             WHERE album.profile_id = ?\n               AND (album.name LIKE ? COLLATE NOCASE\n                    OR album.artist_name LIKE ? COLLATE NOCASE)\n             ORDER BY album.artist_name COLLATE NOCASE,\n                      album.year,\n                      album.name COLLATE NOCASE\n             LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "year",
+        "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "year"
+          }
+        }
+      },
+      {
+        "name": "song_count",
+        "ordinal": 4,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "song_count"
+          }
+        }
+      },
+      {
+        "name": "artwork_path",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 4
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      false,
+      true
+    ]
+  },
+  "hash": "59ba9032b1b180a92b88913e5e0a8a0c1b63c6b9e8b2d5b0c64a6994af56f5f7"
+}

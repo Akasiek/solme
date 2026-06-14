@@ -104,6 +104,19 @@ pub struct CachedAlbum {
     pub artwork_path: Option<String>,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedSong {
+    pub remote_id: String,
+    pub album_id: String,
+    pub title: String,
+    pub artist_name: String,
+    pub album_name: String,
+    pub track_number: Option<i64>,
+    pub disc_number: Option<i64>,
+    pub duration_seconds: i64,
+}
+
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum LibrarySyncPhase {
