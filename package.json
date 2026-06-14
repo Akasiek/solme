@@ -14,8 +14,10 @@
     "fmt:check": "oxfmt --check"
   },
   "dependencies": {
+    "@tailwindcss/vite": "^4.3.1",
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-opener": "^2",
+    "tailwindcss": "^4.3.1",
     "vue": "^3.5.38",
     "vue-router": "^5.1.0"
   },
