@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT song.remote_id, song.album_id, song.title, song.artist_name,\n                    song.album_name, song.track_number, song.disc_number,\n                    song.duration_seconds\n             FROM songs song\n             JOIN library_sync_state state\n               ON state.profile_id = song.profile_id\n              AND state.active_generation = song.generation\n             WHERE song.profile_id = ? AND song.album_id = ?\n             ORDER BY COALESCE(song.disc_number, 1),\n                      COALESCE(song.track_number, 2147483647),\n                      song.title COLLATE NOCASE",
+  "query": "SELECT song.remote_id, song.album_id, song.title, song.artist_name,\n                    song.album_name, artwork.local_path AS artwork_path,\n                    song.track_number, song.disc_number, song.duration_seconds\n             FROM songs song\n             JOIN library_sync_state state\n               ON state.profile_id = song.profile_id\n              AND state.active_generation = song.generation\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = song.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = song.album_id\n             WHERE song.profile_id = ? AND song.album_id = ?\n             ORDER BY COALESCE(song.disc_number, 1),\n                      COALESCE(song.track_number, 2147483647),\n                      song.title COLLATE NOCASE",
   "describe": {
     "columns": [
       {
@@ -59,8 +59,19 @@
         }
       },
       {
-        "name": "track_number",
+        "name": "artwork_path",
         "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      },
+      {
+        "name": "track_number",
+        "ordinal": 6,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -71,7 +82,7 @@
       },
       {
         "name": "disc_number",
-        "ordinal": 6,
+        "ordinal": 7,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -82,7 +93,7 @@
       },
       {
         "name": "duration_seconds",
-        "ordinal": 7,
+        "ordinal": 8,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -103,8 +114,9 @@
       false,
       true,
       true,
+      true,
       false
     ]
   },
-  "hash": "0628ac9f822fec6b37bd3ffe63e5b13d1c26a55d37fc75c4c4bc75c5e6f920e1"
+  "hash": "04fa600d6b01e69ad70c00d0c9d31056f30155e5f58b023cf5832b4a784c6a20"
 }

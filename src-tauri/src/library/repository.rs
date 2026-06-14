@@ -498,12 +498,16 @@ impl LibraryRepository for SqliteLibraryRepository {
         sqlx::query_as!(
             CachedSong,
             "SELECT song.remote_id, song.album_id, song.title, song.artist_name,
-                    song.album_name, song.track_number, song.disc_number,
-                    song.duration_seconds
+                    song.album_name, artwork.local_path AS artwork_path,
+                    song.track_number, song.disc_number, song.duration_seconds
              FROM songs song
              JOIN library_sync_state state
                ON state.profile_id = song.profile_id
               AND state.active_generation = song.generation
+             LEFT JOIN artwork_cache artwork
+               ON artwork.profile_id = song.profile_id
+              AND artwork.kind = 'album'
+              AND artwork.remote_id = song.album_id
              WHERE song.profile_id = ? AND song.album_id = ?
              ORDER BY COALESCE(song.disc_number, 1),
                       COALESCE(song.track_number, 2147483647),

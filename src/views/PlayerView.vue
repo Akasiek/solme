@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { onMounted, onUnmounted, ref } from "vue";
 
 import type { PlayerStatus } from "@/types";
+import { artworkSource } from "@/utils/artwork";
 import { formatTime } from "@/utils/format";
 
 const status = ref<PlayerStatus | null>(null);
@@ -65,6 +66,13 @@ onUnmounted(() => {
   <p>{{ message }}</p>
 
   <template v-if="status">
+    <img
+      v-if="status.currentSong?.artworkPath"
+      :src="artworkSource(status.currentSong.artworkPath)"
+      :alt="`${status.currentSong.albumName} cover`"
+      width="300"
+      height="300"
+    />
     <p v-if="status.currentSong">
       {{ status.currentSong.artistName }} - {{ status.currentSong.title }} ({{
         status.queuePosition

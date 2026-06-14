@@ -310,6 +310,7 @@ mod tests {
             title: id.to_string(),
             artist_name: "Artist".to_string(),
             album_name: "Album".to_string(),
+            artwork_path: None,
             track_number: Some(1),
             disc_number: Some(1),
             duration_seconds: 180,

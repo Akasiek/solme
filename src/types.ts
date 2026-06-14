@@ -44,6 +44,7 @@ export interface CachedSong {
   title: string;
   artistName: string;
   albumName: string;
+  artworkPath?: string;
   trackNumber?: number;
   discNumber?: number;
   durationSeconds: number;

@@ -112,6 +112,7 @@ pub struct CachedSong {
     pub title: String,
     pub artist_name: String,
     pub album_name: String,
+    pub artwork_path: Option<String>,
     pub track_number: Option<i64>,
     pub disc_number: Option<i64>,
     pub duration_seconds: i64,

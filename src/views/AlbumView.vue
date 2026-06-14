@@ -4,6 +4,7 @@ import { onMounted, ref } from "vue";
 import { RouterLink, useRouter } from "vue-router";
 
 import type { CachedAlbum, CachedSong } from "@/types";
+import { artworkSource } from "@/utils/artwork";
 import { formatTime } from "@/utils/format";
 
 const props = defineProps<{ albumId: string }>();
@@ -53,6 +54,13 @@ onMounted(loadAlbum);
 
   <template v-if="album">
     <h2>{{ album.name }}</h2>
+    <img
+      v-if="album.artworkPath"
+      :src="artworkSource(album.artworkPath)"
+      :alt="`${album.name} cover`"
+      width="300"
+      height="300"
+    />
     <p>
       {{ album.artistName }}
       <span v-if="album.year">- {{ album.year }}</span>
