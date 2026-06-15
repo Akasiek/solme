@@ -1,10 +1,10 @@
-use std::{path::Path, sync::Arc, time::Duration};
+use super::{PlaybackState, PlayerService, PlayerStatus};
 use mpris_server::{
     zbus::{fdo, Result},
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
     Server, Time, TrackId, Volume,
 };
-use super::{PlaybackState, PlayerService, PlayerStatus};
+use std::{path::Path, sync::Arc, time::Duration};
 
 const STATUS_INTERVAL: Duration = Duration::from_secs(1);
 
