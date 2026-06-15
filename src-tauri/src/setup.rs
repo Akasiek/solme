@@ -7,9 +7,10 @@ use std::{
 use tauri::Manager;
 
 use crate::{
-    audio::{MpvBackend, PlayerService},
+    audio::{MpvBackend, PlayerService, ScrobbleRepository, ScrobbleService},
     credentials::SystemCredentialStore,
-    library::{LibraryRepository, LibrarySyncService, SqliteLibraryRepository},
+    database::{SqliteRepository, DATABASE_FILE_NAME},
+    library::{LibraryRepository, LibrarySyncService},
     server::MusicServerService,
 };
 
@@ -24,13 +25,19 @@ struct AppDirs {
 pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let dirs = resolve_app_dirs(app)?;
     let server = create_server(&dirs.config)?;
-    let library_repository = create_library_repository(&dirs.data)?;
+    let database_path = dirs.data.join(DATABASE_FILE_NAME);
+    let repository = create_repository(&database_path)?;
+    let library_repository: Arc<dyn LibraryRepository> = repository.clone();
+    let scrobble_repository: Arc<dyn ScrobbleRepository> = repository;
     let library_sync = create_library_sync(&dirs.cache, &server, &library_repository);
     let player = create_player(&server, library_repository)?;
+    let scrobble_service = create_scrobble_service(&player, &server, scrobble_repository);
 
     app.manage(Arc::clone(&server));
     app.manage(Arc::clone(&library_sync));
-    app.manage(player);
+    app.manage(Arc::clone(&player));
+    app.manage(Arc::clone(&scrobble_service));
+    scrobble_service.start();
     start_saved_server_connection(server, library_sync);
     Ok(())
 }
@@ -50,12 +57,10 @@ fn create_server(config_dir: &Path) -> SetupResult<Arc<MusicServerService>> {
     )))
 }
 
-fn create_library_repository(data_dir: &Path) -> SetupResult<Arc<dyn LibraryRepository>> {
-    let library_repository = tauri::async_runtime::block_on(SqliteLibraryRepository::open(
-        &data_dir.join("library.sqlite"),
-    ))
-    .map_err(std::io::Error::other)?;
-    Ok(Arc::new(library_repository))
+fn create_repository(database_path: &Path) -> SetupResult<Arc<SqliteRepository>> {
+    let repository = tauri::async_runtime::block_on(SqliteRepository::open(database_path))
+        .map_err(std::io::Error::other)?;
+    Ok(Arc::new(repository))
 }
 
 fn create_library_sync(
@@ -80,6 +85,18 @@ fn create_player(
         Arc::clone(server),
         library_repository,
     )))
+}
+
+fn create_scrobble_service(
+    player: &Arc<PlayerService>,
+    server: &Arc<MusicServerService>,
+    repository: Arc<dyn ScrobbleRepository>,
+) -> Arc<ScrobbleService> {
+    Arc::new(ScrobbleService::new(
+        Arc::clone(player),
+        Arc::clone(server),
+        repository,
+    ))
 }
 
 fn start_saved_server_connection(

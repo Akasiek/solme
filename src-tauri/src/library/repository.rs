@@ -1,10 +1,9 @@
-use std::{path::Path, time::Duration};
+use std::path::Path;
 
 use async_trait::async_trait;
-use sqlx::{
-    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions, SqliteSynchronous},
-    QueryBuilder, Sqlite, SqlitePool, Transaction,
-};
+use sqlx::{QueryBuilder, Sqlite, Transaction};
+
+use crate::database::SqliteRepository;
 
 use super::models::{
     AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, Genre,
@@ -55,39 +54,7 @@ pub trait LibraryRepository: Send + Sync {
     ) -> Result<(), String>;
 }
 
-pub struct SqliteLibraryRepository {
-    pool: SqlitePool,
-}
-
-impl SqliteLibraryRepository {
-    pub async fn open(path: &Path) -> Result<Self, String> {
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent)
-                .map_err(|error| format!("Failed to create database directory: {error}"))?;
-        }
-
-        let options = SqliteConnectOptions::new()
-            .filename(path)
-            .create_if_missing(true)
-            .foreign_keys(true)
-            .journal_mode(SqliteJournalMode::Wal)
-            .synchronous(SqliteSynchronous::Normal)
-            .busy_timeout(Duration::from_secs(5));
-
-        let pool = SqlitePoolOptions::new()
-            .max_connections(3)
-            .connect_with(options)
-            .await
-            .map_err(|error| format!("Failed to open library database: {error}"))?;
-
-        sqlx::migrate!("./migrations")
-            .run(&pool)
-            .await
-            .map_err(|error| format!("Failed to migrate library database: {error}"))?;
-
-        Ok(Self { pool })
-    }
-
+impl SqliteRepository {
     async fn insert_artists(
         transaction: &mut Transaction<'_, Sqlite>,
         profile_id: &str,
@@ -309,7 +276,7 @@ impl SqliteLibraryRepository {
 }
 
 #[async_trait]
-impl LibraryRepository for SqliteLibraryRepository {
+impl LibraryRepository for SqliteRepository {
     async fn server_revision(&self, profile_id: &str) -> Result<Option<String>, String> {
         sqlx::query_scalar!(
             "SELECT server_revision FROM library_sync_state WHERE profile_id = ?",
@@ -636,7 +603,8 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{LibraryRepository, SqliteLibraryRepository};
+    use super::LibraryRepository;
+    use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{Album, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song};
 
     #[test]
@@ -665,7 +633,7 @@ mod tests {
             );
             assert_eq!(repository.albums("profile", 0, 50).await.unwrap().len(), 1);
 
-            repository.pool.close().await;
+            repository.close().await;
             fs::remove_dir_all(directory).unwrap();
         });
     }
@@ -705,7 +673,7 @@ mod tests {
                 Some("revision-1".to_string())
             );
 
-            repository.pool.close().await;
+            repository.close().await;
             fs::remove_dir_all(directory).unwrap();
         });
     }
@@ -730,7 +698,7 @@ mod tests {
                 260
             );
 
-            repository.pool.close().await;
+            repository.close().await;
             fs::remove_dir_all(directory).unwrap();
         });
     }
@@ -761,7 +729,7 @@ mod tests {
                 .collect::<Vec<_>>();
             assert_eq!(ids, ["song-1", "song-2", "song-3", "song-4"]);
 
-            repository.pool.close().await;
+            repository.close().await;
             fs::remove_dir_all(directory).unwrap();
         });
     }
@@ -800,14 +768,14 @@ mod tests {
                 Some("Kind of Blue")
             );
 
-            repository.pool.close().await;
+            repository.close().await;
             fs::remove_dir_all(directory).unwrap();
         });
     }
 
-    async fn repository() -> (SqliteLibraryRepository, std::path::PathBuf) {
+    async fn repository() -> (SqliteRepository, std::path::PathBuf) {
         let directory = std::env::temp_dir().join(format!("solme-library-{}", Uuid::new_v4()));
-        let repository = SqliteLibraryRepository::open(&directory.join("library.sqlite"))
+        let repository = SqliteRepository::open(&directory.join(DATABASE_FILE_NAME))
             .await
             .unwrap();
         (repository, directory)

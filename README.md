@@ -10,7 +10,7 @@ metadata with:
 
 ```sh
 cd src-tauri
-DATABASE_URL="sqlite:///path/to/library.sqlite" cargo sqlx prepare
+DATABASE_URL="sqlite:///path/to/database.sqlite" cargo sqlx prepare
 ```
 
 Bulk inserts use `QueryBuilder`, so they are checked by repository tests instead

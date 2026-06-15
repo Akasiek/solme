@@ -2,7 +2,7 @@ use async_trait::async_trait;
 
 use crate::library::models::{Album, AlbumWithSongs, Artist, BinaryArtwork, Genre};
 
-use super::models::ServerInfo;
+use super::models::{ScrobbleEvent, ServerInfo};
 
 #[async_trait]
 pub trait MusicServer: Send + Sync {
@@ -13,6 +13,12 @@ pub trait MusicServer: Send + Sync {
     async fn album(&self, id: &str) -> Result<AlbumWithSongs, String>;
     async fn genres(&self) -> Result<Vec<Genre>, String>;
     fn playback_uri(&self, song_id: &str) -> Result<String, String>;
+    async fn scrobble(
+        &self,
+        song_id: &str,
+        started_at_ms: i64,
+        event: ScrobbleEvent,
+    ) -> Result<(), String>;
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String>;
     async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String>;
 }

@@ -15,6 +15,7 @@ use crate::setup::setup_app;
 mod audio;
 mod commands;
 mod credentials;
+mod database;
 mod library;
 mod server;
 mod setup;

@@ -175,7 +175,7 @@ mod tests {
             },
             LibraryRepository,
         },
-        server::{backend::MusicServer, MusicServerService, ServerInfo},
+        server::{backend::MusicServer, MusicServerService, ScrobbleEvent, ServerInfo},
     };
 
     #[test]
@@ -426,6 +426,15 @@ mod tests {
 
         fn playback_uri(&self, song_id: &str) -> Result<String, String> {
             Ok(format!("https://music.example.com/{song_id}"))
+        }
+
+        async fn scrobble(
+            &self,
+            _song_id: &str,
+            _started_at_ms: i64,
+            _event: ScrobbleEvent,
+        ) -> Result<(), String> {
+            Ok(())
         }
 
         async fn album_artwork(

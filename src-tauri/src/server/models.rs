@@ -33,6 +33,12 @@ pub struct ServerInfo {
     pub username: String,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum ScrobbleEvent {
+    NowPlaying,
+    Submission,
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredServerProfile {

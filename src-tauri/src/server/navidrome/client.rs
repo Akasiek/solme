@@ -12,9 +12,12 @@ use crate::library::models::{Album, AlbumWithSongs, Artist, BinaryArtwork, Genre
 
 use super::models::{
     AlbumDto, AlbumListPayload, AlbumPayload, ArtistInfoPayload, ArtistsPayload, GenresPayload,
-    PingPayload, ScanStatusPayload, SubsonicEnvelope,
+    PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
 };
-use crate::server::{backend::MusicServer, models::ServerInfo};
+use crate::server::{
+    backend::MusicServer,
+    models::{ScrobbleEvent, ServerInfo},
+};
 
 const API_VERSION: &str = "1.16.1";
 const CLIENT_NAME: &str = "solme";
@@ -83,11 +86,16 @@ impl NavidromeBackend {
         query
     }
 
-    async fn request_json<T>(
+    /// Calls a Subsonic endpoint and returns its validated response envelope.
+    ///
+    /// This handles authentication parameters, requests JSON, rejects HTTP
+    /// failures, deserializes the Subsonic envelope, and converts a Subsonic
+    /// `status = "failed"` response into an error.
+    async fn send_json_request<T>(
         &self,
         endpoint: &str,
         parameters: &[(&str, String)],
-    ) -> Result<T, String>
+    ) -> Result<SubsonicResponse<T>, String>
     where
         T: DeserializeOwned,
     {
@@ -107,19 +115,48 @@ impl NavidromeBackend {
             .await
             .map_err(|error| format!("{endpoint} returned an invalid response: {error}"))?;
 
-        if envelope.subsonic_response.status != "ok" {
-            let message = envelope
-                .subsonic_response
+        let response = envelope.subsonic_response;
+        if response.status != "ok" {
+            let message = response
                 .error
                 .map(|error| error.message)
                 .unwrap_or_else(|| "Unknown server error".to_string());
             return Err(format!("{endpoint} failed: {message}"));
         }
 
-        envelope
-            .subsonic_response
+        Ok(response)
+    }
+
+    /// Calls an endpoint that must return a typed payload.
+    ///
+    /// Use this for read operations such as `getArtists` or `getAlbum`. A
+    /// successful response without the expected payload is treated as invalid.
+    async fn request_payload<T>(
+        &self,
+        endpoint: &str,
+        parameters: &[(&str, String)],
+    ) -> Result<T, String>
+    where
+        T: DeserializeOwned,
+    {
+        self.send_json_request(endpoint, parameters)
+            .await?
             .payload
             .ok_or_else(|| format!("{endpoint} response is missing its payload"))
+    }
+
+    /// Calls an action endpoint where the successful status is the whole result.
+    ///
+    /// Use this for commands such as `scrobble`, whose response confirms success
+    /// but does not contain data needed by the application.
+    async fn request_status(
+        &self,
+        endpoint: &str,
+        parameters: &[(&str, String)],
+    ) -> Result<(), String> {
+        self.send_json_request::<serde_json::Value>(endpoint, parameters)
+            .await?;
+        Ok(())
     }
 
     async fn request_binary(
@@ -157,7 +194,7 @@ impl NavidromeBackend {
 #[async_trait]
 impl MusicServer for NavidromeBackend {
     async fn ping(&self) -> Result<ServerInfo, String> {
-        let response: PingPayload = self.request_json("ping", &[]).await?;
+        let response: PingPayload = self.request_payload("ping", &[]).await?;
 
         Ok(ServerInfo {
             server_type: response
@@ -170,7 +207,7 @@ impl MusicServer for NavidromeBackend {
     }
 
     async fn library_revision(&self) -> Result<Option<String>, String> {
-        let status: ScanStatusPayload = self.request_json("getScanStatus", &[]).await?;
+        let status: ScanStatusPayload = self.request_payload("getScanStatus", &[]).await?;
         Ok(status.scan_status.last_scan.map(|revision| match revision {
             serde_json::Value::String(value) => value,
             value => value.to_string(),
@@ -178,7 +215,7 @@ impl MusicServer for NavidromeBackend {
     }
 
     async fn artists(&self) -> Result<Vec<Artist>, String> {
-        let payload: ArtistsPayload = self.request_json("getArtists", &[]).await?;
+        let payload: ArtistsPayload = self.request_payload("getArtists", &[]).await?;
         Ok(payload
             .artists
             .index
@@ -198,7 +235,7 @@ impl MusicServer for NavidromeBackend {
 
         loop {
             let payload: AlbumListPayload = self
-                .request_json(
+                .request_payload(
                     "getAlbumList2",
                     &[
                         ("type", "alphabeticalByArtist".to_string()),
@@ -220,13 +257,13 @@ impl MusicServer for NavidromeBackend {
 
     async fn album(&self, id: &str) -> Result<AlbumWithSongs, String> {
         let payload: AlbumPayload = self
-            .request_json("getAlbum", &[("id", id.to_string())])
+            .request_payload("getAlbum", &[("id", id.to_string())])
             .await?;
         Ok(payload.album.into_album_with_songs())
     }
 
     async fn genres(&self) -> Result<Vec<Genre>, String> {
-        let payload: GenresPayload = self.request_json("getGenres", &[]).await?;
+        let payload: GenresPayload = self.request_payload("getGenres", &[]).await?;
         Ok(payload
             .genres
             .genre
@@ -251,6 +288,23 @@ impl MusicServer for NavidromeBackend {
         Ok(url.into())
     }
 
+    async fn scrobble(
+        &self,
+        song_id: &str,
+        started_at_ms: i64,
+        event: ScrobbleEvent,
+    ) -> Result<(), String> {
+        if song_id.is_empty() {
+            return Err("Song ID cannot be empty".to_string());
+        }
+
+        self.request_status(
+            "scrobble",
+            &scrobble_parameters(song_id, started_at_ms, event),
+        )
+        .await
+    }
+
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
         self.request_binary(
             self.endpoint_url("getCoverArt"),
@@ -265,7 +319,7 @@ impl MusicServer for NavidromeBackend {
 
     async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String> {
         let payload: ArtistInfoPayload = self
-            .request_json(
+            .request_payload(
                 "getArtistInfo2",
                 &[("id", artist_id.to_string()), ("count", "0".to_string())],
             )
@@ -298,6 +352,21 @@ impl MusicServer for NavidromeBackend {
             .map_err(|error| format!("Artist image returned an HTTP error: {error}"))?;
         binary_artwork(response, source).await.map(Some)
     }
+}
+
+fn scrobble_parameters(
+    song_id: &str,
+    started_at_ms: i64,
+    event: ScrobbleEvent,
+) -> [(&'static str, String); 3] {
+    [
+        ("id", song_id.to_string()),
+        ("time", started_at_ms.to_string()),
+        (
+            "submission",
+            matches!(event, ScrobbleEvent::Submission).to_string(),
+        ),
+    ]
 }
 
 async fn binary_artwork(response: Response, source_key: String) -> Result<BinaryArtwork, String> {
@@ -342,10 +411,11 @@ fn header_value(response: &Response, name: reqwest::header::HeaderName) -> Optio
 
 #[cfg(test)]
 mod tests {
-    use crate::server::backend::MusicServer;
+    use crate::server::{backend::MusicServer, ScrobbleEvent};
 
     use super::{
-        AlbumListPayload, ArtistsPayload, NavidromeBackend, PingPayload, SubsonicEnvelope,
+        scrobble_parameters, AlbumListPayload, ArtistsPayload, NavidromeBackend, PingPayload,
+        SubsonicEnvelope,
     };
 
     #[test]
@@ -404,6 +474,22 @@ mod tests {
         assert!(!query.contains_key("format"));
         assert!(!query.contains_key("maxBitRate"));
         assert!(!url.as_str().contains("password"));
+    }
+
+    #[test]
+    fn maps_scrobble_events_to_subsonic_parameters() {
+        let now_playing = scrobble_parameters("song-1", 1234, ScrobbleEvent::NowPlaying);
+        let submission = scrobble_parameters("song-1", 1234, ScrobbleEvent::Submission);
+
+        assert_eq!(
+            now_playing,
+            [
+                ("id", "song-1".to_string()),
+                ("time", "1234".to_string()),
+                ("submission", "false".to_string()),
+            ]
+        );
+        assert_eq!(submission[2], ("submission", "true".to_string()));
     }
 
     #[test]

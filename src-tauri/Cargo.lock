@@ -3937,6 +3937,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-opener",
+ "tokio",
  "uuid",
  "windows-native-keyring-store",
 ]
