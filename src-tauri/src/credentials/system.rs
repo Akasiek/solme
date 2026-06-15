@@ -2,7 +2,7 @@ use keyring_core::{CredentialStore as KeyringStore, Entry, Error};
 
 use super::CredentialStore;
 
-const KEYRING_SERVICE: &str = "com.solme.app";
+const KEYRING_SERVICE: &str = "com.akasiek.solme";
 
 pub struct SystemCredentialStore;
 
