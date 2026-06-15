@@ -7,11 +7,13 @@ use crate::{
 
 use super::{
     backend::AudioBackend,
+    fader::PlaybackFader,
     models::{PlaybackState, PlayerStatus},
 };
 
 pub struct PlayerService {
-    audio: Box<dyn AudioBackend>,
+    audio: Arc<dyn AudioBackend>,
+    fader: PlaybackFader,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
     queue: Mutex<Vec<CachedSong>>,
@@ -23,8 +25,12 @@ impl PlayerService {
         server: Arc<MusicServerService>,
         repository: Arc<dyn LibraryRepository>,
     ) -> Self {
+        let audio: Arc<dyn AudioBackend> = audio.into();
+        let fader = PlaybackFader::new(Arc::clone(&audio));
+
         Self {
             audio,
+            fader,
             server,
             repository,
             queue: Mutex::new(Vec::new()),
@@ -76,6 +82,7 @@ impl PlayerService {
             .map(|song| server.playback_uri(&song.remote_id))
             .collect::<Result<Vec<_>, _>>()?;
 
+        self.fader.cancel()?;
         self.audio.load_queue(&sources, start_index)?;
         self.replace_queue(songs)
     }
@@ -97,23 +104,26 @@ impl PlayerService {
     }
 
     pub fn pause(&self) -> Result<(), String> {
-        self.audio.pause()
+        self.fader.pause()
     }
 
     pub fn resume(&self) -> Result<(), String> {
-        self.audio.resume()
+        self.fader.resume()
     }
 
     pub fn stop(&self) -> Result<(), String> {
+        self.fader.cancel()?;
         self.audio.stop()?;
         self.clear_queue()
     }
 
     pub fn next(&self) -> Result<(), String> {
+        self.fader.cancel()?;
         self.audio.next()
     }
 
     pub fn previous(&self) -> Result<(), String> {
+        self.fader.cancel()?;
         self.audio.previous()
     }
 
@@ -122,11 +132,12 @@ impl PlayerService {
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
-        self.audio.set_volume(volume)
+        self.fader.set_volume(volume)
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
         let audio_status = self.audio.status();
+        let volume = self.fader.volume()?;
         let queue = self.lock_queue()?;
         let current_song = audio_status
             .playlist_position
@@ -147,7 +158,7 @@ impl PlayerService {
             duration_seconds: audio_status.duration_seconds,
             queue_position: audio_status.playlist_position.map(|position| position + 1),
             queue_length: queue.len(),
-            volume: audio_status.volume,
+            volume,
         })
     }
 }

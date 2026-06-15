@@ -1,4 +1,5 @@
 mod backend;
+mod fader;
 mod models;
 #[cfg(target_os = "linux")]
 mod mpris;
