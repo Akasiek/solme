@@ -61,6 +61,7 @@ keyring-core = "1"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus-secret-service-keyring-store = { version = "1", features = ["crypto-rust"] }
+mpris-server = { version = "0.10", features = ["tokio"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 apple-native-keyring-store = { version = "1", default-features = false, features = ["keychain"] }

@@ -2451,6 +2451,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mpris-server"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70cf358e9a9516cc35ed40eebd56cbe80f5190a7a2b3cd0c2d358c86b879132b"
+dependencies = [
+ "async-channel",
+ "futures-channel",
+ "serde",
+ "trait-variant",
+ "zbus",
+]
+
+[[package]]
 name = "muda"
 version = "0.19.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3929,6 +3942,7 @@ dependencies = [
  "libc",
  "libmpv2",
  "md5",
+ "mpris-server",
  "rand 0.10.1",
  "reqwest",
  "serde",
@@ -4702,7 +4716,9 @@ dependencies = [
  "libc",
  "mio",
  "pin-project-lite",
+ "signal-hook-registry",
  "socket2",
+ "tracing",
  "windows-sys 0.61.2",
 ]
 
@@ -4935,6 +4951,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "db97caf9d906fbde555dd62fa95ddba9eecfd14cb388e4f491a66d74cd5fb79a"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "trait-variant"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "70977707304198400eb4835a78f6a9f928bf41bba420deb8fdb175cd965d77a7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -6135,6 +6162,7 @@ dependencies = [
  "rustix",
  "serde",
  "serde_repr",
+ "tokio",
  "tracing",
  "uds_windows",
  "uuid",

@@ -38,6 +38,8 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     app.manage(Arc::clone(&player));
     app.manage(Arc::clone(&scrobble_service));
     scrobble_service.start();
+    #[cfg(target_os = "linux")]
+    crate::audio::start_mpris_service(Arc::clone(&player));
     start_saved_server_connection(server, library_sync);
     Ok(())
 }
