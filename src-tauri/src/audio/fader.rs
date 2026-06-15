@@ -332,6 +332,17 @@ mod tests {
             Ok(())
         }
 
+        fn load_queue_paused(
+            &self,
+            _sources: &[String],
+            _start_index: usize,
+        ) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.playing = true;
+            state.paused = true;
+            Ok(())
+        }
+
         fn append_queue(&self, _sources: &[String]) -> Result<(), String> {
             Ok(())
         }

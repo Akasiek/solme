@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::{
+    sync::{Arc, Mutex, MutexGuard},
+    time::Duration,
+};
 
 use crate::{
     library::{CachedSong, LibraryRepository},
@@ -11,6 +14,8 @@ use super::{
     models::{PlaybackState, PlayerStatus},
     session::PlaybackSession,
 };
+
+const RESTORE_SEEK_DELAY: Duration = Duration::from_secs(2);
 
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
@@ -193,10 +198,24 @@ impl PlayerService {
             .collect::<Result<Vec<_>, _>>()?;
 
         self.fader.cancel()?;
-        self.audio.load_queue(&sources, session.active_index)?;
-        self.audio.seek(session.position_seconds)?;
-        self.audio.pause()?;
-        self.replace_queue(session.queue)
+        self.replace_queue(session.queue)?;
+        self.audio
+            .load_queue_paused(&sources, session.active_index)?;
+        self.restore_position_after_load(session.position_seconds);
+        Ok(())
+    }
+
+    fn restore_position_after_load(&self, position_seconds: f64) {
+        let position_seconds = position_seconds.max(0.0);
+        if position_seconds <= 0.0 {
+            return;
+        }
+
+        let audio = Arc::clone(&self.audio);
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(RESTORE_SEEK_DELAY).await;
+            let _ = audio.seek(position_seconds);
+        });
     }
 }
 
@@ -384,7 +403,7 @@ mod tests {
 
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.start_index, 1);
-            assert_eq!(audio.position_seconds, 37.5);
+            assert_eq!(audio.position_seconds, 0.0);
             assert!(audio.paused);
             assert_eq!(
                 audio.sources,
@@ -438,6 +457,16 @@ mod tests {
             state.sources = sources.to_vec();
             state.start_index = start_index;
             state.playing = true;
+            state.paused = false;
+            Ok(())
+        }
+
+        fn load_queue_paused(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.sources = sources.to_vec();
+            state.start_index = start_index;
+            state.playing = true;
+            state.paused = true;
             Ok(())
         }
 

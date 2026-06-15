@@ -60,24 +60,11 @@ fn set_numeric_locale() -> Result<(), String> {
 
 impl AudioBackend for MpvBackend {
     fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
-        if sources.is_empty() {
-            return Err("Cannot play an empty queue".to_string());
-        }
-        if start_index >= sources.len() {
-            return Err("Queue start index is out of bounds".to_string());
-        }
+        self.load_queue_with_state(sources, start_index, false)
+    }
 
-        self.set_paused(true, "pause while loading queue")?;
-        self.execute_command(
-            "loadfile",
-            &[&sources[0], "replace"],
-            "load first queue item",
-        )?;
-        for source in &sources[1..] {
-            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
-        }
-        self.set_property("playlist-pos", start_index as i64, "select queue item")?;
-        self.set_paused(false, "start playback")
+    fn load_queue_paused(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+        self.load_queue_with_state(sources, start_index, true)
     }
 
     fn append_queue(&self, sources: &[String]) -> Result<(), String> {
@@ -139,5 +126,33 @@ impl AudioBackend for MpvBackend {
                 .filter(|position| *position >= 0)
                 .map(|position| position as usize),
         }
+    }
+}
+
+impl MpvBackend {
+    fn load_queue_with_state(
+        &self,
+        sources: &[String],
+        start_index: usize,
+        paused: bool,
+    ) -> Result<(), String> {
+        if sources.is_empty() {
+            return Err("Cannot play an empty queue".to_string());
+        }
+        if start_index >= sources.len() {
+            return Err("Queue start index is out of bounds".to_string());
+        }
+
+        self.set_paused(true, "pause while loading queue")?;
+        self.execute_command(
+            "loadfile",
+            &[&sources[0], "replace"],
+            "load first queue item",
+        )?;
+        for source in &sources[1..] {
+            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
+        }
+        self.set_property("playlist-pos", start_index as i64, "select queue item")?;
+        self.set_paused(paused, "set playback state after loading queue")
     }
 }
