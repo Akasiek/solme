@@ -336,6 +336,7 @@ mod tests {
             &self,
             _sources: &[String],
             _start_index: usize,
+            _position_seconds: Option<f64>,
         ) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.playing = true;

@@ -1,4 +1,6 @@
-use libmpv2::{Mpv, SetData};
+use std::time::{Duration, Instant};
+
+use libmpv2::{events::Event, Mpv, SetData};
 
 use super::backend::{AudioBackend, AudioBackendStatus};
 
@@ -60,11 +62,16 @@ fn set_numeric_locale() -> Result<(), String> {
 
 impl AudioBackend for MpvBackend {
     fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
-        self.load_queue_with_state(sources, start_index, false)
+        self.load_queue_with_state(sources, start_index, false, None)
     }
 
-    fn load_queue_paused(&self, sources: &[String], start_index: usize) -> Result<(), String> {
-        self.load_queue_with_state(sources, start_index, true)
+    fn load_queue_paused(
+        &self,
+        sources: &[String],
+        start_index: usize,
+        position_seconds: Option<f64>,
+    ) -> Result<(), String> {
+        self.load_queue_with_state(sources, start_index, true, position_seconds)
     }
 
     fn append_queue(&self, sources: &[String]) -> Result<(), String> {
@@ -135,6 +142,7 @@ impl MpvBackend {
         sources: &[String],
         start_index: usize,
         paused: bool,
+        position_seconds: Option<f64>,
     ) -> Result<(), String> {
         if sources.is_empty() {
             return Err("Cannot play an empty queue".to_string());
@@ -153,6 +161,37 @@ impl MpvBackend {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
         }
         self.set_property("playlist-pos", start_index as i64, "select queue item")?;
-        self.set_paused(paused, "set playback state after loading queue")
+        self.set_paused(paused, "set playback state after loading queue")?;
+
+        if let Some(position_seconds) = position_seconds.filter(|p| *p > 0.0) {
+            self.seek_when_file_is_loaded(position_seconds)?;
+        }
+
+        Ok(())
+    }
+
+    fn seek_when_file_is_loaded(&self, position_seconds: f64) -> Result<(), String> {
+        if !self.wait_for_file_loaded(Duration::from_secs(5)) {
+            return Ok(());
+        }
+
+        self.execute_command(
+            "seek",
+            &[&position_seconds.max(0.0).to_string(), "absolute", "exact"],
+            "restore playback position",
+        )
+    }
+
+    fn wait_for_file_loaded(&self, timeout: Duration) -> bool {
+        let started_at = Instant::now();
+        while let Some(remaining) = timeout.checked_sub(started_at.elapsed()) {
+            match self.mpv.wait_event(remaining.as_secs_f64()) {
+                Some(Ok(Event::FileLoaded)) => return true,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+
+        false
     }
 }
