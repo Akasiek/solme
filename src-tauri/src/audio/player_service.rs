@@ -9,6 +9,7 @@ use super::{
     backend::AudioBackend,
     fader::PlaybackFader,
     models::{PlaybackState, PlayerStatus},
+    session::PlaybackSession,
 };
 
 pub struct PlayerService {
@@ -161,6 +162,42 @@ impl PlayerService {
             volume,
         })
     }
+
+    pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
+        let audio_status = self.audio.status();
+        let queue = self.lock_queue()?.clone();
+        let Some(active_index) = audio_status.playlist_position else {
+            return Ok(None);
+        };
+        if queue.is_empty() || active_index >= queue.len() {
+            return Ok(None);
+        }
+
+        Ok(Some(PlaybackSession {
+            queue,
+            active_index,
+            position_seconds: audio_status.position_seconds.max(0.0),
+        }))
+    }
+
+    pub(crate) fn restore_session(&self, session: PlaybackSession) -> Result<(), String> {
+        if session.queue.is_empty() || session.active_index >= session.queue.len() {
+            return Err("Stored playback session has an invalid queue".to_string());
+        }
+
+        let (_, server) = self.server.current_server()?;
+        let sources = session
+            .queue
+            .iter()
+            .map(|song| server.playback_uri(&song.remote_id))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        self.fader.cancel()?;
+        self.audio.load_queue(&sources, session.active_index)?;
+        self.audio.seek(session.position_seconds)?;
+        self.audio.pause()?;
+        self.replace_queue(session.queue)
+    }
 }
 
 #[cfg(test)]
@@ -177,6 +214,7 @@ mod tests {
         audio::{
             backend::{AudioBackend, AudioBackendStatus},
             models::PlaybackState,
+            session::PlaybackSession,
         },
         credentials::CredentialStore,
         library::{
@@ -311,6 +349,57 @@ mod tests {
             assert_eq!(status.current_song.unwrap().remote_id, "song-2");
             assert_eq!(status.queue_position, Some(2));
             assert_eq!(status.queue_length, 4);
+        });
+    }
+
+    #[test]
+    fn restores_paused_playback_session() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+            );
+            let queue = vec![song("song-1"), song("song-2"), song("song-3")];
+
+            player
+                .restore_session(PlaybackSession {
+                    queue,
+                    active_index: 1,
+                    position_seconds: 37.5,
+                })
+                .unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.start_index, 1);
+            assert_eq!(audio.position_seconds, 37.5);
+            assert!(audio.paused);
+            assert_eq!(
+                audio.sources,
+                [
+                    "https://music.example.com/song-1",
+                    "https://music.example.com/song-2",
+                    "https://music.example.com/song-3"
+                ]
+            );
+            drop(audio);
+
+            let status = player.status().unwrap();
+            assert_eq!(status.state, PlaybackState::Paused);
+            assert_eq!(status.current_song.unwrap().remote_id, "song-2");
+            assert_eq!(status.queue_length, 3);
         });
     }
 

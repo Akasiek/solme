@@ -7,7 +7,10 @@ use std::{
 use tauri::Manager;
 
 use crate::{
-    audio::{MpvBackend, PlayerService, ScrobbleRepository, ScrobbleService},
+    audio::{
+        MpvBackend, PlaybackSessionRepository, PlaybackSessionService, PlayerService,
+        ScrobbleRepository, ScrobbleService,
+    },
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
     library::{LibraryRepository, LibrarySyncService},
@@ -28,19 +31,22 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let database_path = dirs.data.join(DATABASE_FILE_NAME);
     let repository = create_repository(&database_path)?;
     let library_repository: Arc<dyn LibraryRepository> = repository.clone();
-    let scrobble_repository: Arc<dyn ScrobbleRepository> = repository;
+    let scrobble_repository: Arc<dyn ScrobbleRepository> = repository.clone();
+    let session_repository: Arc<dyn PlaybackSessionRepository> = repository;
     let library_sync = create_library_sync(&dirs.cache, &server, &library_repository);
     let player = create_player(&server, library_repository)?;
     let scrobble_service = create_scrobble_service(&player, &server, scrobble_repository);
+    let session_service = create_session_service(&player, &server, session_repository);
 
     app.manage(Arc::clone(&server));
     app.manage(Arc::clone(&library_sync));
     app.manage(Arc::clone(&player));
     app.manage(Arc::clone(&scrobble_service));
+    app.manage(Arc::clone(&session_service));
     scrobble_service.start();
     #[cfg(target_os = "linux")]
     crate::audio::start_mpris_service(Arc::clone(&player));
-    start_saved_server_connection(server, library_sync);
+    start_saved_server_connection(server, library_sync, session_service);
     Ok(())
 }
 
@@ -101,12 +107,27 @@ fn create_scrobble_service(
     ))
 }
 
+fn create_session_service(
+    player: &Arc<PlayerService>,
+    server: &Arc<MusicServerService>,
+    repository: Arc<dyn PlaybackSessionRepository>,
+) -> Arc<PlaybackSessionService> {
+    Arc::new(PlaybackSessionService::new(
+        Arc::clone(player),
+        Arc::clone(server),
+        repository,
+    ))
+}
+
 fn start_saved_server_connection(
     server: Arc<MusicServerService>,
     library_sync: Arc<LibrarySyncService>,
+    session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
         if server.connect_saved().await.is_ok() {
+            let _ = session.restore().await;
+            session.start();
             let _ = library_sync.start(false);
         }
     });

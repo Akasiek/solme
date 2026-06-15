@@ -6,6 +6,7 @@ mod mpris;
 mod mpv;
 mod player_service;
 mod scrobble;
+mod session;
 
 pub use models::{PlaybackState, PlayerStatus};
 #[cfg(target_os = "linux")]
@@ -14,3 +15,5 @@ pub use mpv::MpvBackend;
 pub use player_service::PlayerService;
 pub(crate) use scrobble::ScrobbleRepository;
 pub use scrobble::ScrobbleService;
+pub(crate) use session::PlaybackSessionRepository;
+pub use session::PlaybackSessionService;
