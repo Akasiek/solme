@@ -7,13 +7,10 @@ use std::{
 use tauri::Manager;
 
 use crate::{
-    audio::{
-        MpvBackend, PlaybackSessionRepository, PlaybackSessionService, PlayerService,
-        ScrobbleRepository, ScrobbleService,
-    },
+    audio::{MpvBackend, PlaybackSessionService, PlayerService, ScrobbleService},
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
-    library::{LibraryRepository, LibrarySyncService},
+    library::LibrarySyncService,
     server::MusicServerService,
 };
 
@@ -30,13 +27,10 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let server = create_server(&dirs.config)?;
     let database_path = dirs.data.join(DATABASE_FILE_NAME);
     let repository = create_repository(&database_path)?;
-    let library_repository: Arc<dyn LibraryRepository> = repository.clone();
-    let scrobble_repository: Arc<dyn ScrobbleRepository> = repository.clone();
-    let session_repository: Arc<dyn PlaybackSessionRepository> = repository;
-    let library_sync = create_library_sync(&dirs.cache, &server, &library_repository);
-    let player = create_player(&server, library_repository)?;
-    let scrobble_service = create_scrobble_service(&player, &server, scrobble_repository);
-    let session_service = create_session_service(&player, &server, session_repository);
+    let library_sync = create_library_sync(&dirs.cache, &server, &repository);
+    let player = create_player(&server, &repository)?;
+    let scrobble_service = create_scrobble_service(&player, &server, &repository);
+    let session_service = create_session_service(&player, &server, &repository);
 
     app.manage(Arc::clone(&server));
     app.manage(Arc::clone(&library_sync));
@@ -74,32 +68,35 @@ fn create_repository(database_path: &Path) -> SetupResult<Arc<SqliteRepository>>
 fn create_library_sync(
     cache_dir: &Path,
     server: &Arc<MusicServerService>,
-    library_repository: &Arc<dyn LibraryRepository>,
+    repository: &Arc<SqliteRepository>,
 ) -> Arc<LibrarySyncService> {
+    let repository = Arc::clone(repository);
     Arc::new(LibrarySyncService::new(
         Arc::clone(server),
-        Arc::clone(library_repository),
+        repository,
         cache_dir.join("artwork"),
     ))
 }
 
 fn create_player(
     server: &Arc<MusicServerService>,
-    library_repository: Arc<dyn LibraryRepository>,
+    repository: &Arc<SqliteRepository>,
 ) -> SetupResult<Arc<PlayerService>> {
     let audio = MpvBackend::new().map_err(std::io::Error::other)?;
+    let repository = Arc::clone(repository);
     Ok(Arc::new(PlayerService::new(
         Box::new(audio),
         Arc::clone(server),
-        library_repository,
+        repository,
     )))
 }
 
 fn create_scrobble_service(
     player: &Arc<PlayerService>,
     server: &Arc<MusicServerService>,
-    repository: Arc<dyn ScrobbleRepository>,
+    repository: &Arc<SqliteRepository>,
 ) -> Arc<ScrobbleService> {
+    let repository = Arc::clone(repository);
     Arc::new(ScrobbleService::new(
         Arc::clone(player),
         Arc::clone(server),
@@ -110,8 +107,9 @@ fn create_scrobble_service(
 fn create_session_service(
     player: &Arc<PlayerService>,
     server: &Arc<MusicServerService>,
-    repository: Arc<dyn PlaybackSessionRepository>,
+    repository: &Arc<SqliteRepository>,
 ) -> Arc<PlaybackSessionService> {
+    let repository = Arc::clone(repository);
     Arc::new(PlaybackSessionService::new(
         Arc::clone(player),
         Arc::clone(server),

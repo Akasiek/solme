@@ -13,7 +13,5 @@ pub use models::{PlaybackState, PlayerStatus};
 pub use mpris::start_mpris_service;
 pub use mpv::MpvBackend;
 pub use player_service::PlayerService;
-pub(crate) use scrobble::ScrobbleRepository;
 pub use scrobble::ScrobbleService;
-pub(crate) use session::PlaybackSessionRepository;
 pub use session::PlaybackSessionService;
