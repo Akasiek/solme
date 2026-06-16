@@ -40,7 +40,7 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     scrobble_service.start();
     #[cfg(target_os = "linux")]
     crate::audio::start_mpris_service(Arc::clone(&player));
-    start_saved_server_connection(server, library_sync, session_service);
+    start_saved_server_connection(server, library_sync, player, session_service);
     Ok(())
 }
 
@@ -83,11 +83,13 @@ fn create_player(
     repository: &Arc<SqliteRepository>,
 ) -> SetupResult<Arc<PlayerService>> {
     let audio = MpvBackend::new().map_err(std::io::Error::other)?;
-    let repository = Arc::clone(repository);
+    let library_repository = Arc::clone(repository);
+    let preference_repository = Arc::clone(repository);
     Ok(Arc::new(PlayerService::new(
         Box::new(audio),
         Arc::clone(server),
-        repository,
+        library_repository,
+        preference_repository,
     )))
 }
 
@@ -120,10 +122,12 @@ fn create_session_service(
 fn start_saved_server_connection(
     server: Arc<MusicServerService>,
     library_sync: Arc<LibrarySyncService>,
+    player: Arc<PlayerService>,
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
         if server.connect_saved().await.is_ok() {
+            let _ = player.restore_preferences().await;
             let _ = session.restore().await;
             session.start();
             let _ = library_sync.start(false);

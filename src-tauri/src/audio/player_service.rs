@@ -9,6 +9,7 @@ use super::{
     backend::AudioBackend,
     fader::PlaybackFader,
     models::{PlaybackState, PlayerStatus},
+    preference::{PreferenceRepository, PreferenceService},
     session::PlaybackSession,
 };
 
@@ -17,6 +18,7 @@ pub struct PlayerService {
     fader: PlaybackFader,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
+    preference: PreferenceService,
     queue: Mutex<Vec<CachedSong>>,
 }
 
@@ -25,15 +27,18 @@ impl PlayerService {
         audio: Box<dyn AudioBackend>,
         server: Arc<MusicServerService>,
         repository: Arc<dyn LibraryRepository>,
+        preference: Arc<dyn PreferenceRepository>,
     ) -> Self {
         let audio: Arc<dyn AudioBackend> = audio.into();
         let fader = PlaybackFader::new(Arc::clone(&audio));
+        let preference = PreferenceService::new(Arc::clone(&server), preference);
 
         Self {
             audio,
             fader,
             server,
             repository,
+            preference,
             queue: Mutex::new(Vec::new()),
         }
     }
@@ -133,7 +138,10 @@ impl PlayerService {
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
-        self.fader.set_volume(volume)
+        let volume = volume.clamp(0.0, 100.0);
+        self.fader.set_volume(volume)?;
+        self.preference.save_volume(volume);
+        Ok(())
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
@@ -201,6 +209,14 @@ impl PlayerService {
         )?;
         Ok(())
     }
+
+    pub async fn restore_preferences(&self) -> Result<(), String> {
+        let Some(volume) = self.preference.load_volume().await? else {
+            return Ok(());
+        };
+
+        self.fader.set_volume(volume)
+    }
 }
 
 #[cfg(test)]
@@ -217,6 +233,7 @@ mod tests {
         audio::{
             backend::{AudioBackend, AudioBackendStatus},
             models::PlaybackState,
+            preference::{Preference, PreferenceKey, PreferenceRepository},
             session::PlaybackSession,
         },
         credentials::CredentialStore,
@@ -252,6 +269,7 @@ mod tests {
                 }),
                 server_service,
                 repository,
+                Arc::new(MockPreferenceRepository::default()),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -298,6 +316,7 @@ mod tests {
                 }),
                 server_service,
                 repository,
+                Arc::new(MockPreferenceRepository::default()),
             );
 
             assert_eq!(
@@ -332,6 +351,7 @@ mod tests {
                 }),
                 server_service,
                 repository,
+                Arc::new(MockPreferenceRepository::default()),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -374,6 +394,7 @@ mod tests {
                 }),
                 server_service,
                 repository,
+                Arc::new(MockPreferenceRepository::default()),
             );
             let queue = vec![song("song-1"), song("song-2"), song("song-3")];
 
@@ -403,6 +424,38 @@ mod tests {
             assert_eq!(status.state, PlaybackState::Paused);
             assert_eq!(status.current_song.unwrap().remote_id, "song-2");
             assert_eq!(status.queue_length, 3);
+        });
+    }
+
+    #[test]
+    fn restores_saved_volume_preference() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let preferences = Arc::new(MockPreferenceRepository {
+                preference: Mutex::new(Some(Preference::volume(37.0))),
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                preferences,
+            );
+
+            player.restore_preferences().await.unwrap();
+
+            assert_eq!(audio_state.lock().unwrap().volume, 37.0);
+            assert_eq!(player.status().unwrap().volume, 37.0);
         });
     }
 
@@ -514,6 +567,31 @@ mod tests {
                 playlist_position: state.playing.then_some(state.start_index),
                 volume: state.volume,
             }
+        }
+    }
+
+    #[derive(Default)]
+    struct MockPreferenceRepository {
+        preference: Mutex<Option<Preference>>,
+    }
+
+    #[async_trait]
+    impl PreferenceRepository for MockPreferenceRepository {
+        async fn load(
+            &self,
+            _profile_id: &str,
+            _key: PreferenceKey,
+        ) -> Result<Option<Preference>, String> {
+            Ok(self.preference.lock().unwrap().clone())
+        }
+
+        async fn save(
+            &self,
+            _profile_id: &str,
+            preference: Option<&Preference>,
+        ) -> Result<(), String> {
+            *self.preference.lock().unwrap() = preference.cloned();
+            Ok(())
         }
     }
 

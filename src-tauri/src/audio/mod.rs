@@ -5,6 +5,7 @@ mod models;
 mod mpris;
 mod mpv;
 mod player_service;
+mod preference;
 mod scrobble;
 mod session;
 

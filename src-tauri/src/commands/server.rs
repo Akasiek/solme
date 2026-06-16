@@ -3,13 +3,17 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::server::{MusicServerService, SavedServerProfile, ServerConnectionConfig, ServerInfo};
-use crate::{audio::PlaybackSessionService, library::LibrarySyncService};
+use crate::{
+    audio::{PlaybackSessionService, PlayerService},
+    library::LibrarySyncService,
+};
 
 #[tauri::command]
 pub async fn connect_music_server(
     config: ServerConnectionConfig,
     server: State<'_, Arc<MusicServerService>>,
     library: State<'_, Arc<LibrarySyncService>>,
+    player: State<'_, Arc<PlayerService>>,
     session: State<'_, Arc<PlaybackSessionService>>,
 ) -> Result<ServerInfo, String> {
     session.suspend_monitoring();
@@ -21,6 +25,7 @@ pub async fn connect_music_server(
             return Err(error);
         }
     };
+    let _ = player.restore_preferences().await;
     let _ = session.restore().await;
     session.resume_monitoring();
     session.start();
@@ -46,6 +51,7 @@ pub async fn get_saved_server_profile(
 pub async fn connect_saved_music_server(
     server: State<'_, Arc<MusicServerService>>,
     library: State<'_, Arc<LibrarySyncService>>,
+    player: State<'_, Arc<PlayerService>>,
     session: State<'_, Arc<PlaybackSessionService>>,
 ) -> Result<ServerInfo, String> {
     session.suspend_monitoring();
@@ -57,6 +63,7 @@ pub async fn connect_saved_music_server(
             return Err(error);
         }
     };
+    let _ = player.restore_preferences().await;
     let _ = session.restore().await;
     session.resume_monitoring();
     session.start();
