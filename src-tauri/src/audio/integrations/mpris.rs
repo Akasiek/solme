@@ -1,4 +1,4 @@
-use super::{PlaybackState, PlayerService, PlayerStatus};
+use crate::audio::{PlaybackState, PlayerService, PlayerStatus};
 use mpris_server::{
     zbus::{fdo, Result},
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
