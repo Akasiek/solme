@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import CdDisplayMarquee from "@/components/CdDisplayMarquee.vue";
+import PlayerDisplayMarquee from "@/components/player/PlayerDisplayMarquee.vue";
 
 withDefaults(
   defineProps<{
@@ -48,16 +48,16 @@ withDefaults(
         <div
           class="flex min-w-0 flex-1 flex-col justify-center gap-2 overflow-hidden px-3 whitespace-nowrap sm:px-4"
         >
-          <CdDisplayMarquee
+          <PlayerDisplayMarquee
             :text="title"
             class="metadata-title font-segment text-base leading-tight tracking-wider"
           />
-          <CdDisplayMarquee
+          <PlayerDisplayMarquee
             v-if="album"
             :text="album"
             class="metadata-album font-segment-italic text-xs leading-tight tracking-wider text-green-600/85"
           />
-          <CdDisplayMarquee
+          <PlayerDisplayMarquee
             v-if="artist"
             :text="artist"
             class="metadata-artist font-segment-italic text-xs leading-tight tracking-wider text-green-600/70"
