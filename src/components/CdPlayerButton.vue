@@ -74,7 +74,8 @@ defineProps<{
   );
 }
 
-.cd-button:active {
+.cd-button:active,
+.cd-button:disabled {
   transform: translateY(2px) scale(0.995);
   filter: brightness(0.96);
   box-shadow:
@@ -87,6 +88,18 @@ defineProps<{
 .cd-button:focus-visible {
   outline: 2px solid rgb(40 40 38);
   outline-offset: 4px;
+}
+
+.cd-button:disabled {
+  cursor: default;
+  color: rgb(70 72 71);
+  filter: brightness(0.9);
+}
+
+.cd-button:disabled .control-symbol {
+  transform: translateY(1px);
+  opacity: 0.34;
+  filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.42)) drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.25));
 }
 
 .control-symbol {
