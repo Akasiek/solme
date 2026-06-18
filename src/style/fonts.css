@@ -1,6 +1,6 @@
 @font-face {
     font-family: "DSEG7 Classic";
-    src: url("/fonts/DSEG7Classic-Regular.woff2") format("woff2");
+    src: url("/assets/fonts/DSEG7Classic-Regular.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -8,7 +8,7 @@
 
 @font-face {
     font-family: "DSEG7 Classic Italic";
-    src: url("/fonts/DSEG7Classic-Italic.woff2") format("woff2");
+    src: url("/assets/fonts/DSEG7Classic-Italic.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -16,7 +16,7 @@
 
 @font-face {
     font-family: "DSEG14 Classic";
-    src: url("/fonts/DSEG14Classic-Regular.woff2") format("woff2");
+    src: url("/assets/fonts/DSEG14Classic-Regular.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -24,7 +24,7 @@
 
 @font-face {
     font-family: "DSEG14 Classic Italic";
-    src: url("/fonts/DSEG14Classic-Italic.woff2") format("woff2");
+    src: url("/assets/fonts/DSEG14Classic-Italic.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -32,7 +32,7 @@
 
 @font-face {
     font-family: "D-DIN";
-    src: url("/fonts/D-DIN.woff2") format("woff2");
+    src: url("/assets/fonts/D-DIN.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -40,7 +40,7 @@
 
 @font-face {
     font-family: "D-DIN";
-    src: url("/fonts/D-DIN-Italic.woff2") format("woff2");
+    src: url("/assets/fonts/D-DIN-Italic.woff2") format("woff2");
     font-weight: 400;
     font-style: italic;
     font-display: swap;
@@ -48,7 +48,7 @@
 
 @font-face {
     font-family: "D-DIN";
-    src: url("/fonts/D-DIN-Bold.woff2") format("woff2");
+    src: url("/assets/fonts/D-DIN-Bold.woff2") format("woff2");
     font-weight: 700;
     font-style: normal;
     font-display: swap;
@@ -56,7 +56,7 @@
 
 @font-face {
     font-family: "D-DIN Condensed";
-    src: url("/fonts/D-DINCondensed.woff2") format("woff2");
+    src: url("/assets/fonts/D-DINCondensed.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -64,7 +64,7 @@
 
 @font-face {
     font-family: "D-DIN Condensed";
-    src: url("/fonts/D-DINCondensed-Bold.woff2") format("woff2");
+    src: url("/assets/fonts/D-DINCondensed-Bold.woff2") format("woff2");
     font-weight: 700;
     font-style: normal;
     font-display: swap;
@@ -72,7 +72,7 @@
 
 @font-face {
     font-family: "D-DIN Exp";
-    src: url("/fonts/D-DINExp.woff2") format("woff2");
+    src: url("/assets/fonts/D-DINExp.woff2") format("woff2");
     font-weight: 400;
     font-style: normal;
     font-display: swap;
@@ -80,7 +80,7 @@
 
 @font-face {
     font-family: "D-DIN Exp";
-    src: url("/fonts/D-DINExp-Italic.woff2") format("woff2");
+    src: url("/assets/fonts/D-DINExp-Italic.woff2") format("woff2");
     font-weight: 400;
     font-style: italic;
     font-display: swap;
@@ -88,7 +88,7 @@
 
 @font-face {
     font-family: "D-DIN Exp";
-    src: url("/fonts/D-DINExp-Bold.woff2") format("woff2");
+    src: url("/assets/fonts/D-DINExp-Bold.woff2") format("woff2");
     font-weight: 700;
     font-style: normal;
     font-display: swap;
