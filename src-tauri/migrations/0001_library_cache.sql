@@ -30,7 +30,10 @@ CREATE TABLE albums (
     song_count INTEGER NOT NULL DEFAULT 0,
     duration_seconds INTEGER NOT NULL DEFAULT 0,
     cover_art_id TEXT,
-    PRIMARY KEY (profile_id, generation, remote_id)
+    PRIMARY KEY (profile_id, generation, remote_id),
+    FOREIGN KEY (profile_id, generation, artist_id)
+        REFERENCES artists (profile_id, generation, remote_id)
+        ON DELETE SET NULL
 );
 
 CREATE INDEX albums_active_order
@@ -55,7 +58,10 @@ CREATE TABLE songs (
     PRIMARY KEY (profile_id, generation, remote_id),
     FOREIGN KEY (profile_id, generation, album_id)
         REFERENCES albums (profile_id, generation, remote_id)
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    FOREIGN KEY (profile_id, generation, artist_id)
+        REFERENCES artists (profile_id, generation, remote_id)
+        ON DELETE SET NULL
 );
 
 CREATE INDEX songs_by_album
