@@ -12,7 +12,6 @@ use crate::{
     database::{SqliteRepository, DATABASE_FILE_NAME},
     library::LibrarySyncService,
     server::MusicServerService,
-    startup,
 };
 
 type SetupResult<T> = Result<T, Box<dyn Error>>;
@@ -43,6 +42,31 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     crate::audio::start_mpris_service(Arc::clone(&player));
     start_saved_server_connection(server, library_sync, player, session_service);
     Ok(())
+}
+
+pub(crate) async fn connect_saved_server(
+    server: &Arc<MusicServerService>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
+    session.suspend_monitoring();
+    let connection = server.connect_saved().await;
+    let info = match connection {
+        Ok(info) => info,
+        Err(error) => {
+            session.resume_monitoring();
+            return Err(error);
+        }
+    };
+
+    let _ = player.restore_preferences().await;
+    let _ = session.restore().await;
+    session.resume_monitoring();
+    session.start();
+    library.start(false)?;
+
+    Ok(info)
 }
 
 fn resolve_app_dirs(app: &tauri::App) -> SetupResult<AppDirs> {
@@ -127,7 +151,7 @@ fn start_saved_server_connection(
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
-        match startup::connect_saved_server(&server, &library_sync, &player, &session).await {
+        match connect_saved_server(&server, &library_sync, &player, &session).await {
             Ok(_) => {}
             Err(error) if error == "No server profile is saved" => {}
             Err(error) => eprintln!("Failed to restore saved music server on startup: {error}"),
