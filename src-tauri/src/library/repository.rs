@@ -792,18 +792,20 @@ mod tests {
     }
 
     #[test]
-    fn rejects_snapshot_with_missing_song_artist_reference() {
+    fn allows_song_artist_without_matching_artist_row() {
         tauri::async_runtime::block_on(async {
             let (repository, directory) = repository().await;
             let mut snapshot = snapshot(false);
-            snapshot.albums[0].album.artist_id = None;
-            snapshot.albums[0].songs[0].artist_id = Some("missing-artist".to_string());
+            snapshot.albums[0].songs[0].artist_id = Some("guest-artist".to_string());
 
-            let result = repository
+            repository
                 .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
-                .await;
+                .await
+                .unwrap();
 
-            assert!(result.is_err());
+            let songs = repository.songs("profile", "album-1").await.unwrap();
+            assert_eq!(songs.len(), 1);
+            assert_eq!(songs[0].artist_name, "Artist");
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
