@@ -33,6 +33,7 @@ export interface CachedAlbum {
   remoteId: string;
   name: string;
   artistName: string;
+  artistId?: string;
   year?: number;
   songCount: number;
   artworkPath?: string;

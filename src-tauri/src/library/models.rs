@@ -99,6 +99,7 @@ pub struct CachedAlbum {
     pub remote_id: String,
     pub name: String,
     pub artist_name: String,
+    pub artist_id: Option<String>,
     pub year: Option<i64>,
     pub song_count: i64,
     pub artwork_path: Option<String>,

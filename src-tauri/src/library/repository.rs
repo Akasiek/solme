@@ -380,7 +380,7 @@ impl LibraryRepository for SqliteRepository {
         let offset = offset.max(0);
         sqlx::query_as!(
             CachedAlbum,
-            "SELECT a.remote_id, a.name, a.artist_name, a.year, a.song_count,
+            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year, a.song_count,
                     art.local_path AS artwork_path
              FROM albums a
              JOIN library_sync_state s
@@ -405,17 +405,17 @@ impl LibraryRepository for SqliteRepository {
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
         sqlx::query_as!(
             CachedAlbum,
-            "SELECT album.remote_id, album.name, album.artist_name, album.year,
-                    album.song_count, artwork.local_path AS artwork_path
-             FROM albums album
+            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+                    a.song_count, artwork.local_path AS artwork_path
+             FROM albums a
              JOIN library_sync_state state
-               ON state.profile_id = album.profile_id
-              AND state.active_generation = album.generation
+               ON state.profile_id = a.profile_id
+              AND state.active_generation = a.generation
              LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = album.profile_id
+               ON artwork.profile_id = a.profile_id
               AND artwork.kind = 'album'
-              AND artwork.remote_id = album.remote_id
-             WHERE album.profile_id = ? AND album.remote_id = ?",
+              AND artwork.remote_id = a.remote_id
+             WHERE a.profile_id = ? AND a.remote_id = ?",
             profile_id,
             album_id,
         )
@@ -434,22 +434,22 @@ impl LibraryRepository for SqliteRepository {
         let limit = limit.clamp(1, 500);
         sqlx::query_as!(
             CachedAlbum,
-            "SELECT album.remote_id, album.name, album.artist_name, album.year,
-                    album.song_count, artwork.local_path AS artwork_path
-             FROM albums album
+            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+                    a.song_count, artwork.local_path AS artwork_path
+             FROM albums a
              JOIN library_sync_state state
-               ON state.profile_id = album.profile_id
-              AND state.active_generation = album.generation
+               ON state.profile_id = a.profile_id
+              AND state.active_generation = a.generation
              LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = album.profile_id
+               ON artwork.profile_id = a.profile_id
               AND artwork.kind = 'album'
-              AND artwork.remote_id = album.remote_id
-             WHERE album.profile_id = ?
-               AND (album.name LIKE ? COLLATE NOCASE
-                    OR album.artist_name LIKE ? COLLATE NOCASE)
-             ORDER BY album.artist_name COLLATE NOCASE,
-                      album.year,
-                      album.name COLLATE NOCASE
+              AND artwork.remote_id = a.remote_id
+             WHERE a.profile_id = ?
+               AND (a.name LIKE ? COLLATE NOCASE
+                    OR a.artist_name LIKE ? COLLATE NOCASE)
+             ORDER BY a.artist_name COLLATE NOCASE,
+                      a.year,
+                      a.name COLLATE NOCASE
              LIMIT ?",
             profile_id,
             pattern,
@@ -767,6 +767,43 @@ mod tests {
                     .as_deref(),
                 Some("Kind of Blue")
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn rejects_snapshot_with_missing_album_artist_reference() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.artists.clear();
+
+            let result = repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await;
+
+            assert!(result.is_err());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn rejects_snapshot_with_missing_song_artist_reference() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.artist_id = None;
+            snapshot.albums[0].songs[0].artist_id = Some("missing-artist".to_string());
+
+            let result = repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await;
+
+            assert!(result.is_err());
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
