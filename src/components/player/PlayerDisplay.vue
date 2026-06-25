@@ -9,6 +9,7 @@ withDefaults(
     artist?: string;
     album?: string;
     state?: "playing" | "paused" | "stopped";
+    embedded?: boolean;
   }>(),
   {
     track: 1,
@@ -17,13 +18,15 @@ withDefaults(
     artist: "",
     album: "",
     state: "stopped",
+    embedded: false,
   },
 );
 </script>
 
 <template>
   <section
-    class="display-bezel w-full max-w-lg rounded-sm border border-black/90 p-2"
+    class="display-bezel w-full rounded-sm border border-black/90 p-2"
+    :class="{ 'is-embedded': embedded, 'max-w-lg': !embedded }"
     aria-label="CD player display"
   >
     <div class="display-recess rounded-xs bg-zinc-950 p-1">
@@ -98,6 +101,13 @@ withDefaults(
     0 1px 0 rgba(255, 255, 255, 0.75),
     inset 0 1px 1px rgba(255, 255, 255, 0.8),
     inset 0 -1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.display-bezel.is-embedded {
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
 }
 
 .display-recess {

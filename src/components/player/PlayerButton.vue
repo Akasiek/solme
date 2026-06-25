@@ -6,9 +6,13 @@ defineProps<{
 </script>
 
 <template>
-  <button class="cd-button" type="button" :aria-label="label">
-    <span v-if="hasLight" class="status-light" />
-    <span v-else class="control-symbol" aria-hidden="true">
+  <button
+    class="cd-button relative isolate flex h-15 w-24 items-center justify-center overflow-hidden rounded-sm bg-repeat p-0 text-zinc-900"
+    type="button"
+    :aria-label="label"
+  >
+    <span v-if="hasLight" class="status-light relative z-1 block h-2 w-4 rounded-xs bg-green-300" />
+    <span v-else class="control-symbol relative z-1 grid place-items-center" aria-hidden="true">
       <slot />
     </span>
   </button>
@@ -16,20 +20,8 @@ defineProps<{
 
 <style scoped>
 .cd-button {
-  position: relative;
-  isolation: isolate;
-  overflow: hidden;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 3.75rem;
-  width: 5.85rem;
-  padding: 0;
   border: 0;
-  border-radius: 3px;
-  color: rgb(28 30 30);
   background-image: url("/assets/images/texture_bg_2.webp");
-  background-repeat: repeat;
   background-size: 200%;
   transition:
     transform 100ms,
@@ -46,14 +38,15 @@ defineProps<{
   content: "";
   position: absolute;
   z-index: 2;
-  inset: 0;
+  top: 0;
+  inset-inline: 0;
+  height: 3px;
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(255, 255, 255, 0.8) 4%,
-    rgba(255, 255, 255, 0.12) 6%,
-    rgba(0, 0, 0, 0) 15%,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 255, 255, 0.6) 70%,
+    rgba(255, 255, 255, 0.4) 90%,
     rgba(0, 0, 0, 0) 100%
   );
 }
@@ -62,14 +55,15 @@ defineProps<{
   content: "";
   position: absolute;
   z-index: 2;
-  inset: 0;
+  bottom: 0;
+  inset-inline: 0;
+  height: 3px;
   pointer-events: none;
   background: linear-gradient(
     to top,
-    rgba(0, 0, 0, 0.8) 0%,
-    rgba(0, 0, 0, 0.6) 2%,
-    rgba(0, 0, 0, 0.2) 4%,
-    rgba(0, 0, 0, 0) 8%,
+    rgba(0, 0, 0, 0.6) 0%,
+    rgba(0, 0, 0, 0.4) 70%,
+    rgba(0, 0, 0, 0.2) 90%,
     rgba(0, 0, 0, 0) 100%
   );
 }
@@ -92,7 +86,6 @@ defineProps<{
 
 .cd-button:disabled {
   cursor: default;
-  color: rgb(70 72 71);
   filter: brightness(0.9);
 }
 
@@ -103,10 +96,6 @@ defineProps<{
 }
 
 .control-symbol {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  place-items: center;
   opacity: 0.82;
   filter: drop-shadow(0 1px 0 rgba(255, 255, 255, 0.72)) drop-shadow(0 -1px 0 rgba(0, 0, 0, 0.52))
     drop-shadow(0 0 0.35px rgba(0, 0, 0, 0.9));
@@ -134,13 +123,6 @@ defineProps<{
 }
 
 .status-light {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 16px;
-  height: 8px;
-  border-radius: 1px;
-  background: rgb(175 245 141);
   box-shadow:
     0 0 1px rgba(0, 0, 0, 0.7),
     inset 0 0 2px 2px rgba(60, 119, 18, 0.9);
