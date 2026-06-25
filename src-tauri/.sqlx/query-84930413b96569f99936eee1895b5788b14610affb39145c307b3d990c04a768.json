@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT album.remote_id, album.name, album.artist_name, album.year,\n                    album.song_count, artwork.local_path AS artwork_path\n             FROM albums album\n             JOIN library_sync_state state\n               ON state.profile_id = album.profile_id\n              AND state.active_generation = album.generation\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = album.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = album.remote_id\n             WHERE album.profile_id = ? AND album.remote_id = ?",
+  "query": "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year, a.song_count,\n                    art.local_path AS artwork_path\n             FROM albums a\n             JOIN library_sync_state s\n               ON s.profile_id = a.profile_id\n              AND s.active_generation = a.generation\n             LEFT JOIN artwork_cache art\n               ON art.profile_id = a.profile_id\n              AND art.kind = 'album'\n              AND art.remote_id = a.remote_id\n             WHERE a.profile_id = ?\n             ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE\n             LIMIT ? OFFSET ?",
   "describe": {
     "columns": [
       {
@@ -37,8 +37,19 @@
         }
       },
       {
-        "name": "year",
+        "name": "artist_id",
         "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "artist_id"
+          }
+        }
+      },
+      {
+        "name": "year",
+        "ordinal": 4,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -49,7 +60,7 @@
       },
       {
         "name": "song_count",
-        "ordinal": 4,
+        "ordinal": 5,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -60,7 +71,7 @@
       },
       {
         "name": "artwork_path",
-        "ordinal": 5,
+        "ordinal": 6,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -71,16 +82,17 @@
       }
     ],
     "parameters": {
-      "Right": 2
+      "Right": 3
     },
     "nullable": [
       false,
       false,
       false,
       true,
+      true,
       false,
       true
     ]
   },
-  "hash": "154d8202e0221489e22997093db4b22524ff0163d7d0d4136add6ef736c1c752"
+  "hash": "84930413b96569f99936eee1895b5788b14610affb39145c307b3d990c04a768"
 }

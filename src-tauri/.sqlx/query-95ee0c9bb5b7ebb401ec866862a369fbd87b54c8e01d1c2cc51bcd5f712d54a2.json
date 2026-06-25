@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT a.remote_id, a.name, a.artist_name, a.year, a.song_count,\n                    art.local_path AS artwork_path\n             FROM albums a\n             JOIN library_sync_state s\n               ON s.profile_id = a.profile_id\n              AND s.active_generation = a.generation\n             LEFT JOIN artwork_cache art\n               ON art.profile_id = a.profile_id\n              AND art.kind = 'album'\n              AND art.remote_id = a.remote_id\n             WHERE a.profile_id = ?\n             ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE\n             LIMIT ? OFFSET ?",
+  "query": "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,\n                    a.song_count, artwork.local_path AS artwork_path\n             FROM albums a\n             JOIN library_sync_state state\n               ON state.profile_id = a.profile_id\n              AND state.active_generation = a.generation\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = a.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = a.remote_id\n             WHERE a.profile_id = ?\n               AND (a.name LIKE ? COLLATE NOCASE\n                    OR a.artist_name LIKE ? COLLATE NOCASE)\n             ORDER BY a.artist_name COLLATE NOCASE,\n                      a.year,\n                      a.name COLLATE NOCASE\n             LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -37,8 +37,19 @@
         }
       },
       {
-        "name": "year",
+        "name": "artist_id",
         "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "albums",
+            "name": "artist_id"
+          }
+        }
+      },
+      {
+        "name": "year",
+        "ordinal": 4,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -49,7 +60,7 @@
       },
       {
         "name": "song_count",
-        "ordinal": 4,
+        "ordinal": 5,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -60,7 +71,7 @@
       },
       {
         "name": "artwork_path",
-        "ordinal": 5,
+        "ordinal": 6,
         "type_info": "Text",
         "origin": {
           "Table": {
@@ -71,16 +82,17 @@
       }
     ],
     "parameters": {
-      "Right": 3
+      "Right": 4
     },
     "nullable": [
       false,
       false,
       false,
       true,
+      true,
       false,
       true
     ]
   },
-  "hash": "763ba392087121bca3b7e7059f5b948ef4de30e390ea55df68121d324bf5f506"
+  "hash": "95ee0c9bb5b7ebb401ec866862a369fbd87b54c8e01d1c2cc51bcd5f712d54a2"
 }
