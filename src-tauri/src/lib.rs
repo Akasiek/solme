@@ -19,6 +19,7 @@ mod database;
 mod library;
 mod server;
 mod setup;
+mod startup;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

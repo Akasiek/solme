@@ -6,6 +6,7 @@ use crate::server::{MusicServerService, SavedServerProfile, ServerConnectionConf
 use crate::{
     audio::{PlaybackSessionService, PlayerService},
     library::LibrarySyncService,
+    startup,
 };
 
 #[tauri::command]
@@ -54,21 +55,7 @@ pub async fn connect_saved_music_server(
     player: State<'_, Arc<PlayerService>>,
     session: State<'_, Arc<PlaybackSessionService>>,
 ) -> Result<ServerInfo, String> {
-    session.suspend_monitoring();
-    let connection = server.connect_saved().await;
-    let info = match connection {
-        Ok(info) => info,
-        Err(error) => {
-            session.resume_monitoring();
-            return Err(error);
-        }
-    };
-    let _ = player.restore_preferences().await;
-    let _ = session.restore().await;
-    session.resume_monitoring();
-    session.start();
-    let _ = library.start(false);
-    Ok(info)
+    startup::connect_saved_server(&server.inner().clone(), &library.inner().clone(), &player.inner().clone(), &session.inner().clone()).await
 }
 
 #[tauri::command]

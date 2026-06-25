@@ -12,6 +12,7 @@ use crate::{
     database::{SqliteRepository, DATABASE_FILE_NAME},
     library::LibrarySyncService,
     server::MusicServerService,
+    startup,
 };
 
 type SetupResult<T> = Result<T, Box<dyn Error>>;
@@ -126,11 +127,10 @@ fn start_saved_server_connection(
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
-        if server.connect_saved().await.is_ok() {
-            let _ = player.restore_preferences().await;
-            let _ = session.restore().await;
-            session.start();
-            let _ = library_sync.start(false);
+        match startup::connect_saved_server(&server, &library_sync, &player, &session).await {
+            Ok(_) => {}
+            Err(error) if error == "No server profile is saved" => {}
+            Err(error) => eprintln!("Failed to restore saved music server on startup: {error}"),
         }
     });
 }
