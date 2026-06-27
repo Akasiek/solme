@@ -2,7 +2,7 @@ use serde::Serialize;
 
 use crate::library::CachedSong;
 
-#[derive(Serialize)]
+#[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PlayerStatus {
     pub state: PlaybackState,

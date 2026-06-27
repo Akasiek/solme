@@ -1,23 +1,76 @@
-use std::time::{Duration, Instant};
+use std::{
+    sync::{Arc, Mutex},
+    thread,
+    time::{Duration, Instant},
+};
 
-use libmpv2::{events::Event, Mpv, SetData};
+use libmpv2::{events::Event, Format, Mpv, SetData};
 
-use super::backend::{AudioBackend, AudioBackendStatus};
+use super::backend::{AudioBackend, AudioBackendStatus, AudioStatusChangeCallback};
 
 pub struct MpvBackend {
     mpv: Mpv,
+    status_change_callback: Arc<Mutex<Option<AudioStatusChangeCallback>>>,
 }
 
 impl MpvBackend {
     pub fn new() -> Result<Self, String> {
         set_numeric_locale()?;
         let mpv = Mpv::new().map_err(|error| format!("Failed to create mpv instance: {error}"))?;
-        let audio = Self { mpv };
+        let status_change_callback = Arc::new(Mutex::new(None));
+        Self::start_status_change_watcher(&mpv, Arc::clone(&status_change_callback))?;
+        let audio = Self {
+            mpv,
+            status_change_callback,
+        };
 
         audio.set_property("vo", "null", "disable video output")?;
         audio.set_property("idle", true, "enable mpv idle mode")?;
 
         Ok(audio)
+    }
+
+    fn start_status_change_watcher(
+        mpv: &Mpv,
+        callback: Arc<Mutex<Option<AudioStatusChangeCallback>>>,
+    ) -> Result<(), String> {
+        let mpv = mpv
+            .create_client(Some("status_watcher"))
+            .map_err(|error| format!("Failed to create mpv status watcher: {error}"))?;
+
+        mpv.observe_property("playlist-pos", Format::Int64, 1)
+            .map_err(|error| format!("Failed to observe mpv playlist position: {error}"))?;
+
+        thread::spawn(move || loop {
+            match mpv.wait_event(60.0) {
+                Some(Ok(Event::Shutdown)) => break,
+                Some(Ok(Event::StartFile | Event::FileLoaded)) => {
+                    Self::notify_status_change(&callback)
+                }
+                Some(Ok(Event::PropertyChange {
+                    name: "playlist-pos",
+                    ..
+                })) => Self::notify_status_change(&callback),
+                Some(Ok(_)) | None => {}
+                Some(Err(error)) => eprintln!("Failed to read mpv status event: {error}"),
+            }
+        });
+
+        Ok(())
+    }
+
+    fn notify_status_change(callback: &Arc<Mutex<Option<AudioStatusChangeCallback>>>) {
+        let callback = match callback.lock() {
+            Ok(callback) => callback.clone(),
+            Err(_) => {
+                eprintln!("Failed to read mpv status change callback");
+                return;
+            }
+        };
+
+        if let Some(callback) = callback {
+            callback();
+        }
     }
 
     fn set_property<T: SetData>(
@@ -45,19 +98,64 @@ impl MpvBackend {
             .command(command, arguments)
             .map_err(|error| format!("Failed to {action}: {error}"))
     }
-}
 
-/// Configures the process-wide numeric locale required by libmpv.
-///
-/// libmpv expects floating-point values to use a dot as the decimal separator
-/// and refuses to initialize under locales that use a different separator.
-/// Only `LC_NUMERIC` is changed, and it must be set before calling `Mpv::new`.
-fn set_numeric_locale() -> Result<(), String> {
-    let locale = unsafe { libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr()) };
-    if locale.is_null() {
-        return Err("Failed to set LC_NUMERIC to C for mpv".to_string());
+    fn load_queue_with_state(
+        &self,
+        sources: &[String],
+        start_index: usize,
+        paused: bool,
+        position_seconds: Option<f64>,
+    ) -> Result<(), String> {
+        if sources.is_empty() {
+            return Err("Cannot play an empty queue".to_string());
+        }
+        if start_index >= sources.len() {
+            return Err("Queue start index is out of bounds".to_string());
+        }
+
+        self.set_paused(true, "pause while loading queue")?;
+        self.execute_command(
+            "loadfile",
+            &[&sources[0], "replace"],
+            "load first queue item",
+        )?;
+        for source in &sources[1..] {
+            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
+        }
+        self.set_property("playlist-pos", start_index as i64, "select queue item")?;
+        self.set_paused(paused, "set playback state after loading queue")?;
+
+        if let Some(position_seconds) = position_seconds.filter(|p| *p > 0.0) {
+            self.seek_when_file_is_loaded(position_seconds)?;
+        }
+
+        Ok(())
     }
-    Ok(())
+
+    fn seek_when_file_is_loaded(&self, position_seconds: f64) -> Result<(), String> {
+        if !self.wait_for_file_loaded(Duration::from_secs(5)) {
+            return Ok(());
+        }
+
+        self.execute_command(
+            "seek",
+            &[&position_seconds.max(0.0).to_string(), "absolute", "exact"],
+            "restore playback position",
+        )
+    }
+
+    fn wait_for_file_loaded(&self, timeout: Duration) -> bool {
+        let started_at = Instant::now();
+        while let Some(remaining) = timeout.checked_sub(started_at.elapsed()) {
+            match self.mpv.wait_event(remaining.as_secs_f64()) {
+                Some(Ok(Event::FileLoaded)) => return true,
+                Some(_) => continue,
+                None => return false,
+            }
+        }
+
+        false
+    }
 }
 
 impl AudioBackend for MpvBackend {
@@ -177,64 +275,26 @@ impl AudioBackend for MpvBackend {
                 .map(|position| position as usize),
         }
     }
+
+    fn set_status_change_callback(&self, callback: AudioStatusChangeCallback) {
+        match self.status_change_callback.lock() {
+            Ok(mut status_change_callback) => {
+                status_change_callback.replace(callback);
+            }
+            Err(_) => eprintln!("Failed to set mpv status change callback"),
+        }
+    }
 }
 
-impl MpvBackend {
-    fn load_queue_with_state(
-        &self,
-        sources: &[String],
-        start_index: usize,
-        paused: bool,
-        position_seconds: Option<f64>,
-    ) -> Result<(), String> {
-        if sources.is_empty() {
-            return Err("Cannot play an empty queue".to_string());
-        }
-        if start_index >= sources.len() {
-            return Err("Queue start index is out of bounds".to_string());
-        }
-
-        self.set_paused(true, "pause while loading queue")?;
-        self.execute_command(
-            "loadfile",
-            &[&sources[0], "replace"],
-            "load first queue item",
-        )?;
-        for source in &sources[1..] {
-            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
-        }
-        self.set_property("playlist-pos", start_index as i64, "select queue item")?;
-        self.set_paused(paused, "set playback state after loading queue")?;
-
-        if let Some(position_seconds) = position_seconds.filter(|p| *p > 0.0) {
-            self.seek_when_file_is_loaded(position_seconds)?;
-        }
-
-        Ok(())
+/// Configures the process-wide numeric locale required by libmpv.
+///
+/// libmpv expects floating-point values to use a dot as the decimal separator
+/// and refuses to initialize under locales that use a different separator.
+/// Only `LC_NUMERIC` is changed, and it must be set before calling `Mpv::new`.
+fn set_numeric_locale() -> Result<(), String> {
+    let locale = unsafe { libc::setlocale(libc::LC_NUMERIC, c"C".as_ptr()) };
+    if locale.is_null() {
+        return Err("Failed to set LC_NUMERIC to C for mpv".to_string());
     }
-
-    fn seek_when_file_is_loaded(&self, position_seconds: f64) -> Result<(), String> {
-        if !self.wait_for_file_loaded(Duration::from_secs(5)) {
-            return Ok(());
-        }
-
-        self.execute_command(
-            "seek",
-            &[&position_seconds.max(0.0).to_string(), "absolute", "exact"],
-            "restore playback position",
-        )
-    }
-
-    fn wait_for_file_loaded(&self, timeout: Duration) -> bool {
-        let started_at = Instant::now();
-        while let Some(remaining) = timeout.checked_sub(started_at.elapsed()) {
-            match self.mpv.wait_event(remaining.as_secs_f64()) {
-                Some(Ok(Event::FileLoaded)) => return true,
-                Some(_) => continue,
-                None => return false,
-            }
-        }
-
-        false
-    }
+    Ok(())
 }

@@ -8,6 +8,7 @@ use super::backend::AudioBackend;
 const FADE_DURATION: Duration = Duration::from_millis(300);
 const FADE_STEPS: u32 = 12;
 
+#[derive(Clone)]
 pub struct PlaybackFader {
     audio: Arc<dyn AudioBackend>,
     state: Arc<Mutex<FadeState>>,
@@ -225,7 +226,7 @@ mod tests {
     use std::sync::{Arc, Mutex};
 
     use super::{AudioBackend, PlaybackFader, FADE_DURATION};
-    use crate::audio::backend::AudioBackendStatus;
+    use crate::audio::backend::{AudioBackendStatus, AudioStatusChangeCallback};
 
     #[test]
     fn fades_out_before_pausing_and_preserves_logical_volume() {
@@ -331,6 +332,8 @@ mod tests {
             self.state.lock().unwrap().playing = true;
             Ok(())
         }
+
+        fn set_status_change_callback(&self, _callback: AudioStatusChangeCallback) {}
 
         fn load_queue_paused(
             &self,

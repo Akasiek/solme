@@ -16,6 +16,7 @@ mod audio;
 mod commands;
 mod credentials;
 mod database;
+mod events;
 mod library;
 mod server;
 mod setup;
