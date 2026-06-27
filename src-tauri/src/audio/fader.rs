@@ -348,6 +348,10 @@ mod tests {
             Ok(())
         }
 
+        fn prepend_queue(&self, _sources: &[String]) -> Result<(), String> {
+            Ok(())
+        }
+
         fn pause(&self) -> Result<(), String> {
             self.state.lock().unwrap().paused = true;
             Ok(())

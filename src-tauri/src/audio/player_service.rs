@@ -60,6 +60,11 @@ impl PlayerService {
         Ok(())
     }
 
+    fn prepend_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
+        self.lock_queue()?.splice(0..0, songs);
+        Ok(())
+    }
+
     fn clear_queue(&self) -> Result<(), String> {
         self.lock_queue()?.clear();
         Ok(())
@@ -70,11 +75,7 @@ impl PlayerService {
         album_id: &str,
         start_song_id: Option<&str>,
     ) -> Result<(), String> {
-        let (profile_id, server) = self.server.current_server()?;
-        let songs = self.repository.songs(&profile_id, album_id).await?;
-        if songs.is_empty() {
-            return Err("Album has no cached songs".to_string());
-        }
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
 
         let start_index = match start_song_id {
             Some(song_id) => songs
@@ -83,17 +84,30 @@ impl PlayerService {
                 .ok_or_else(|| "Selected song does not belong to this album".to_string())?,
             None => 0,
         };
-        let sources = songs
-            .iter()
-            .map(|song| server.playback_uri(&song.remote_id))
-            .collect::<Result<Vec<_>, _>>()?;
 
         self.fader.cancel()?;
         self.audio.load_queue(&sources, start_index)?;
         self.replace_queue(songs)
     }
 
-    pub async fn queue_album(&self, album_id: &str) -> Result<(), String> {
+    pub async fn queue_album_at_start(&self, album_id: &str) -> Result<(), String> {
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
+
+        self.audio.prepend_queue(&sources)?;
+        self.prepend_queue(songs)
+    }
+
+    pub async fn queue_album_at_end(&self, album_id: &str) -> Result<(), String> {
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
+
+        self.audio.append_queue(&sources)?;
+        self.append_queue(songs)
+    }
+
+    async fn album_queue_sources(
+        &self,
+        album_id: &str,
+    ) -> Result<(Vec<CachedSong>, Vec<String>), String> {
         let (profile_id, server) = self.server.current_server()?;
         let songs = self.repository.songs(&profile_id, album_id).await?;
         if songs.is_empty() {
@@ -105,8 +119,7 @@ impl PlayerService {
             .map(|song| server.playback_uri(&song.remote_id))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.audio.append_queue(&sources)?;
-        self.append_queue(songs)
+        Ok((songs, sources))
     }
 
     pub fn pause(&self) -> Result<(), String> {
@@ -355,7 +368,7 @@ mod tests {
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
-            player.queue_album("album-2").await.unwrap();
+            player.queue_album_at_end("album-2").await.unwrap();
 
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.start_index, 1);
@@ -371,6 +384,52 @@ mod tests {
             let status = player.status().unwrap();
             assert_eq!(status.current_song.unwrap().remote_id, "song-2");
             assert_eq!(status.queue_position, Some(2));
+            assert_eq!(status.queue_length, 4);
+        });
+    }
+
+    #[test]
+    fn prepends_album_to_current_queue() {
+        tauri::async_runtime::block_on(async {
+            let server_service = Arc::new(MusicServerService::new(
+                PathBuf::from("/tmp/solme-player-test-profile.json"),
+                Box::new(MemoryCredentialStore),
+            ));
+            server_service
+                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+                .unwrap();
+
+            let songs = vec![song("song-1"), song("song-2")];
+            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+                songs: songs.clone(),
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+            );
+
+            player.play_album("album-1", Some("song-2")).await.unwrap();
+            player.queue_album_at_start("album-2").await.unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.start_index, 3);
+            assert_eq!(
+                audio.prepended_sources,
+                [
+                    "https://music.example.com/song-1",
+                    "https://music.example.com/song-2"
+                ]
+            );
+            drop(audio);
+
+            let status = player.status().unwrap();
+            assert_eq!(status.current_song.unwrap().remote_id, "song-2");
+            assert_eq!(status.queue_position, Some(4));
             assert_eq!(status.queue_length, 4);
         });
     }
@@ -476,6 +535,7 @@ mod tests {
     #[derive(Default)]
     struct MockAudioState {
         sources: Vec<String>,
+        prepended_sources: Vec<String>,
         appended_sources: Vec<String>,
         start_index: usize,
         playing: bool,
@@ -521,6 +581,13 @@ mod tests {
                 .unwrap()
                 .appended_sources
                 .extend_from_slice(sources);
+            Ok(())
+        }
+
+        fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.prepended_sources.extend_from_slice(sources);
+            state.start_index += sources.len();
             Ok(())
         }
 

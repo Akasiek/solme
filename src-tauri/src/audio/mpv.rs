@@ -74,6 +74,36 @@ impl AudioBackend for MpvBackend {
         self.load_queue_with_state(sources, start_index, true, position_seconds)
     }
 
+    fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+        if sources.is_empty() {
+            return Err("Cannot prepend an empty queue".to_string());
+        }
+
+        let queue_length = self
+            .mpv
+            .get_property::<i64>("playlist-count")
+            .map_err(|error| format!("Failed to read playlist length: {error}"))?;
+        if queue_length < 0 {
+            return Err("Playlist length is invalid".to_string());
+        }
+
+        for source in sources {
+            self.execute_command("loadfile", &[source, "append"], "append queue item")?;
+        }
+        for (target_index, _) in sources.iter().enumerate() {
+            self.execute_command(
+                "playlist-move",
+                &[
+                    &(queue_length as usize + target_index).to_string(),
+                    &target_index.to_string(),
+                ],
+                "prepend queue item",
+            )?;
+        }
+
+        Ok(())
+    }
+
     fn append_queue(&self, sources: &[String]) -> Result<(), String> {
         if sources.is_empty() {
             return Err("Cannot append an empty queue".to_string());
