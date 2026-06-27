@@ -1,9 +1,24 @@
 import { createRouter, createWebHashHistory } from "vue-router";
+import { invoke } from "@tauri-apps/api/core";
 
-import AlbumView from "@/views/AlbumView.vue";
 import HomeView from "@/views/HomeView.vue";
-import PlayerView from "@/views/PlayerView.vue";
-import SearchView from "@/views/SearchView.vue";
+import AlbumView from "@/views/AlbumView.vue";
+import ArtistView from "@/views/ArtistView.vue";
+import LoginView from "@/views/LoginView.vue";
+
+async function ensureServerConnection() {
+  try {
+    await invoke("ping_music_server");
+    return true;
+  } catch {
+    try {
+      await invoke("connect_saved_music_server");
+      return true;
+    } catch {
+      return false;
+    }
+  }
+}
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -12,22 +27,38 @@ export const router = createRouter({
       path: "/",
       name: "home",
       component: HomeView,
+      meta: { requiresServer: true },
     },
     {
       path: "/album/:albumId",
       name: "album",
       component: AlbumView,
       props: true,
+      meta: { requiresServer: true },
     },
     {
-      path: "/search",
-      name: "search",
-      component: SearchView,
+      path: "/artist/:artistId",
+      name: "artist",
+      component: ArtistView,
+      props: true,
+      meta: { requiresServer: true },
     },
     {
-      path: "/player",
-      name: "player",
-      component: PlayerView,
+      path: "/login",
+      name: "login",
+      component: LoginView,
     },
   ],
+});
+
+router.beforeEach(async (to) => {
+  if (!to.meta.requiresServer) {
+    return true;
+  }
+
+  if (await ensureServerConnection()) {
+    return true;
+  }
+
+  return { name: "login" };
 });
