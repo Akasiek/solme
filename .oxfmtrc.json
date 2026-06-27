@@ -1,4 +1,12 @@
 {
   "$schema": "./node_modules/oxfmt/configuration_schema.json",
-  "ignorePatterns": ["src-tauri/.sqlx/**"]
+  "ignorePatterns": ["src-tauri/.sqlx/**"],
+  "sortTailwindcss": {
+    "stylesheet": "./src/style/glob.css",
+    "functions": ["clsx", "cn"],
+    "preserveWhitespace": true
+  },
+  "vueIndentScriptAndStyle": false,
+  "semi": true,
+  "printWidth": 120
 }
