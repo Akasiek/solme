@@ -86,6 +86,12 @@ impl AudioBackend for MpvBackend {
         if queue_length < 0 {
             return Err("Playlist length is invalid".to_string());
         }
+        let active_index = self
+            .mpv
+            .get_property::<i64>("playlist-pos")
+            .ok()
+            .filter(|position| *position >= 0)
+            .map(|position| position as usize);
 
         for source in sources {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
@@ -98,6 +104,13 @@ impl AudioBackend for MpvBackend {
                     &target_index.to_string(),
                 ],
                 "prepend queue item",
+            )?;
+        }
+        if let Some(active_index) = active_index {
+            self.set_property(
+                "playlist-pos",
+                (active_index + sources.len()) as i64,
+                "restore active queue item after prepend",
             )?;
         }
 
