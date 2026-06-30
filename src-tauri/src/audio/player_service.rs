@@ -7,7 +7,7 @@ use crate::{
 
 use super::{
     backend::AudioBackend,
-    fader::PlaybackFader,
+    fader::FadingAudioBackend,
     models::{PlaybackState, PlayerStatus},
     preference::{PreferenceRepository, PreferenceService},
     session::PlaybackSession,
@@ -16,7 +16,6 @@ use crate::events::EventEmitter;
 
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
-    fader: PlaybackFader,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
     preference: PreferenceService,
@@ -32,21 +31,18 @@ impl PlayerService {
         preference: Arc<dyn PreferenceRepository>,
         event_emitter: Arc<EventEmitter>,
     ) -> Self {
-        let audio: Arc<dyn AudioBackend> = audio.into();
-        let fader = PlaybackFader::new(Arc::clone(&audio));
+        let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
         let queue = Arc::new(Mutex::new(Vec::new()));
 
         audio.set_status_change_callback(Self::status_change_callback(
             Arc::clone(&audio),
-            fader.clone(),
             Arc::clone(&queue),
             Arc::clone(&event_emitter),
         ));
 
         Self {
             audio,
-            fader,
             server,
             repository,
             preference,
@@ -101,7 +97,6 @@ impl PlayerService {
             None => 0,
         };
 
-        self.fader.cancel()?;
         self.audio.load_queue(&sources, start_index)?;
         self.replace_queue(songs)?;
         self.notify_status_changed()
@@ -142,30 +137,27 @@ impl PlayerService {
     }
 
     pub fn pause(&self) -> Result<(), String> {
-        self.fader.pause()?;
+        self.audio.pause()?;
         self.notify_status_changed()
     }
 
     pub fn resume(&self) -> Result<(), String> {
-        self.fader.resume()?;
+        self.audio.resume()?;
         self.notify_status_changed()
     }
 
     pub fn stop(&self) -> Result<(), String> {
-        self.fader.cancel()?;
         self.audio.stop()?;
         self.clear_queue()?;
         self.notify_status_changed()
     }
 
     pub fn next(&self) -> Result<(), String> {
-        self.fader.cancel()?;
         self.audio.next()?;
         self.notify_status_changed()
     }
 
     pub fn previous(&self) -> Result<(), String> {
-        self.fader.cancel()?;
         self.audio.previous()?;
         self.notify_status_changed()
     }
@@ -177,13 +169,13 @@ impl PlayerService {
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
         let volume = volume.clamp(0.0, 100.0);
-        self.fader.set_volume(volume)?;
+        self.audio.set_volume(volume)?;
         self.preference.save_volume(volume);
         self.notify_status_changed()
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
-        Self::player_status(&self.audio, &self.fader, &self.queue)
+        Self::player_status(&self.audio, &self.queue)
     }
 
     pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
@@ -215,7 +207,6 @@ impl PlayerService {
             .map(|song| server.playback_uri(&song.remote_id))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.fader.cancel()?;
         self.replace_queue(session.queue)?;
         self.audio.load_queue_paused(
             &sources,
@@ -230,17 +221,16 @@ impl PlayerService {
             return Ok(());
         };
 
-        self.fader.set_volume(volume)?;
+        self.audio.set_volume(volume)?;
         self.notify_status_changed()
     }
 
     fn status_change_callback(
         audio: Arc<dyn AudioBackend>,
-        fader: PlaybackFader,
         queue: Arc<Mutex<Vec<CachedSong>>>,
         event_emitter: Arc<EventEmitter>,
     ) -> super::backend::AudioStatusChangeCallback {
-        Arc::new(move || match Self::player_status(&audio, &fader, &queue) {
+        Arc::new(move || match Self::player_status(&audio, &queue) {
             Ok(status) => {
                 if let Err(error) = event_emitter.player_status_changed(status) {
                     eprintln!("Failed to emit player status change: {error}");
@@ -252,11 +242,9 @@ impl PlayerService {
 
     fn player_status(
         audio: &Arc<dyn AudioBackend>,
-        fader: &PlaybackFader,
         queue: &Arc<Mutex<Vec<CachedSong>>>,
     ) -> Result<PlayerStatus, String> {
         let audio_status = audio.status();
-        let volume = fader.volume()?;
         let queue = queue
             .lock()
             .map_err(|_| "Player queue lock was poisoned".to_string())?;
@@ -279,7 +267,7 @@ impl PlayerService {
             duration_seconds: audio_status.duration_seconds,
             queue_position: audio_status.playlist_position.map(|position| position + 1),
             queue_length: queue.len(),
-            volume,
+            volume: audio_status.volume,
         })
     }
 }

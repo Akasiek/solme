@@ -3,14 +3,14 @@ use std::{
     time::Duration,
 };
 
-use super::backend::AudioBackend;
+use super::backend::{AudioBackend, AudioBackendStatus, AudioStatusChangeCallback};
 
 const FADE_DURATION: Duration = Duration::from_millis(300);
 const FADE_STEPS: u32 = 12;
 
 #[derive(Clone)]
-pub struct PlaybackFader {
-    audio: Arc<dyn AudioBackend>,
+pub struct FadingAudioBackend {
+    inner: Arc<dyn AudioBackend>,
     state: Arc<Mutex<FadeState>>,
 }
 
@@ -27,12 +27,12 @@ enum FadePhase {
     Resuming,
 }
 
-impl PlaybackFader {
-    pub fn new(audio: Arc<dyn AudioBackend>) -> Self {
-        let volume = audio.status().volume;
+impl FadingAudioBackend {
+    pub fn new(inner: Arc<dyn AudioBackend>) -> Self {
+        let volume = inner.status().volume;
 
         Self {
-            audio,
+            inner,
             state: Arc::new(Mutex::new(FadeState {
                 generation: 0,
                 volume,
@@ -48,7 +48,7 @@ impl PlaybackFader {
         Ok(state.generation)
     }
 
-    pub fn cancel(&self) -> Result<(), String> {
+    fn cancel(&self) -> Result<(), String> {
         let volume = {
             let mut state = self.lock_state()?;
             state.generation = state.generation.wrapping_add(1);
@@ -56,7 +56,7 @@ impl PlaybackFader {
             state.volume
         };
 
-        self.audio.set_volume(volume)
+        self.inner.set_volume(volume)
     }
 
     fn lock_state(&self) -> Result<std::sync::MutexGuard<'_, FadeState>, String> {
@@ -69,8 +69,8 @@ impl PlaybackFader {
         Ok(self.lock_state()?.phase == phase)
     }
 
-    pub fn pause(&self) -> Result<(), String> {
-        let status = self.audio.status();
+    fn pause_with_fade(&self) -> Result<(), String> {
+        let status = self.inner.status();
         let is_already_paused = status.paused;
         let is_pausing = self.is_fade_running(FadePhase::Pausing)?;
 
@@ -78,12 +78,12 @@ impl PlaybackFader {
             return Ok(());
         }
         if !status.playing {
-            return self.audio.pause();
+            return self.inner.pause();
         }
 
         let generation = self.begin_fade(FadePhase::Pausing)?;
         spawn_fade_out(
-            Arc::clone(&self.audio),
+            Arc::clone(&self.inner),
             Arc::clone(&self.state),
             generation,
             status.volume,
@@ -91,8 +91,8 @@ impl PlaybackFader {
         Ok(())
     }
 
-    pub fn resume(&self) -> Result<(), String> {
-        let is_paused = self.audio.status().paused;
+    fn resume_with_fade(&self) -> Result<(), String> {
+        let is_paused = self.inner.status().paused;
         let is_resuming = self.is_fade_running(FadePhase::Resuming)?;
 
         if is_paused && is_resuming {
@@ -100,18 +100,18 @@ impl PlaybackFader {
         }
 
         let generation = self.begin_fade(FadePhase::Resuming)?;
-        let status = self.audio.status();
+        let status = self.inner.status();
         let start_volume = if status.paused {
-            self.audio.set_volume(0.0)?;
-            self.audio.resume()?;
+            self.inner.set_volume(0.0)?;
+            self.inner.resume()?;
             0.0
         } else {
-            self.audio.resume()?;
+            self.inner.resume()?;
             status.volume
         };
 
         spawn_fade_in(
-            Arc::clone(&self.audio),
+            Arc::clone(&self.inner),
             Arc::clone(&self.state),
             generation,
             start_volume,
@@ -119,7 +119,7 @@ impl PlaybackFader {
         Ok(())
     }
 
-    pub fn set_volume(&self, volume: f64) -> Result<(), String> {
+    fn set_logical_volume(&self, volume: f64) -> Result<(), String> {
         let volume = volume.clamp(0.0, 100.0);
         let should_apply = {
             let mut state = self.lock_state()?;
@@ -128,13 +128,82 @@ impl PlaybackFader {
         };
 
         if should_apply {
-            self.audio.set_volume(volume)?;
+            self.inner.set_volume(volume)?;
         }
         Ok(())
     }
 
-    pub fn volume(&self) -> Result<f64, String> {
+    fn volume(&self) -> Result<f64, String> {
         Ok(self.lock_state()?.volume)
+    }
+}
+
+impl AudioBackend for FadingAudioBackend {
+    fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.load_queue(sources, start_index)
+    }
+
+    fn load_queue_paused(
+        &self,
+        sources: &[String],
+        start_index: usize,
+        position_seconds: Option<f64>,
+    ) -> Result<(), String> {
+        self.cancel()?;
+        self.inner
+            .load_queue_paused(sources, start_index, position_seconds)
+    }
+
+    fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+        self.inner.prepend_queue(sources)
+    }
+
+    fn append_queue(&self, sources: &[String]) -> Result<(), String> {
+        self.inner.append_queue(sources)
+    }
+
+    fn pause(&self) -> Result<(), String> {
+        self.pause_with_fade()
+    }
+
+    fn resume(&self) -> Result<(), String> {
+        self.resume_with_fade()
+    }
+
+    fn stop(&self) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.stop()
+    }
+
+    fn next(&self) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.next()
+    }
+
+    fn previous(&self) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.previous()
+    }
+
+    fn seek(&self, position_seconds: f64) -> Result<(), String> {
+        self.inner.seek(position_seconds)
+    }
+
+    fn set_volume(&self, volume: f64) -> Result<(), String> {
+        self.set_logical_volume(volume)
+    }
+
+    fn status(&self) -> AudioBackendStatus {
+        let mut status = self.inner.status();
+        if let Ok(volume) = self.volume() {
+            status.volume = volume;
+        }
+        status
+    }
+
+    fn set_status_change_callback(&self, callback: AudioStatusChangeCallback) {
+        self.inner.set_status_change_callback(callback);
     }
 }
 
@@ -225,18 +294,18 @@ fn finish_fade(state: &Mutex<FadeState>, generation: u64) {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use super::{AudioBackend, PlaybackFader, FADE_DURATION};
+    use super::{AudioBackend, FadingAudioBackend, FADE_DURATION};
     use crate::audio::backend::{AudioBackendStatus, AudioStatusChangeCallback};
 
     #[test]
     fn fades_out_before_pausing_and_preserves_logical_volume() {
         tauri::async_runtime::block_on(async {
             let state = Arc::new(Mutex::new(MockState::playing(80.0)));
-            let fader = fader(Arc::clone(&state));
+            let audio = fading_audio(Arc::clone(&state));
 
-            fader.pause().unwrap();
+            audio.pause().unwrap();
 
-            assert_eq!(fader.volume().unwrap(), 80.0);
+            assert_eq!(audio.status().volume, 80.0);
             tokio::time::sleep(FADE_DURATION + FADE_DURATION).await;
 
             let state = state.lock().unwrap();
@@ -253,9 +322,9 @@ mod tests {
                 paused: true,
                 volume: 70.0,
             }));
-            let fader = fader(Arc::clone(&state));
+            let audio = fading_audio(Arc::clone(&state));
 
-            fader.resume().unwrap();
+            audio.resume().unwrap();
             assert!(!state.lock().unwrap().paused);
 
             tokio::time::sleep(FADE_DURATION + FADE_DURATION).await;
@@ -267,11 +336,11 @@ mod tests {
     fn resume_cancels_pending_pause() {
         tauri::async_runtime::block_on(async {
             let state = Arc::new(Mutex::new(MockState::playing(60.0)));
-            let fader = fader(Arc::clone(&state));
+            let audio = fading_audio(Arc::clone(&state));
 
-            fader.pause().unwrap();
+            audio.pause().unwrap();
             tokio::time::sleep(FADE_DURATION / 3).await;
-            fader.resume().unwrap();
+            audio.resume().unwrap();
             tokio::time::sleep(FADE_DURATION + FADE_DURATION).await;
 
             let state = state.lock().unwrap();
@@ -284,10 +353,10 @@ mod tests {
     fn volume_changed_during_fade_is_restored_after_pause() {
         tauri::async_runtime::block_on(async {
             let state = Arc::new(Mutex::new(MockState::playing(90.0)));
-            let fader = fader(Arc::clone(&state));
+            let audio = fading_audio(Arc::clone(&state));
 
-            fader.pause().unwrap();
-            fader.set_volume(35.0).unwrap();
+            audio.pause().unwrap();
+            audio.set_volume(35.0).unwrap();
             tokio::time::sleep(FADE_DURATION + FADE_DURATION).await;
 
             let state = state.lock().unwrap();
@@ -296,9 +365,26 @@ mod tests {
         });
     }
 
-    fn fader(state: Arc<Mutex<MockState>>) -> PlaybackFader {
+    #[test]
+    fn stop_cancels_pending_fade_and_restores_logical_volume() {
+        tauri::async_runtime::block_on(async {
+            let state = Arc::new(Mutex::new(MockState::playing(65.0)));
+            let audio = fading_audio(Arc::clone(&state));
+
+            audio.pause().unwrap();
+            tokio::time::sleep(FADE_DURATION / 3).await;
+            audio.stop().unwrap();
+            tokio::time::sleep(FADE_DURATION + FADE_DURATION).await;
+
+            let state = state.lock().unwrap();
+            assert!(!state.playing);
+            assert_eq!(state.volume, 65.0);
+        });
+    }
+
+    fn fading_audio(state: Arc<Mutex<MockState>>) -> FadingAudioBackend {
         let audio: Arc<dyn AudioBackend> = Arc::new(MockBackend::new(state));
-        PlaybackFader::new(audio)
+        FadingAudioBackend::new(audio)
     }
 
     struct MockState {
