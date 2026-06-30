@@ -5,7 +5,7 @@ use tauri::State;
 use crate::audio::{PlayerService, PlayerStatus};
 
 #[tauri::command]
-pub async fn play_album(
+pub async fn player_play_album(
     album_id: String,
     start_song_id: Option<String>,
     player: State<'_, Arc<PlayerService>>,
@@ -14,7 +14,7 @@ pub async fn play_album(
 }
 
 #[tauri::command]
-pub async fn queue_album_at_start(
+pub async fn player_queue_album_at_start(
     album_id: String,
     player: State<'_, Arc<PlayerService>>,
 ) -> Result<(), String> {
@@ -22,7 +22,7 @@ pub async fn queue_album_at_start(
 }
 
 #[tauri::command]
-pub async fn queue_album_at_end(
+pub async fn player_queue_album_at_end(
     album_id: String,
     player: State<'_, Arc<PlayerService>>,
 ) -> Result<(), String> {
@@ -30,37 +30,37 @@ pub async fn queue_album_at_end(
 }
 
 #[tauri::command]
-pub fn pause(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_pause(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.pause()
 }
 
 #[tauri::command]
-pub fn resume(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_resume(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.resume()
 }
 
 #[tauri::command]
-pub fn stop(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_stop(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.stop()
 }
 
 #[tauri::command]
-pub fn next(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_next(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.next()
 }
 
 #[tauri::command]
-pub fn previous(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_previous(player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.previous()
 }
 
 #[tauri::command]
-pub fn seek(position_seconds: f64, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_seek(position_seconds: f64, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.seek(position_seconds)
 }
 
 #[tauri::command]
-pub fn set_volume(volume: f64, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_set_volume(volume: f64, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
     player.set_volume(volume)
 }
 

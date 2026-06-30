@@ -16,17 +16,17 @@ const stopAlbumLinkNavigation = (event: MouseEvent) => {
 
 const playAlbum = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
-  invoke("play_album", { albumId: album.remoteId });
+  invoke("player_play_album", { albumId: album.remoteId });
 };
 
 const queueAlbumAtStart = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
-  invoke("queue_album_at_start", { albumId: album.remoteId });
+  invoke("player_queue_album_at_start", { albumId: album.remoteId });
 };
 
 const queueAlbumAtEnd = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
-  invoke("queue_album_at_end", { albumId: album.remoteId });
+  invoke("player_queue_album_at_end", { albumId: album.remoteId });
 };
 </script>
 
