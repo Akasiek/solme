@@ -4,19 +4,19 @@ use mpris_server::{
     LoopStatus, Metadata, PlaybackRate, PlaybackStatus, PlayerInterface, Property, RootInterface,
     Server, Time, TrackId, Volume,
 };
-use std::{path::Path, sync::Arc, time::Duration};
-
-const STATUS_INTERVAL: Duration = Duration::from_secs(1);
+use std::{path::Path, sync::Arc};
+use tokio::sync::broadcast;
 
 pub fn start_mpris_service(player: Arc<PlayerService>) {
     tauri::async_runtime::spawn(async move {
+        let status_receiver = player.subscribe_status();
         let handler = MprisPlayer::new(player);
         let bus_name = format!("solme.instance{}", std::process::id());
         let Ok(server) = Server::new(&bus_name, handler).await else {
             return;
         };
 
-        monitor_player(server).await;
+        monitor_player(server, status_receiver).await;
     });
 }
 
@@ -221,22 +221,34 @@ impl PlayerInterface for MprisPlayer {
     }
 }
 
-async fn monitor_player(server: Server<MprisPlayer>) {
-    let mut previous = None;
+async fn monitor_player(
+    server: Server<MprisPlayer>,
+    mut status_receiver: broadcast::Receiver<PlayerStatus>,
+) {
+    let mut previous = server
+        .imp()
+        .status()
+        .ok()
+        .map(|status| MprisSnapshot::from(&status));
 
     loop {
-        if let Ok(status) = server.imp().status() {
-            let current = MprisSnapshot::from(&status);
-            if let Some(previous) = previous.as_ref() {
-                let properties = changed_properties(previous, &current, &status);
-                if !properties.is_empty() {
-                    let _ = server.properties_changed(properties).await;
-                }
-            }
-            previous = Some(current);
-        }
+        let status = match status_receiver.recv().await {
+            Ok(status) => status,
+            Err(broadcast::error::RecvError::Lagged(_)) => match server.imp().status() {
+                Ok(status) => status,
+                Err(_) => continue,
+            },
+            Err(broadcast::error::RecvError::Closed) => return,
+        };
 
-        tokio::time::sleep(STATUS_INTERVAL).await;
+        let current = MprisSnapshot::from(&status);
+        if let Some(previous) = previous.as_ref() {
+            let properties = changed_properties(previous, &current, &status);
+            if !properties.is_empty() {
+                let _ = server.properties_changed(properties).await;
+            }
+        }
+        previous = Some(current);
     }
 }
 
