@@ -136,6 +136,10 @@ impl FadingAudioBackend {
     fn volume(&self) -> Result<f64, String> {
         Ok(self.lock_state()?.volume)
     }
+
+    fn phase(&self) -> Result<FadePhase, String> {
+        Ok(self.lock_state()?.phase)
+    }
 }
 
 impl AudioBackend for FadingAudioBackend {
@@ -198,6 +202,13 @@ impl AudioBackend for FadingAudioBackend {
         let mut status = self.inner.status();
         if let Ok(volume) = self.volume() {
             status.volume = volume;
+        }
+        if let Ok(phase) = self.phase() {
+            match phase {
+                FadePhase::Idle => {}
+                FadePhase::Pausing => status.paused = status.playing,
+                FadePhase::Resuming => status.paused = false,
+            }
         }
         status
     }
@@ -312,6 +323,17 @@ mod tests {
             assert!(state.paused);
             assert_eq!(state.volume, 80.0);
         });
+    }
+
+    #[test]
+    fn reports_target_pause_state_while_fading_out() {
+        let state = Arc::new(Mutex::new(MockState::playing(80.0)));
+        let audio = fading_audio(Arc::clone(&state));
+
+        audio.pause().unwrap();
+
+        assert!(!state.lock().unwrap().paused);
+        assert!(audio.status().paused);
     }
 
     #[test]
