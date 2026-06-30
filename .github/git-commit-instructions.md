@@ -1,13 +1,15 @@
 Write a meaningful compact commit message in the conventional commit convention by trying to understand what was the benefits the code author wanted to add by their changes to codebase with this commit.
 
---------------------------------------
+---
+
 Format (The <type> and <subject> fields are mandatory. The <subject> field starts with uppercase.):
 <type>: <subject>
 <BLANK LINE>
-<body>
---------------------------------------
+
+## <body>
 
 Only possible types:
+
 - feat (feature): Introduces a new feature or functionality to the codebase.
 - fix (bug fix): Resolves a bug or issue in the codebase.
 - docs (documentation): Adds or updates documentation.
