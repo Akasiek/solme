@@ -110,6 +110,7 @@ pub struct CachedAlbum {
 pub struct CachedSong {
     pub remote_id: String,
     pub album_id: String,
+    pub artist_id: Option<String>,
     pub title: String,
     pub artist_name: String,
     pub album_name: String,

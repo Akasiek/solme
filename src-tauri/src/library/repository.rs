@@ -464,7 +464,7 @@ impl LibraryRepository for SqliteRepository {
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {
         sqlx::query_as!(
             CachedSong,
-            "SELECT song.remote_id, song.album_id, song.title, song.artist_name,
+            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                     song.album_name, artwork.local_path AS artwork_path,
                     song.track_number, song.disc_number, song.duration_seconds
              FROM songs song

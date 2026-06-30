@@ -581,6 +581,7 @@ mod tests {
         CachedSong {
             remote_id: id.to_string(),
             album_id: "album-1".to_string(),
+            artist_id: Some("artist-1".to_string()),
             title: id.to_string(),
             artist_name: "Artist".to_string(),
             album_name: "Album".to_string(),
