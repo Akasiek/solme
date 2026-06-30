@@ -46,7 +46,11 @@ const canGoNext = computed(
 }
 
 .playback-control-container > button {
-  @apply cursor-pointer rounded-full bg-accent p-2.5 text-zinc-100 disabled:cursor-not-allowed disabled:bg-zinc-700;
+  @apply cursor-pointer rounded-full bg-accent p-2.5 text-zinc-100;
+}
+
+.playback-control-container > button:disabled {
+  @apply cursor-not-allowed bg-zinc-700;
 }
 
 .playback-control-container > button > svg {
