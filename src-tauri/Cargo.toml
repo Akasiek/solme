@@ -25,7 +25,7 @@ tauri-plugin-opener = "2"
 # Async
 async-trait = "0.1"
 futures-util = "0.3"
-tokio = { version = "1", features = ["time"] }
+tokio = { version = "1", features = ["sync", "time"] }
 
 # Serialization
 serde = { version = "1", features = ["derive"] }

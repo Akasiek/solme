@@ -3,17 +3,7 @@ use tauri::{AppHandle, Emitter};
 
 use crate::audio::PlayerStatus;
 
-enum Event {
-    PlayerStatusChanged,
-}
-
-impl Event {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::PlayerStatusChanged => "player-status-changed",
-        }
-    }
-}
+use super::event::Event;
 
 pub struct EventEmitter {
     app: Option<AppHandle>,

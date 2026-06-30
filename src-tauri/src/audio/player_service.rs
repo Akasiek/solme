@@ -12,14 +12,14 @@ use super::{
     preference::{PreferenceRepository, PreferenceService},
     session::PlaybackSession,
 };
-use crate::events::EventEmitter;
+use crate::events::EventBus;
 
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
     preference: PreferenceService,
-    event_emitter: Arc<EventEmitter>,
+    event_bus: Arc<EventBus>,
     queue: Arc<Mutex<Vec<CachedSong>>>,
 }
 
@@ -29,7 +29,7 @@ impl PlayerService {
         server: Arc<MusicServerService>,
         repository: Arc<dyn LibraryRepository>,
         preference: Arc<dyn PreferenceRepository>,
-        event_emitter: Arc<EventEmitter>,
+        event_bus: Arc<EventBus>,
     ) -> Self {
         let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
@@ -38,7 +38,7 @@ impl PlayerService {
         audio.set_status_change_callback(Self::status_change_callback(
             Arc::clone(&audio),
             Arc::clone(&queue),
-            Arc::clone(&event_emitter),
+            Arc::clone(&event_bus),
         ));
 
         Self {
@@ -46,7 +46,7 @@ impl PlayerService {
             server,
             repository,
             preference,
-            event_emitter,
+            event_bus,
             queue,
         }
     }
@@ -79,7 +79,12 @@ impl PlayerService {
     }
 
     fn notify_status_changed(&self) -> Result<(), String> {
-        self.event_emitter.player_status_changed(self.status()?)
+        let status = self.status()?;
+        self.event_bus.publish_player_status(status)
+    }
+
+    pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<PlayerStatus> {
+        self.event_bus.subscribe_player_status()
     }
 
     pub async fn play_album(
@@ -228,11 +233,11 @@ impl PlayerService {
     fn status_change_callback(
         audio: Arc<dyn AudioBackend>,
         queue: Arc<Mutex<Vec<CachedSong>>>,
-        event_emitter: Arc<EventEmitter>,
+        event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
         Arc::new(move || match Self::player_status(&audio, &queue) {
             Ok(status) => {
-                if let Err(error) = event_emitter.player_status_changed(status) {
+                if let Err(error) = event_bus.publish_player_status(status) {
                     eprintln!("Failed to emit player status change: {error}");
                 }
             }
@@ -282,7 +287,7 @@ mod tests {
     use async_trait::async_trait;
 
     use super::PlayerService;
-    use crate::events::EventEmitter;
+    use crate::events::EventBus;
     use crate::{
         audio::{
             backend::{AudioBackend, AudioBackendStatus},
@@ -324,7 +329,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
-                noop_event_emitter(),
+                noop_event_bus(),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -372,7 +377,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
-                noop_event_emitter(),
+                noop_event_bus(),
             );
 
             assert_eq!(
@@ -408,7 +413,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
-                noop_event_emitter(),
+                noop_event_bus(),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -455,7 +460,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
-                noop_event_emitter(),
+                noop_event_bus(),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -499,7 +504,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
-                noop_event_emitter(),
+                noop_event_bus(),
             );
             let queue = vec![song("song-1"), song("song-2"), song("song-3")];
 
@@ -555,7 +560,7 @@ mod tests {
                 server_service,
                 repository,
                 preferences,
-                noop_event_emitter(),
+                noop_event_bus(),
             );
 
             player.restore_preferences().await.unwrap();
@@ -580,8 +585,8 @@ mod tests {
         }
     }
 
-    fn noop_event_emitter() -> Arc<EventEmitter> {
-        Arc::new(EventEmitter::disabled())
+    fn noop_event_bus() -> Arc<EventBus> {
+        Arc::new(EventBus::disabled())
     }
 
     #[derive(Default)]

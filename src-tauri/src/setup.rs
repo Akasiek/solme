@@ -10,7 +10,7 @@ use crate::{
     audio::{MpvBackend, PlaybackSessionService, PlayerService, ScrobbleService},
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
-    events::EventEmitter,
+    events::{EventBus, EventEmitter},
     library::LibrarySyncService,
     server::MusicServerService,
 };
@@ -28,9 +28,9 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let server = create_server(&dirs.config)?;
     let database_path = dirs.data.join(DATABASE_FILE_NAME);
     let repository = create_repository(&database_path)?;
-    let event_emitter = create_event_emitter(app);
+    let event_bus = create_event_bus(app);
     let library_sync = create_library_sync(&dirs.cache, &server, &repository);
-    let player = create_player(&server, &repository, event_emitter)?;
+    let player = create_player(&server, &repository, event_bus)?;
     let scrobble_service = create_scrobble_service(&player, &server, &repository);
     let session_service = create_session_service(&player, &server, &repository);
 
@@ -92,8 +92,10 @@ fn create_repository(database_path: &Path) -> SetupResult<Arc<SqliteRepository>>
     Ok(Arc::new(repository))
 }
 
-fn create_event_emitter(app: &tauri::App) -> Arc<EventEmitter> {
-    Arc::new(EventEmitter::new(app.handle().clone()))
+fn create_event_bus(app: &tauri::App) -> Arc<EventBus> {
+    Arc::new(EventBus::new(Arc::new(EventEmitter::new(
+        app.handle().clone(),
+    ))))
 }
 
 fn create_library_sync(
@@ -112,7 +114,7 @@ fn create_library_sync(
 fn create_player(
     server: &Arc<MusicServerService>,
     repository: &Arc<SqliteRepository>,
-    event_emitter: Arc<EventEmitter>,
+    event_bus: Arc<EventBus>,
 ) -> SetupResult<Arc<PlayerService>> {
     let audio = MpvBackend::new().map_err(std::io::Error::other)?;
     let library_repository = Arc::clone(repository);
@@ -122,7 +124,7 @@ fn create_player(
         Arc::clone(server),
         library_repository,
         preference_repository,
-        event_emitter,
+        event_bus,
     )))
 }
 
