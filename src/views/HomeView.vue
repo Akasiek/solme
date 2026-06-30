@@ -27,9 +27,7 @@ const {
     </div>
 
     <AsyncViewState :is-loading="isLoading" :error="loadError">
-      <div
-        class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8"
-      >
+      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
         <div v-for="album in albums" :key="album.remoteId">
           <AlbumCard :album="album" />
         </div>
