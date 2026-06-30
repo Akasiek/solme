@@ -17,9 +17,9 @@ defineProps<{
     <div
       class="space-y-1 gap-x-2.5 rounded-md border-2 border-zinc-800 px-3 py-3 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
     >
-      <h4 class="line-clamp-2 font-serif font-bold">{{ album.name }}</h4>
+      <h4 class="line-clamp-1 font-serif font-bold" :title="album.name">{{ album.name }}</h4>
       <RouterLink :to="{ name: 'artist', params: { artistId: album.artistId } }">
-        <h3 class="line-clamp-2 font-sans font-normal text-zinc-300 hover:underline">
+        <h3 class="line-clamp-1 font-sans font-normal text-zinc-300 hover:underline" :title="album.artistName">
           {{ album.artistName }}
         </h3>
       </RouterLink>
