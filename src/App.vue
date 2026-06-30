@@ -1,7 +1,10 @@
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import PlayerBar from "@/components/PlayerBar/PlayerBar.vue";
+</script>
 
 <template>
-  <main class="min-h-screen bg-zinc-900 font-sans text-zinc-100">
+  <main class="bg-zinc-900 font-sans text-zinc-100">
     <RouterView />
   </main>
+  <PlayerBar />
 </template>
