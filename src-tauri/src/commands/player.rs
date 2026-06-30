@@ -55,7 +55,10 @@ pub fn player_previous(player: State<'_, Arc<PlayerService>>) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn player_seek(position_seconds: f64, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_seek(
+    position_seconds: f64,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
     player.seek(position_seconds)
 }
 

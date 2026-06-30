@@ -3,8 +3,9 @@ use crate::commands::library::{
     get_library_sync_status, search_cached_albums, sync_library,
 };
 use crate::commands::player::{
-    get_player_status, player_next, player_pause, player_play_album, player_previous, player_queue_album_at_end, player_queue_album_at_start,
-    player_resume, player_seek, player_set_volume, player_stop,
+    get_player_status, player_next, player_pause, player_play_album, player_previous,
+    player_queue_album_at_end, player_queue_album_at_start, player_resume, player_seek,
+    player_set_volume, player_stop,
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, forget_saved_server_profile,
