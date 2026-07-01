@@ -6,8 +6,14 @@ defineProps<{ currentSong: CachedSong }>();
 </script>
 
 <template>
-  <div class="flex min-w-0 items-center gap-4">
-    <img :src="artworkSource(currentSong.artworkPath)" alt="Artwork" class="aspect-square h-18" />
+  <div class="flex h-20 w-full min-w-0 items-center gap-4">
+    <div class="size-20 shrink-0 overflow-hidden rounded">
+      <img
+        :src="artworkSource(currentSong.artworkPath)"
+        alt="Artwork"
+        class="h-full w-full object-cover object-center"
+      />
+    </div>
     <div class="flex min-w-0 flex-col gap-1">
       <span class="line-clamp-1 font-serif font-bold">{{ currentSong.title }}</span>
       <RouterLink
