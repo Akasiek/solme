@@ -98,7 +98,7 @@ const formatTime = (seconds: number) => {
 @reference "@/style/glob.css";
 
 .seek-slider-wrapper {
-  @apply flex h-4 w-full max-w-md min-w-72 items-center gap-3;
+  @apply flex h-4 w-full max-w-md min-w-72 items-center gap-3 font-sans;
 }
 
 .seek-slider-time {
