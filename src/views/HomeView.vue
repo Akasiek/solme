@@ -22,7 +22,7 @@ const {
 <template>
   <section class="space-y-6 p-6">
     <div class="space-y-2">
-      <h1 class="font-serif text-4xl font-bold">Solm<span class="text-accent">ë</span></h1>
+      <h1 class="font-serif text-4xl font-bold">Home</h1>
       <hr class="border-zinc-800" />
     </div>
 
