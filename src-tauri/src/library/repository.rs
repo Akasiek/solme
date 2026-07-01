@@ -5,9 +5,12 @@ use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use crate::database::SqliteRepository;
 
-use super::models::{
-    AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, Genre,
-    LibrarySnapshot, LibrarySummary, Song,
+use super::{
+    fuzzy_search,
+    models::{
+        AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong,
+        Genre, LibrarySnapshot, LibrarySummary, Song,
+    },
 };
 
 const SQLITE_BIND_LIMIT: usize = 999;
@@ -74,6 +77,47 @@ impl SqliteRepository {
             .collect::<Vec<_>>();
 
         (!terms.is_empty()).then(|| terms.join(" "))
+    }
+
+    async fn fuzzy_album_candidates(&self, profile_id: &str) -> Result<Vec<CachedAlbum>, String> {
+        sqlx::query_as::<_, CachedAlbum>(
+            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+                    a.song_count, artwork.local_path AS artwork_path
+             FROM albums a
+             JOIN library_sync_state state
+               ON state.profile_id = a.profile_id
+              AND state.active_generation = a.generation
+             LEFT JOIN artwork_cache artwork
+               ON artwork.profile_id = a.profile_id
+              AND artwork.kind = 'album'
+              AND artwork.remote_id = a.remote_id
+             WHERE a.profile_id = ?",
+        )
+        .bind(profile_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read fuzzy album candidates: {error}"))
+    }
+
+    async fn fuzzy_song_candidates(&self, profile_id: &str) -> Result<Vec<CachedSong>, String> {
+        sqlx::query_as::<_, CachedSong>(
+            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
+                    song.album_name, artwork.local_path AS artwork_path,
+                    song.track_number, song.disc_number, song.duration_seconds
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             LEFT JOIN artwork_cache artwork
+               ON artwork.profile_id = song.profile_id
+              AND artwork.kind = 'album'
+              AND artwork.remote_id = song.album_id
+             WHERE song.profile_id = ?",
+        )
+        .bind(profile_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read fuzzy song candidates: {error}"))
     }
 
     async fn insert_artists(
@@ -528,11 +572,11 @@ impl LibraryRepository for SqliteRepository {
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedAlbum>, String> {
-        let Some(query) = Self::search_query(query) else {
+        let Some(fts_query) = Self::search_query(query) else {
             return Ok(Vec::new());
         };
         let limit = limit.clamp(1, 500);
-        sqlx::query_as!(
+        let results = sqlx::query_as!(
             CachedAlbum,
             "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
                     a.song_count, artwork.local_path AS artwork_path
@@ -556,12 +600,20 @@ impl LibraryRepository for SqliteRepository {
                       a.name COLLATE NOCASE
              LIMIT ?",
             profile_id,
-            query,
+            fts_query,
             limit,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| format!("Failed to search cached albums: {error}"))
+        .map_err(|error| format!("Failed to search cached albums: {error}"))?;
+
+        let Some(query) = fuzzy_search::should_use_fuzzy(query, results.len(), limit) else {
+            return Ok(results);
+        };
+
+        let candidates = self.fuzzy_album_candidates(profile_id).await?;
+        let fuzzy_results = fuzzy_search::rank_albums(&query, candidates, limit);
+        Ok(fuzzy_search::merge_albums(results, fuzzy_results, limit))
     }
 
     async fn search_songs(
@@ -570,11 +622,11 @@ impl LibraryRepository for SqliteRepository {
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedSong>, String> {
-        let Some(query) = Self::search_query(query) else {
+        let Some(fts_query) = Self::search_query(query) else {
             return Ok(Vec::new());
         };
         let limit = limit.clamp(1, 500);
-        sqlx::query_as!(
+        let results = sqlx::query_as!(
             CachedSong,
             "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                     song.album_name, artwork.local_path AS artwork_path,
@@ -601,12 +653,20 @@ impl LibraryRepository for SqliteRepository {
                       song.title COLLATE NOCASE
              LIMIT ?",
             profile_id,
-            query,
+            fts_query,
             limit,
         )
         .fetch_all(&self.pool)
         .await
-        .map_err(|error| format!("Failed to search cached songs: {error}"))
+        .map_err(|error| format!("Failed to search cached songs: {error}"))?;
+
+        let Some(query) = fuzzy_search::should_use_fuzzy(query, results.len(), limit) else {
+            return Ok(results);
+        };
+
+        let candidates = self.fuzzy_song_candidates(profile_id).await?;
+        let fuzzy_results = fuzzy_search::rank_songs(&query, candidates, limit);
+        Ok(fuzzy_search::merge_songs(results, fuzzy_results, limit))
     }
 
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {
@@ -933,6 +993,32 @@ mod tests {
     }
 
     #[test]
+    fn album_search_uses_fuzzy_fallback_for_typos() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Nevermind".to_string();
+            snapshot.albums[0].album.artist_name = "Nirvana".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_artist_typo = repository
+                .search_albums("profile", "nibana", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_artist_typo.len(), 1);
+            assert_eq!(by_artist_typo[0].remote_id, "album-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
     fn searches_active_songs_by_title_artist_album_or_genre() {
         tauri::async_runtime::block_on(async {
             let (repository, directory) = repository().await;
@@ -1003,6 +1089,35 @@ mod tests {
             assert_eq!(by_album.len(), 2);
             assert_eq!(by_genre.len(), 1);
             assert_eq!(by_genre[0].remote_id, "song-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn song_search_uses_fuzzy_fallback_for_typos() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Nevermind".to_string();
+            snapshot.albums[0].album.artist_name = "Nirvana".to_string();
+            snapshot.albums[0].songs[0].title = "Smells Like Teen Spirit".to_string();
+            snapshot.albums[0].songs[0].artist_name = "Nirvana".to_string();
+            snapshot.albums[0].songs[0].album_name = "Nevermind".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_title_typo = repository
+                .search_songs("profile", "smels", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_title_typo.len(), 1);
+            assert_eq!(by_title_typo[0].remote_id, "song-1");
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

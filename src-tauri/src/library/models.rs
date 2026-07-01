@@ -93,7 +93,7 @@ pub struct LibrarySummary {
     pub last_success_at: Option<i64>,
 }
 
-#[derive(Serialize)]
+#[derive(Clone, Debug, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedAlbum {
     pub remote_id: String,
@@ -105,7 +105,7 @@ pub struct CachedAlbum {
     pub artwork_path: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Deserialize, PartialEq, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedSong {
     pub remote_id: String,
