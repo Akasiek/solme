@@ -1,19 +1,16 @@
 use std::path::Path;
 
 use async_trait::async_trait;
-use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use crate::database::SqliteRepository;
 
 use super::{
-    fuzzy_search,
     models::{
-        AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong,
-        Genre, LibrarySnapshot, LibrarySummary, Song,
+        ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
+        LibrarySummary,
     },
+    query,
 };
-
-const SQLITE_BIND_LIMIT: usize = 999;
 
 #[async_trait]
 pub trait LibraryRepository: Send + Sync {
@@ -63,356 +60,7 @@ pub trait LibraryRepository: Send + Sync {
     ) -> Result<(), String>;
 }
 
-impl SqliteRepository {
-    fn search_query(input: &str) -> Option<String> {
-        let terms = input
-            .split_whitespace()
-            .map(|term| {
-                term.chars()
-                    .filter(|character| character.is_alphanumeric())
-                    .collect::<String>()
-            })
-            .filter(|term| !term.is_empty())
-            .map(|term| format!("{term}*"))
-            .collect::<Vec<_>>();
-
-        (!terms.is_empty()).then(|| terms.join(" "))
-    }
-
-    async fn fuzzy_album_candidates(&self, profile_id: &str) -> Result<Vec<CachedAlbum>, String> {
-        sqlx::query_as::<_, CachedAlbum>(
-            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                    a.song_count, artwork.local_path AS artwork_path
-             FROM albums a
-             JOIN library_sync_state state
-               ON state.profile_id = a.profile_id
-              AND state.active_generation = a.generation
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = a.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = a.remote_id
-             WHERE a.profile_id = ?",
-        )
-        .bind(profile_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read fuzzy album candidates: {error}"))
-    }
-
-    async fn fuzzy_song_candidates(&self, profile_id: &str) -> Result<Vec<CachedSong>, String> {
-        sqlx::query_as::<_, CachedSong>(
-            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
-                    song.album_name, artwork.local_path AS artwork_path,
-                    song.track_number, song.disc_number, song.duration_seconds
-             FROM songs song
-             JOIN library_sync_state state
-               ON state.profile_id = song.profile_id
-              AND state.active_generation = song.generation
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = song.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = song.album_id
-             WHERE song.profile_id = ?",
-        )
-        .bind(profile_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read fuzzy song candidates: {error}"))
-    }
-
-    async fn insert_artists(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        artists: &[Artist],
-    ) -> Result<(), String> {
-        for artists in artists.chunks(SQLITE_BIND_LIMIT / 5) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO artists
-                 (profile_id, generation, remote_id, name, album_count) ",
-            );
-            query.push_values(artists, |mut row, artist| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&artist.remote_id)
-                    .push_bind(&artist.name)
-                    .push_bind(artist.album_count);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache artists: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        genres: &[Genre],
-    ) -> Result<(), String> {
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 5) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO genres
-                 (profile_id, generation, name, song_count, album_count) ",
-            );
-            query.push_values(genres, |mut row, genre| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&genre.name)
-                    .push_bind(genre.song_count)
-                    .push_bind(genre.album_count);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_albums(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        albums: &[AlbumWithSongs],
-    ) -> Result<(), String> {
-        for albums in albums.chunks(SQLITE_BIND_LIMIT / 10) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO albums
-                 (profile_id, generation, remote_id, name, artist_id, artist_name,
-                  year, song_count, duration_seconds, cover_art_id) ",
-            );
-            query.push_values(albums, |mut row, details| {
-                let album = &details.album;
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&album.remote_id)
-                    .push_bind(&album.name)
-                    .push_bind(&album.artist_id)
-                    .push_bind(&album.artist_name)
-                    .push_bind(album.year)
-                    .push_bind(album.song_count)
-                    .push_bind(album.duration_seconds)
-                    .push_bind(&album.cover_art_id);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache albums: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_album_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        albums: &[AlbumWithSongs],
-    ) -> Result<(), String> {
-        let genres = albums
-            .iter()
-            .flat_map(|details| {
-                details
-                    .album
-                    .genres
-                    .iter()
-                    .map(|genre| (&details.album.remote_id, genre))
-            })
-            .collect::<Vec<_>>();
-
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 4) {
-            let mut query = QueryBuilder::new(
-                "INSERT OR IGNORE INTO album_genres
-                 (profile_id, generation, album_id, genre) ",
-            );
-            query.push_values(genres, |mut row, (album_id, genre)| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(album_id)
-                    .push_bind(genre);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache album genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_album_search(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        albums: &[AlbumWithSongs],
-    ) -> Result<(), String> {
-        for albums in albums.chunks(SQLITE_BIND_LIMIT / 6) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO album_search
-                 (profile_id, generation, remote_id, name, artist_name, genres) ",
-            );
-            query.push_values(albums, |mut row, details| {
-                let album = &details.album;
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&album.remote_id)
-                    .push_bind(&album.name)
-                    .push_bind(&album.artist_name)
-                    .push_bind(album.genres.join(" "));
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to index albums for search: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_songs(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        songs: &[&Song],
-    ) -> Result<(), String> {
-        for songs in songs.chunks(SQLITE_BIND_LIMIT / 15) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO songs
-                 (profile_id, generation, remote_id, album_id, artist_id, title,
-                  artist_name, album_name, track_number, disc_number, year,
-                  duration_seconds, suffix, content_type, cover_art_id) ",
-            );
-            query.push_values(songs, |mut row, song| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&song.remote_id)
-                    .push_bind(&song.album_id)
-                    .push_bind(&song.artist_id)
-                    .push_bind(&song.title)
-                    .push_bind(&song.artist_name)
-                    .push_bind(&song.album_name)
-                    .push_bind(song.track_number)
-                    .push_bind(song.disc_number)
-                    .push_bind(song.year)
-                    .push_bind(song.duration_seconds)
-                    .push_bind(&song.suffix)
-                    .push_bind(&song.content_type)
-                    .push_bind(&song.cover_art_id);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache songs: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_song_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        songs: &[&Song],
-    ) -> Result<(), String> {
-        let genres = songs
-            .iter()
-            .flat_map(|song| song.genres.iter().map(|genre| (&song.remote_id, genre)))
-            .collect::<Vec<_>>();
-
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 4) {
-            let mut query = QueryBuilder::new(
-                "INSERT OR IGNORE INTO song_genres
-                 (profile_id, generation, song_id, genre) ",
-            );
-            query.push_values(genres, |mut row, (song_id, genre)| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(song_id)
-                    .push_bind(genre);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache song genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_song_search(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        songs: &[&Song],
-    ) -> Result<(), String> {
-        for songs in songs.chunks(SQLITE_BIND_LIMIT / 8) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO song_search
-                 (profile_id, generation, remote_id, album_id, title,
-                  artist_name, album_name, genres) ",
-            );
-            query.push_values(songs, |mut row, song| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&song.remote_id)
-                    .push_bind(&song.album_id)
-                    .push_bind(&song.title)
-                    .push_bind(&song.artist_name)
-                    .push_bind(&song.album_name)
-                    .push_bind(song.genres.join(" "));
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to index songs for search: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn delete_stale_generations(&self, profile_id: &str, generation: &str) {
-        let _ = sqlx::query!(
-            "DELETE FROM album_search WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM song_search WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM albums WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM genres WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM artists WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-    }
-}
+impl SqliteRepository {}
 
 #[async_trait]
 impl LibraryRepository for SqliteRepository {
@@ -441,12 +89,12 @@ impl LibraryRepository for SqliteRepository {
             .await
             .map_err(|error| format!("Failed to begin library transaction: {error}"))?;
 
-        Self::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
-        Self::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
-        Self::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
-        Self::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
+        query::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
+        query::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
+        query::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
+        query::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
             .await?;
-        Self::insert_album_search(&mut transaction, profile_id, generation, &snapshot.albums)
+        query::insert_album_search(&mut transaction, profile_id, generation, &snapshot.albums)
             .await?;
 
         let songs = snapshot
@@ -454,9 +102,9 @@ impl LibraryRepository for SqliteRepository {
             .iter()
             .flat_map(|details| &details.songs)
             .collect::<Vec<_>>();
-        Self::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
-        Self::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
-        Self::insert_song_search(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_song_search(&mut transaction, profile_id, generation, &songs).await?;
         let song_count = songs.len() as i64;
 
         sqlx::query!(
@@ -488,7 +136,7 @@ impl LibraryRepository for SqliteRepository {
             .await
             .map_err(|error| format!("Failed to commit library generation: {error}"))?;
 
-        self.delete_stale_generations(profile_id, generation).await;
+        query::delete_stale_generations(self, profile_id, generation).await;
 
         Ok(())
     }
@@ -572,48 +220,7 @@ impl LibraryRepository for SqliteRepository {
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedAlbum>, String> {
-        let Some(fts_query) = Self::search_query(query) else {
-            return Ok(Vec::new());
-        };
-        let limit = limit.clamp(1, 500);
-        let results = sqlx::query_as!(
-            CachedAlbum,
-            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                    a.song_count, artwork.local_path AS artwork_path
-             FROM album_search
-             JOIN library_sync_state state
-               ON state.profile_id = album_search.profile_id
-              AND state.active_generation = album_search.generation
-             JOIN albums a
-               ON a.profile_id = album_search.profile_id
-              AND a.generation = album_search.generation
-              AND a.remote_id = album_search.remote_id
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = a.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = a.remote_id
-             WHERE album_search.profile_id = ?
-               AND album_search MATCH ?
-             ORDER BY bm25(album_search, 0.0, 0.0, 0.0, 6.0, 4.0, 2.0),
-                      a.artist_name COLLATE NOCASE,
-                      a.year,
-                      a.name COLLATE NOCASE
-             LIMIT ?",
-            profile_id,
-            fts_query,
-            limit,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to search cached albums: {error}"))?;
-
-        let Some(query) = fuzzy_search::should_use_fuzzy(query, results.len(), limit) else {
-            return Ok(results);
-        };
-
-        let candidates = self.fuzzy_album_candidates(profile_id).await?;
-        let fuzzy_results = fuzzy_search::rank_albums(&query, candidates, limit);
-        Ok(fuzzy_search::merge_albums(results, fuzzy_results, limit))
+        query::search_albums(self, profile_id, query, limit).await
     }
 
     async fn search_songs(
@@ -622,51 +229,7 @@ impl LibraryRepository for SqliteRepository {
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedSong>, String> {
-        let Some(fts_query) = Self::search_query(query) else {
-            return Ok(Vec::new());
-        };
-        let limit = limit.clamp(1, 500);
-        let results = sqlx::query_as!(
-            CachedSong,
-            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
-                    song.album_name, artwork.local_path AS artwork_path,
-                    song.track_number, song.disc_number, song.duration_seconds
-             FROM song_search
-             JOIN library_sync_state state
-               ON state.profile_id = song_search.profile_id
-              AND state.active_generation = song_search.generation
-             JOIN songs song
-               ON song.profile_id = song_search.profile_id
-              AND song.generation = song_search.generation
-              AND song.remote_id = song_search.remote_id
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = song.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = song.album_id
-             WHERE song_search.profile_id = ?
-               AND song_search MATCH ?
-             ORDER BY bm25(song_search, 0.0, 0.0, 0.0, 0.0, 6.0, 4.0, 2.0, 1.0),
-                      song.artist_name COLLATE NOCASE,
-                      song.album_name COLLATE NOCASE,
-                      song.disc_number,
-                      song.track_number,
-                      song.title COLLATE NOCASE
-             LIMIT ?",
-            profile_id,
-            fts_query,
-            limit,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to search cached songs: {error}"))?;
-
-        let Some(query) = fuzzy_search::should_use_fuzzy(query, results.len(), limit) else {
-            return Ok(results);
-        };
-
-        let candidates = self.fuzzy_song_candidates(profile_id).await?;
-        let fuzzy_results = fuzzy_search::rank_songs(&query, candidates, limit);
-        Ok(fuzzy_search::merge_songs(results, fuzzy_results, limit))
+        query::search_songs(self, profile_id, query, limit).await
     }
 
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {

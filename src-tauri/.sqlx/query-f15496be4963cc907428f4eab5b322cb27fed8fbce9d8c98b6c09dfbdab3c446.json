@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,\n                    a.song_count, artwork.local_path AS artwork_path\n             FROM album_search\n             JOIN library_sync_state state\n               ON state.profile_id = album_search.profile_id\n              AND state.active_generation = album_search.generation\n             JOIN albums a\n               ON a.profile_id = album_search.profile_id\n              AND a.generation = album_search.generation\n              AND a.remote_id = album_search.remote_id\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = a.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = a.remote_id\n             WHERE album_search.profile_id = ?\n               AND album_search MATCH ?\n             ORDER BY bm25(album_search, 0.0, 0.0, 0.0, 6.0, 4.0, 2.0),\n                      a.artist_name COLLATE NOCASE,\n                      a.year,\n                      a.name COLLATE NOCASE\n             LIMIT ?",
+  "query": "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,\n                a.song_count, artwork.local_path AS artwork_path\n         FROM album_search\n         JOIN library_sync_state state\n           ON state.profile_id = album_search.profile_id\n          AND state.active_generation = album_search.generation\n         JOIN albums a\n           ON a.profile_id = album_search.profile_id\n          AND a.generation = album_search.generation\n          AND a.remote_id = album_search.remote_id\n         LEFT JOIN artwork_cache artwork\n           ON artwork.profile_id = a.profile_id\n          AND artwork.kind = 'album'\n          AND artwork.remote_id = a.remote_id\n         WHERE album_search.profile_id = ?\n           AND album_search MATCH ?\n         ORDER BY bm25(album_search, 0.0, 0.0, 0.0, 6.0, 4.0, 2.0),\n                  a.artist_name COLLATE NOCASE,\n                  a.year,\n                  a.name COLLATE NOCASE\n         LIMIT ?",
   "describe": {
     "columns": [
       {
@@ -94,5 +94,5 @@
       true
     ]
   },
-  "hash": "cfb816ed8c07e9f7ee090929bd67e6abcb39fe648b842f7a4a47626ed3730b4b"
+  "hash": "f15496be4963cc907428f4eab5b322cb27fed8fbce9d8c98b6c09dfbdab3c446"
 }

@@ -1,6 +1,7 @@
 mod artwork;
 mod fuzzy_search;
 pub(crate) mod models;
+mod query;
 mod repository;
 mod sync;
 mod time;
