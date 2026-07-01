@@ -6,8 +6,8 @@ defineProps<{ currentSong: CachedSong }>();
 </script>
 
 <template>
-  <div class="flex h-20 w-full min-w-0 items-center gap-4">
-    <div class="size-20 shrink-0 overflow-hidden rounded">
+  <div class="flex h-16 w-full min-w-0 items-center gap-4">
+    <div class="size-16 shrink-0 overflow-hidden rounded">
       <img
         :src="artworkSource(currentSong.artworkPath)"
         alt="Artwork"

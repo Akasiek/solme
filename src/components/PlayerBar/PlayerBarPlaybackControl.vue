@@ -27,13 +27,13 @@ const canGoNext = computed(
 <template>
   <div class="playback-control-container">
     <button @click="invoke('player_previous')" :disabled="!canGoBack">
-      <SkipBack class="size-4" />
+      <SkipBack class="size-3.5" />
     </button>
     <button @click="onPlayPause(playerStatus.state)">
-      <component :is="playerStatus.state === 'playing' ? Pause : Play" class="size-6" />
+      <component :is="playerStatus.state === 'playing' ? Pause : Play" class="size-5" />
     </button>
     <button @click="invoke('player_next')" :disabled="!canGoNext">
-      <SkipForward class="size-4" />
+      <SkipForward class="size-3.5" />
     </button>
   </div>
 </template>

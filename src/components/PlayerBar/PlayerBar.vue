@@ -40,12 +40,12 @@ onUnmounted(() => {
   >
     <nav
       v-if="playerStatus && currentSong"
-      class="sticky inset-x-0 bottom-0 grid h-28 grid-cols-[minmax(0,1fr)_28rem_minmax(0,1fr)] items-center gap-4 bg-zinc-900 p-4 text-zinc-100 shadow-[0_0_24px_0_rgba(0,0,0,0.5)]"
+      class="sticky inset-x-0 bottom-0 grid h-24 grid-cols-[minmax(0,1fr)_28rem_minmax(0,1fr)] items-center gap-4 border-t border-zinc-800 bg-zinc-900 p-4 text-zinc-100"
     >
-      <div class="h-20 w-96 max-w-full">
+      <div class="h-16 w-96 max-w-full">
         <PlayerBarTrackInfo :currentSong="currentSong" />
       </div>
-      <div class="grid justify-items-center gap-3">
+      <div class="grid justify-items-center gap-2">
         <PlayerBarPlaybackControl :playerStatus="playerStatus" />
         <PlayerBarSeekBar :playerStatus="playerStatus" />
       </div>
