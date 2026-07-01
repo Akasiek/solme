@@ -39,7 +39,7 @@ const canGoNext = computed(
 </template>
 
 <style scoped>
-@import "@/style/glob.css";
+@reference "@/style/glob.css";
 
 .playback-control-container {
   @apply flex items-center justify-center gap-4;

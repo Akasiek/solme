@@ -63,7 +63,7 @@ const invokeSetNewVolume = async (newVolume: number) => {
 </template>
 
 <style scoped>
-@import "@/style/glob.css";
+@reference "@/style/glob.css";
 
 .volume-slider-wrapper {
   @apply relative flex h-4 w-48 items-center;

@@ -95,7 +95,7 @@ const formatTime = (seconds: number) => {
 </template>
 
 <style scoped>
-@import "@/style/glob.css";
+@reference "@/style/glob.css";
 
 .seek-slider-wrapper {
   @apply flex h-4 w-full max-w-md min-w-72 items-center gap-3;
