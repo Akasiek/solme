@@ -1,0 +1,12 @@
+{
+  "db_name": "SQLite",
+  "query": "DELETE FROM song_search WHERE profile_id = ? AND generation <> ?",
+  "describe": {
+    "columns": [],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": []
+  },
+  "hash": "d55bc6b2c8bb24e7c8835123a48440aea51b9ce121dcf6d7580a3293682b50f8"
+}

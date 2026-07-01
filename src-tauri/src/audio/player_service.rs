@@ -829,6 +829,15 @@ mod tests {
             unimplemented!()
         }
 
+        async fn search_songs(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedSong>, String> {
+            unimplemented!()
+        }
+
         async fn songs(
             &self,
             _profile_id: &str,

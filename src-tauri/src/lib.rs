@@ -1,6 +1,6 @@
 use crate::commands::library::{
     get_cached_album, get_cached_albums, get_cached_songs, get_library_summary,
-    get_library_sync_status, search_cached_albums, sync_library,
+    get_library_sync_status, search_cached_albums, search_cached_songs, sync_library,
 };
 use crate::commands::player::{
     get_player_status, player_next, player_pause, player_play_album, player_previous,
@@ -50,7 +50,8 @@ pub fn run() {
             get_cached_album,
             get_cached_albums,
             get_cached_songs,
-            search_cached_albums
+            search_cached_albums,
+            search_cached_songs
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

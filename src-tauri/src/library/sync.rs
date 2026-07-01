@@ -122,6 +122,18 @@ impl LibrarySyncService {
             .await
     }
 
+    pub async fn search_songs(&self, query: &str, limit: i64) -> Result<Vec<CachedSong>, String> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository
+            .search_songs(&profile_id, query, limit)
+            .await
+    }
+
     pub async fn songs(&self, album_id: &str) -> Result<Vec<CachedSong>, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(Vec::new());
@@ -706,6 +718,15 @@ mod tests {
             _query: &str,
             _limit: i64,
         ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(Vec::new())
+        }
+
+        async fn search_songs(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedSong>, String> {
             Ok(Vec::new())
         }
 

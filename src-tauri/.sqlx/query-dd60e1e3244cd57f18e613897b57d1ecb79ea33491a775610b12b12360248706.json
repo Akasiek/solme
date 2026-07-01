@@ -1,0 +1,134 @@
+{
+  "db_name": "SQLite",
+  "query": "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,\n                    song.album_name, artwork.local_path AS artwork_path,\n                    song.track_number, song.disc_number, song.duration_seconds\n             FROM song_search\n             JOIN library_sync_state state\n               ON state.profile_id = song_search.profile_id\n              AND state.active_generation = song_search.generation\n             JOIN songs song\n               ON song.profile_id = song_search.profile_id\n              AND song.generation = song_search.generation\n              AND song.remote_id = song_search.remote_id\n             LEFT JOIN artwork_cache artwork\n               ON artwork.profile_id = song.profile_id\n              AND artwork.kind = 'album'\n              AND artwork.remote_id = song.album_id\n             WHERE song_search.profile_id = ?\n               AND song_search MATCH ?\n             ORDER BY bm25(song_search, 0.0, 0.0, 0.0, 0.0, 6.0, 4.0, 2.0, 1.0),\n                      song.artist_name COLLATE NOCASE,\n                      song.album_name COLLATE NOCASE,\n                      song.disc_number,\n                      song.track_number,\n                      song.title COLLATE NOCASE\n             LIMIT ?",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "album_id",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "album_id"
+          }
+        }
+      },
+      {
+        "name": "artist_id",
+        "ordinal": 2,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "artist_id"
+          }
+        }
+      },
+      {
+        "name": "title",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "title"
+          }
+        }
+      },
+      {
+        "name": "artist_name",
+        "ordinal": 4,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "artist_name"
+          }
+        }
+      },
+      {
+        "name": "album_name",
+        "ordinal": 5,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "album_name"
+          }
+        }
+      },
+      {
+        "name": "artwork_path",
+        "ordinal": 6,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      },
+      {
+        "name": "track_number",
+        "ordinal": 7,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "track_number"
+          }
+        }
+      },
+      {
+        "name": "disc_number",
+        "ordinal": 8,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "disc_number"
+          }
+        }
+      },
+      {
+        "name": "duration_seconds",
+        "ordinal": 9,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "songs",
+            "name": "duration_seconds"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 3
+    },
+    "nullable": [
+      false,
+      false,
+      true,
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false
+    ]
+  },
+  "hash": "dd60e1e3244cd57f18e613897b57d1ecb79ea33491a775610b12b12360248706"
+}
