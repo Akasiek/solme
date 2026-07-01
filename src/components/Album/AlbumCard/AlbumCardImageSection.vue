@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ListStart, Play, ListEnd } from "@lucide/vue";
-import { CachedAlbum } from "@/types.ts";
-import { artworkSource } from "@/utils/artwork.ts";
-import MissingCoverImage from "@/components/albums/MissingCoverImage.vue";
+import { CachedAlbum } from "@/types.js";
+import { artworkSource } from "@/utils/artwork.js";
+import MissingCoverImage from "./MissingCoverImage.vue";
 import { invoke } from "@tauri-apps/api/core";
 
 const { album } = defineProps<{

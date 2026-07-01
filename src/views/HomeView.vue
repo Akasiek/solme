@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { CachedAlbum } from "@/types.ts";
-import AlbumCard from "@/components/albums/AlbumCard.vue";
+import AlbumCard from "@/components/Album/AlbumCard/AlbumCard.vue";
 import AsyncViewState from "@/components/AsyncViewState.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CachedAlbum } from "@/types.js";
-import AlbumCardImageSection from "@/components/albums/AlbumCardImageSection.vue";
+import AlbumCardImageSection from "./AlbumCardImageSection.vue";
 
 defineProps<{
   album: CachedAlbum;
