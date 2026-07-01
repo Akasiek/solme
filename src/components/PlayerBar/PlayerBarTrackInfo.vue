@@ -18,7 +18,7 @@ defineProps<{ currentSong: CachedSong }>();
       <span class="line-clamp-1 font-serif font-bold">{{ currentSong.title }}</span>
       <RouterLink
         :to="{ name: 'artist', params: { artistId: currentSong.artistId } }"
-        class="line-clamp-1 text-sm text-zinc-300 hover:underline"
+        class="line-clamp-1 font-sans text-sm text-zinc-300 hover:underline"
       >
         {{ currentSong.artistName }}
       </RouterLink>
