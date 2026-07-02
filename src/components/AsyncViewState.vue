@@ -7,7 +7,9 @@ defineProps<{
 
 <template>
   <slot v-if="isLoading" name="loading">
-    <p class="text-zinc-400">Loading...</p>
+    <div class="flex h-full w-full items-center justify-center">
+      <p class="text-zinc-400">Loading...</p>
+    </div>
   </slot>
 
   <slot v-else-if="error" name="error" :error="error">
