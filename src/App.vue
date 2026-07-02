@@ -1,10 +1,16 @@
 <script setup lang="ts">
-import PlayerBar from "@/components/PlayerBar/PlayerBar.vue";
+import AsideMenu from "@/components/AsideMenu";
+import PlayerBar from "@/components/PlayerBar";
 </script>
 
 <template>
-  <main class="bg-zinc-900 font-sans text-zinc-100">
-    <RouterView />
-  </main>
-  <PlayerBar />
+  <div class="flex h-dvh flex-col bg-zinc-900 font-serif text-zinc-100">
+    <div class="flex min-h-0 flex-1">
+      <AsideMenu />
+      <main class="min-w-0 flex-1 overflow-y-auto">
+        <RouterView />
+      </main>
+    </div>
+    <PlayerBar />
+  </div>
 </template>
