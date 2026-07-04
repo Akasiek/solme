@@ -22,6 +22,7 @@ use crate::server::{
 const API_VERSION: &str = "1.16.1";
 const CLIENT_NAME: &str = "solme";
 const ALBUM_PAGE_SIZE: u32 = 500;
+const LOG_BODY_LIMIT: usize = 4000;
 
 pub struct NavidromeBackend {
     client: Client,
@@ -100,6 +101,22 @@ impl NavidromeBackend {
         T: DeserializeOwned,
     {
         let response = self
+            .send_json_request_with_body(endpoint, parameters)
+            .await?
+            .0;
+
+        Ok(response)
+    }
+
+    async fn send_json_request_with_body<T>(
+        &self,
+        endpoint: &str,
+        parameters: &[(&str, String)],
+    ) -> Result<(SubsonicResponse<T>, String), String>
+    where
+        T: DeserializeOwned,
+    {
+        let response = self
             .client
             .get(self.endpoint_url(endpoint))
             .query(&self.subsonic_json_parameters())
@@ -110,10 +127,17 @@ impl NavidromeBackend {
             .error_for_status()
             .map_err(|error| format!("{endpoint} returned an HTTP error: {error}"))?;
 
-        let envelope: SubsonicEnvelope<T> = response
-            .json()
+        let body = response
+            .text()
             .await
-            .map_err(|error| format!("{endpoint} returned an invalid response: {error}"))?;
+            .map_err(|error| format!("Failed to read {endpoint} response: {error}"))?;
+        let envelope: SubsonicEnvelope<T> = serde_json::from_str(&body).map_err(|error| {
+            log::error!(
+                "{endpoint} returned invalid JSON: {error}; body: {}",
+                abbreviated_body(&body)
+            );
+            format!("{endpoint} returned an invalid response: {error}")
+        })?;
 
         let response = envelope.subsonic_response;
         if response.status != "ok" {
@@ -124,7 +148,7 @@ impl NavidromeBackend {
             return Err(format!("{endpoint} failed: {message}"));
         }
 
-        Ok(response)
+        Ok((response, body))
     }
 
     /// Calls an endpoint that must return a typed payload.
@@ -139,10 +163,14 @@ impl NavidromeBackend {
     where
         T: DeserializeOwned,
     {
-        self.send_json_request(endpoint, parameters)
-            .await?
-            .payload
-            .ok_or_else(|| format!("{endpoint} response is missing its payload"))
+        let (response, body) = self.send_json_request_with_body(endpoint, parameters).await?;
+        response.payload.ok_or_else(|| {
+            log::error!(
+                "{endpoint} response is missing its payload; body: {}",
+                abbreviated_body(&body)
+            );
+            format!("{endpoint} response is missing its payload")
+        })
     }
 
     /// Calls an action endpoint where the successful status is the whole result.
@@ -407,6 +435,18 @@ fn header_value(response: &Response, name: reqwest::header::HeaderName) -> Optio
         .get(name)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string)
+}
+
+fn abbreviated_body(body: &str) -> String {
+    let mut abbreviated = String::new();
+    for character in body.chars().take(LOG_BODY_LIMIT) {
+        abbreviated.push(character);
+    }
+
+    if abbreviated.len() < body.len() {
+        abbreviated.push_str("...");
+    }
+    abbreviated
 }
 
 #[cfg(test)]

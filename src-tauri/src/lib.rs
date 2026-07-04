@@ -12,6 +12,8 @@ use crate::commands::server::{
     get_saved_server_profile, ping_music_server,
 };
 use crate::setup::setup_app;
+use log::LevelFilter;
+use tauri_plugin_log::{Target, TargetKind};
 
 mod audio;
 mod commands;
@@ -26,6 +28,17 @@ mod setup;
 pub fn run() {
     tauri::Builder::default()
         .setup(setup_app)
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .level(LevelFilter::Info)
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir {
+                        file_name: Some("solme.log".to_string()),
+                    }),
+                ])
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             player_play_album,

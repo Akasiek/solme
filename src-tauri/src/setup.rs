@@ -164,7 +164,7 @@ fn start_saved_server_connection(
         match connect_saved_server(&server, &library_sync, &player, &session).await {
             Ok(_) => {}
             Err(error) if error == "No server profile is saved" => {}
-            Err(error) => eprintln!("Failed to restore saved music server on startup: {error}"),
+            Err(error) => log::error!("Failed to restore saved music server on startup: {error}"),
         }
     });
 }

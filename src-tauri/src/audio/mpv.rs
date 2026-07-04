@@ -52,7 +52,7 @@ impl MpvBackend {
                     ..
                 })) => Self::notify_status_change(&callback),
                 Some(Ok(_)) | None => {}
-                Some(Err(error)) => eprintln!("Failed to read mpv status event: {error}"),
+                Some(Err(error)) => log::error!("Failed to read mpv status event: {error}"),
             }
         });
 
@@ -63,7 +63,7 @@ impl MpvBackend {
         let callback = match callback.lock() {
             Ok(callback) => callback.clone(),
             Err(_) => {
-                eprintln!("Failed to read mpv status change callback");
+                log::error!("Failed to read mpv status change callback");
                 return;
             }
         };
@@ -281,7 +281,7 @@ impl AudioBackend for MpvBackend {
             Ok(mut status_change_callback) => {
                 status_change_callback.replace(callback);
             }
-            Err(_) => eprintln!("Failed to set mpv status change callback"),
+            Err(_) => log::error!("Failed to set mpv status change callback"),
         }
     }
 }

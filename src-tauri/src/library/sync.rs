@@ -55,6 +55,7 @@ impl LibrarySyncService {
         let service = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
             if let Err(error) = service.synchronize(force).await {
+                log::error!("Library synchronization failed: {error}");
                 service.update_status(|status| {
                     status.phase = LibrarySyncPhase::Failed;
                     status.last_error = Some(error);

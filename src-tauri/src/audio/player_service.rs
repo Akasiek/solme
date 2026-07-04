@@ -238,10 +238,10 @@ impl PlayerService {
         Arc::new(move || match Self::player_status(&audio, &queue) {
             Ok(status) => {
                 if let Err(error) = event_bus.publish_player_status(status) {
-                    eprintln!("Failed to emit player status change: {error}");
+                    log::error!("Failed to emit player status change: {error}");
                 }
             }
-            Err(error) => eprintln!("Failed to build player status change: {error}"),
+            Err(error) => log::error!("Failed to build player status change: {error}"),
         })
     }
 
