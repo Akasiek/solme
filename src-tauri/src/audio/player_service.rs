@@ -298,8 +298,8 @@ mod tests {
         credentials::CredentialStore,
         library::{
             models::{
-                Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
-                CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
+                Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate,
+                BinaryArtwork, CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
             },
             LibraryRepository,
         },
@@ -808,6 +808,7 @@ mod tests {
             _profile_id: &str,
             _offset: i64,
             _limit: i64,
+            _sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
             unimplemented!()
         }

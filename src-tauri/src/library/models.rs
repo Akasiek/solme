@@ -14,6 +14,8 @@ pub struct Album {
     pub artist_id: Option<String>,
     pub artist_name: String,
     pub year: Option<i64>,
+    pub release_date: Option<String>,
+    pub server_added_at: Option<String>,
     pub song_count: i64,
     pub duration_seconds: i64,
     pub cover_art_id: Option<String>,
@@ -93,6 +95,22 @@ pub struct LibrarySummary {
     pub last_success_at: Option<i64>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlbumSort {
+    Artist,
+    Random,
+    RecentlyAdded,
+    RecentlyReleased,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeAlbumSections {
+    pub random_albums: Vec<CachedAlbum>,
+    pub newly_added_albums: Vec<CachedAlbum>,
+    pub newly_released_albums: Vec<CachedAlbum>,
+}
+
 #[derive(Clone, Debug, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedAlbum {
@@ -101,6 +119,8 @@ pub struct CachedAlbum {
     pub artist_name: String,
     pub artist_id: Option<String>,
     pub year: Option<i64>,
+    pub release_date: Option<String>,
+    pub server_added_at: Option<String>,
     pub song_count: i64,
     pub artwork_path: Option<String>,
 }

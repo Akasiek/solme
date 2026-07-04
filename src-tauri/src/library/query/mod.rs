@@ -4,7 +4,9 @@ mod library;
 mod search;
 mod songs;
 
-pub(crate) use albums::{insert_album_genres, insert_album_search, insert_albums, search_albums};
+pub(crate) use albums::{
+    albums, insert_album_genres, insert_album_search, insert_albums, search_albums,
+};
 pub(crate) use artists::{insert_artists, insert_genres};
 pub(crate) use library::delete_stale_generations;
 pub(crate) use search::search_query;

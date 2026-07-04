@@ -6,7 +6,7 @@ use crate::database::SqliteRepository;
 
 use super::{
     models::{
-        ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
+        AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
         LibrarySummary,
     },
     query,
@@ -29,6 +29,7 @@ pub trait LibraryRepository: Send + Sync {
         profile_id: &str,
         offset: i64,
         limit: i64,
+        sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String>;
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
     async fn search_albums(
@@ -165,38 +166,15 @@ impl LibraryRepository for SqliteRepository {
         profile_id: &str,
         offset: i64,
         limit: i64,
+        sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String> {
-        let limit = limit.clamp(1, 500);
-        let offset = offset.max(0);
-        sqlx::query_as!(
-            CachedAlbum,
-            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year, a.song_count,
-                    art.local_path AS artwork_path
-             FROM albums a
-             JOIN library_sync_state s
-               ON s.profile_id = a.profile_id
-              AND s.active_generation = a.generation
-             LEFT JOIN artwork_cache art
-               ON art.profile_id = a.profile_id
-              AND art.kind = 'album'
-              AND art.remote_id = a.remote_id
-             WHERE a.profile_id = ?
-             ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE
-             LIMIT ? OFFSET ?",
-            profile_id,
-            limit,
-            offset,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached albums: {error}"))
+        query::albums(self, profile_id, offset, limit, sort).await
     }
 
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
-        sqlx::query_as!(
-            CachedAlbum,
+        sqlx::query_as::<_, CachedAlbum>(
             "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                    a.song_count, artwork.local_path AS artwork_path
+                    a.release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
              FROM albums a
              JOIN library_sync_state state
                ON state.profile_id = a.profile_id
@@ -206,9 +184,9 @@ impl LibraryRepository for SqliteRepository {
               AND artwork.kind = 'album'
               AND artwork.remote_id = a.remote_id
              WHERE a.profile_id = ? AND a.remote_id = ?",
-            profile_id,
-            album_id,
         )
+        .bind(profile_id)
+        .bind(album_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| format!("Failed to read cached album: {error}"))
@@ -376,7 +354,9 @@ mod tests {
 
     use super::LibraryRepository;
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
-    use crate::library::models::{Album, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song};
+    use crate::library::models::{
+        Album, AlbumSort, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song,
+    };
 
     #[test]
     fn activates_complete_generation() {
@@ -402,7 +382,14 @@ mod tests {
                 repository.server_revision("profile").await.unwrap(),
                 Some("revision-1".to_string())
             );
-            assert_eq!(repository.albums("profile", 0, 50).await.unwrap().len(), 1);
+            assert_eq!(
+                repository
+                    .albums("profile", 0, 50, AlbumSort::Artist)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -465,7 +452,11 @@ mod tests {
             assert_eq!(summary.album_count, 260);
             assert_eq!(summary.song_count, 260);
             assert_eq!(
-                repository.albums("profile", 0, 500).await.unwrap().len(),
+                repository
+                    .albums("profile", 0, 500, AlbumSort::Artist)
+                    .await
+                    .unwrap()
+                    .len(),
                 260
             );
 
@@ -808,6 +799,8 @@ mod tests {
                     artist_id: Some("artist-1".to_string()),
                     artist_name: "Artist".to_string(),
                     year: Some(2026),
+                    release_date: Some("2026-01-01".to_string()),
+                    server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                     song_count: songs.len() as i64,
                     duration_seconds: 180,
                     cover_art_id: Some("cover-1".to_string()),
@@ -861,6 +854,8 @@ mod tests {
                         artist_id: Some(artist_id.clone()),
                         artist_name: format!("Artist {index}"),
                         year: Some(2026),
+                        release_date: Some("2026-01-01".to_string()),
+                        server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                         song_count: 1,
                         duration_seconds: 180,
                         cover_art_id: Some(format!("cover-{index}")),

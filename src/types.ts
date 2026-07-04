@@ -35,8 +35,16 @@ export interface CachedAlbum {
   artistName: string;
   artistId?: string;
   year?: number;
+  releaseDate?: string;
+  serverAddedAt?: string;
   songCount: number;
   artworkPath?: string;
+}
+
+export interface HomeAlbumSections {
+  randomAlbums: CachedAlbum[];
+  newlyAddedAlbums: CachedAlbum[];
+  newlyReleasedAlbums: CachedAlbum[];
 }
 
 export interface CachedSong {

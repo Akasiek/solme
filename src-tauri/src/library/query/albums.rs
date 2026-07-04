@@ -2,11 +2,23 @@ use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use super::super::{
     fuzzy_search,
-    models::{AlbumWithSongs, CachedAlbum},
+    models::{AlbumSort, AlbumWithSongs, CachedAlbum},
 };
 use crate::database::SqliteRepository;
 
 const SQLITE_BIND_LIMIT: usize = 999;
+const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
+    SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+           a.release_date, a.server_added_at, a.song_count, art.local_path AS artwork_path
+    FROM albums a
+    JOIN library_sync_state s
+      ON s.profile_id = a.profile_id
+     AND s.active_generation = a.generation
+    LEFT JOIN artwork_cache art
+      ON art.profile_id = a.profile_id
+     AND art.kind = 'album'
+     AND art.remote_id = a.remote_id
+    WHERE a.profile_id = ";
 
 pub(crate) async fn insert_albums(
     transaction: &mut Transaction<'_, Sqlite>,
@@ -14,11 +26,11 @@ pub(crate) async fn insert_albums(
     generation: &str,
     albums: &[AlbumWithSongs],
 ) -> Result<(), String> {
-    for albums in albums.chunks(SQLITE_BIND_LIMIT / 10) {
+    for albums in albums.chunks(SQLITE_BIND_LIMIT / 12) {
         let mut query = QueryBuilder::new(
             "INSERT INTO albums
              (profile_id, generation, remote_id, name, artist_id, artist_name,
-              year, song_count, duration_seconds, cover_art_id) ",
+              year, release_date, server_added_at, song_count, duration_seconds, cover_art_id) ",
         );
         query.push_values(albums, |mut row, details| {
             let album = &details.album;
@@ -29,6 +41,8 @@ pub(crate) async fn insert_albums(
                 .push_bind(&album.artist_id)
                 .push_bind(&album.artist_name)
                 .push_bind(album.year)
+                .push_bind(&album.release_date)
+                .push_bind(&album.server_added_at)
                 .push_bind(album.song_count)
                 .push_bind(album.duration_seconds)
                 .push_bind(&album.cover_art_id);
@@ -40,6 +54,58 @@ pub(crate) async fn insert_albums(
             .map_err(|error| format!("Failed to cache albums: {error}"))?;
     }
     Ok(())
+}
+
+pub(crate) async fn albums(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    offset: i64,
+    limit: i64,
+    sort: AlbumSort,
+) -> Result<Vec<CachedAlbum>, String> {
+    let limit = limit.clamp(-1, 500);
+    let offset = offset.max(0);
+    let (filter, order) = album_list_filter_and_order(sort);
+    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
+    query
+        .push_bind(profile_id)
+        .push(filter)
+        .push(" ")
+        .push(order)
+        .push(" LIMIT ")
+        .push_bind(limit)
+        .push(" OFFSET ")
+        .push_bind(offset);
+
+    query
+        .build_query_as::<CachedAlbum>()
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached albums: {error}"))
+}
+
+fn album_list_filter_and_order(sort: AlbumSort) -> (&'static str, &'static str) {
+    match sort {
+        AlbumSort::Artist => (
+            "",
+            "ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE",
+        ),
+        AlbumSort::Random => ("", "ORDER BY RANDOM()"),
+        AlbumSort::RecentlyAdded => (
+            "",
+            "ORDER BY a.server_added_at IS NULL,
+                      a.server_added_at DESC,
+                      a.artist_name COLLATE NOCASE,
+                      a.name COLLATE NOCASE",
+        ),
+        AlbumSort::RecentlyReleased => (
+            " AND a.release_date IS NOT NULL",
+            "ORDER BY COALESCE(a.release_date, CASE WHEN a.year IS NOT NULL THEN printf('%04d-12-31', a.year) END) IS NULL,
+                      COALESCE(a.release_date, CASE WHEN a.year IS NOT NULL THEN printf('%04d-12-31', a.year) END) DESC,
+                      a.artist_name COLLATE NOCASE,
+                      a.name COLLATE NOCASE",
+        ),
+    }
 }
 
 pub(crate) async fn insert_album_genres(
@@ -114,7 +180,7 @@ pub(crate) async fn fuzzy_album_candidates(
 ) -> Result<Vec<CachedAlbum>, String> {
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                a.song_count, artwork.local_path AS artwork_path
+                a.release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
          FROM albums a
          JOIN library_sync_state state
            ON state.profile_id = a.profile_id
@@ -141,10 +207,9 @@ pub(crate) async fn search_albums(
         return Ok(Vec::new());
     };
     let limit = limit.clamp(1, 500);
-    let results = sqlx::query_as!(
-        CachedAlbum,
+    let results = sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                a.song_count, artwork.local_path AS artwork_path
+                a.release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
          FROM album_search
          JOIN library_sync_state state
            ON state.profile_id = album_search.profile_id
@@ -164,10 +229,10 @@ pub(crate) async fn search_albums(
                   a.year,
                   a.name COLLATE NOCASE
          LIMIT ?",
-        profile_id,
-        fts_query,
-        limit,
     )
+    .bind(profile_id)
+    .bind(fts_query)
+    .bind(limit)
     .fetch_all(&repo.pool)
     .await
     .map_err(|error| format!("Failed to search cached albums: {error}"))?;

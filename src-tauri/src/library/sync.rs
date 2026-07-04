@@ -14,8 +14,8 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumWithSongs, CachedAlbum, CachedSong, LibrarySnapshot, LibrarySummary,
-        LibrarySyncPhase, LibrarySyncStatus,
+        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedSong, HomeAlbumSections,
+        LibrarySnapshot, LibrarySummary, LibrarySyncPhase, LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -101,7 +101,38 @@ impl LibrarySyncService {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(Vec::new());
         };
-        self.repository.albums(&profile_id, offset, limit).await
+        self.repository
+            .albums(&profile_id, offset, limit, AlbumSort::Artist)
+            .await
+    }
+
+    pub async fn home_album_sections(&self, limit: i64) -> Result<HomeAlbumSections, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(HomeAlbumSections {
+                random_albums: Vec::new(),
+                newly_added_albums: Vec::new(),
+                newly_released_albums: Vec::new(),
+            });
+        };
+        let limit = limit.clamp(1, 50);
+        let random_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::Random)
+            .await?;
+        let newly_added_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::RecentlyAdded)
+            .await?;
+        let newly_released_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::RecentlyReleased)
+            .await?;
+
+        Ok(HomeAlbumSections {
+            random_albums,
+            newly_added_albums,
+            newly_released_albums,
+        })
     }
 
     pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbum>, String> {
@@ -353,6 +384,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::LibrarySyncService;
+    use crate::library::models::AlbumSort;
     use crate::{
         credentials::CredentialStore,
         library::{
@@ -701,6 +733,7 @@ mod tests {
             _profile_id: &str,
             _offset: i64,
             _limit: i64,
+            _sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
             Ok(Vec::new())
         }
@@ -779,6 +812,8 @@ mod tests {
             artist_id: Some("artist-1".to_string()),
             artist_name: "Artist".to_string(),
             year: Some(2026),
+            release_date: Some("2026-01-01".to_string()),
+            server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
             song_count: 1,
             duration_seconds: 180,
             cover_art_id: Some("cover-1".to_string()),

@@ -304,6 +304,8 @@ mod tests {
             artist_name: artist_name.to_string(),
             artist_id: Some("artist-1".to_string()),
             year: Some(2026),
+            release_date: Some("2026-01-01".to_string()),
+            server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
             song_count: 1,
             artwork_path: None,
         }
