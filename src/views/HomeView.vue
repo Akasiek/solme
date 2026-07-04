@@ -1,21 +1,24 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { CachedAlbum } from "@/types.ts";
-import AlbumCard from "@/components/Album/AlbumCard/AlbumCard.vue";
+import { HomeAlbumSections } from "@/types.ts";
 import AsyncViewState from "@/components/AsyncViewState.vue";
+import HomeAlbumCarousel from "@/components/HomeAlbumCarousel.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
 
 const {
-  data: albums,
+  data: albumSections,
   isLoading,
   error: loadError,
 } = useAsyncData(
   () =>
-    invoke<CachedAlbum[]>("get_cached_albums", {
-      offset: 128,
+    invoke<HomeAlbumSections>("get_home_album_sections", {
       limit: 24,
     }),
-  [],
+  {
+    randomAlbums: [],
+    newlyAddedAlbums: [],
+    newlyReleasedAlbums: [],
+  },
 );
 </script>
 
@@ -27,10 +30,10 @@ const {
     </div>
 
     <AsyncViewState :is-loading="isLoading" :error="loadError">
-      <div class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
-        <div v-for="album in albums" :key="album.remoteId">
-          <AlbumCard :album="album" />
-        </div>
+      <div class="space-y-8">
+        <HomeAlbumCarousel title="Random albums" :albums="albumSections.randomAlbums" />
+        <HomeAlbumCarousel title="Recently added albums" :albums="albumSections.newlyAddedAlbums" />
+        <HomeAlbumCarousel title="Recently released albums" :albums="albumSections.newlyReleasedAlbums" />
       </div>
     </AsyncViewState>
   </section>
