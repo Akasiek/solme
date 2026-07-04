@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AsideMenu from "@/components/AsideMenu";
 import PlayerBar from "@/components/PlayerBar";
+import ToastHost from "@/components/ToastHost.vue";
 </script>
 
 <template>
@@ -12,5 +13,6 @@ import PlayerBar from "@/components/PlayerBar";
       </main>
     </div>
     <PlayerBar />
+    <ToastHost />
   </div>
 </template>
