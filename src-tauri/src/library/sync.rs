@@ -462,15 +462,17 @@ mod tests {
 
     #[test]
     fn rejects_second_running_sync() {
-        let server = Arc::new(MockMusicServer::new(Some("revision-1")));
-        let repository = Arc::new(MockRepository::new(Some("revision-1")));
-        let service = service(server, repository);
-        service.running.store(true, Ordering::SeqCst);
+        tauri::async_runtime::block_on(async {
+            let server = Arc::new(MockMusicServer::new(Some("revision-1")));
+            let repository = Arc::new(MockRepository::new(Some("revision-1")));
+            let service = service(server, repository);
+            service.running.store(true, Ordering::SeqCst);
 
-        assert_eq!(
-            service.start(false).unwrap_err(),
-            "Library synchronization is already running"
-        );
+            assert_eq!(
+                service.start(false).unwrap_err(),
+                "Library synchronization is already running"
+            );
+        });
     }
 
     #[test]
@@ -549,10 +551,9 @@ mod tests {
         repository: Arc<MockRepository>,
         artwork_root: PathBuf,
     ) -> Arc<LibrarySyncService> {
-        let profile_path =
-            std::env::temp_dir().join(format!("solme-profile-{}.json", Uuid::new_v4()));
+        let database = sqlx::SqlitePool::connect_lazy("sqlite::memory:").unwrap();
         let server_service = Arc::new(MusicServerService::new(
-            profile_path,
+            database,
             Box::new(MemoryCredentialStore),
         ));
         server_service

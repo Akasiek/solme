@@ -279,12 +279,10 @@ impl PlayerService {
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
+    use sqlx::SqlitePool;
 
     use super::PlayerService;
     use crate::events::EventBus;
@@ -309,13 +307,7 @@ mod tests {
     #[test]
     fn plays_full_album_from_selected_song() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2"), song("song-3")];
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
@@ -360,13 +352,7 @@ mod tests {
     #[test]
     fn rejects_song_outside_selected_album() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
                 songs: vec![song("song-1")],
             });
@@ -393,13 +379,7 @@ mod tests {
     #[test]
     fn appends_album_to_current_queue() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2")];
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
@@ -440,13 +420,7 @@ mod tests {
     #[test]
     fn prepends_album_to_current_queue() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2")];
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
@@ -487,13 +461,7 @@ mod tests {
     #[test]
     fn restores_paused_playback_session() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
@@ -540,13 +508,7 @@ mod tests {
     #[test]
     fn restores_saved_volume_preference() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let preferences = Arc::new(MockPreferenceRepository {
@@ -583,6 +545,18 @@ mod tests {
             disc_number: Some(1),
             duration_seconds: 180,
         }
+    }
+
+    async fn test_server_service() -> Arc<MusicServerService> {
+        let database = SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let server_service = Arc::new(MusicServerService::new(
+            database,
+            Box::new(MemoryCredentialStore),
+        ));
+        server_service
+            .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+            .unwrap();
+        server_service
     }
 
     fn noop_event_bus() -> Arc<EventBus> {

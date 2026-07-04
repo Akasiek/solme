@@ -10,7 +10,7 @@ use crate::commands::player::{
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, forget_saved_server_profile,
-    get_saved_server_profile, ping_music_server,
+    get_saved_server_profile, get_saved_server_profiles, ping_music_server,
 };
 use crate::setup::setup_app;
 use log::LevelFilter;
@@ -57,6 +57,7 @@ pub fn run() {
             connect_music_server,
             ping_music_server,
             get_saved_server_profile,
+            get_saved_server_profiles,
             connect_saved_music_server,
             forget_saved_server_profile,
             sync_library,

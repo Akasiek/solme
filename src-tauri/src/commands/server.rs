@@ -49,13 +49,22 @@ pub async fn get_saved_server_profile(
 }
 
 #[tauri::command]
+pub async fn get_saved_server_profiles(
+    server: State<'_, Arc<MusicServerService>>,
+) -> Result<Vec<SavedServerProfile>, String> {
+    server.saved_profiles().await
+}
+
+#[tauri::command]
 pub async fn connect_saved_music_server(
+    profile_id: Option<String>,
     server: State<'_, Arc<MusicServerService>>,
     library: State<'_, Arc<LibrarySyncService>>,
     player: State<'_, Arc<PlayerService>>,
     session: State<'_, Arc<PlaybackSessionService>>,
 ) -> Result<ServerInfo, String> {
     setup::connect_saved_server(
+        profile_id,
         &server.inner().clone(),
         &library.inner().clone(),
         &player.inner().clone(),
@@ -66,7 +75,8 @@ pub async fn connect_saved_music_server(
 
 #[tauri::command]
 pub async fn forget_saved_server_profile(
+    profile_id: Option<String>,
     server: State<'_, Arc<MusicServerService>>,
 ) -> Result<(), String> {
-    server.forget_saved_profile().await
+    server.forget_saved_profile(profile_id).await
 }

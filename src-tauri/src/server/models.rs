@@ -3,6 +3,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ServerConnectionConfig {
+    #[serde(default)]
+    pub profile_id: Option<String>,
     pub server_type: ServerType,
     pub url: String,
     pub username: String,
@@ -10,18 +12,35 @@ pub struct ServerConnectionConfig {
     pub save_credentials: bool,
 }
 
-#[derive(Clone, Copy, Deserialize, Serialize)]
+#[derive(Clone, Copy, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ServerType {
     Navidrome,
 }
 
+impl ServerType {
+    pub(super) fn as_storage_value(self) -> &'static str {
+        match self {
+            ServerType::Navidrome => "navidrome",
+        }
+    }
+
+    pub(super) fn from_storage_value(value: &str) -> Result<Self, String> {
+        match value {
+            "navidrome" => Ok(ServerType::Navidrome),
+            value => Err(format!("Unknown server type in profile store: {value}")),
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedServerProfile {
+    pub id: String,
     pub server_type: ServerType,
     pub url: String,
     pub username: String,
+    pub is_current: bool,
 }
 
 #[derive(Serialize)]
@@ -51,9 +70,11 @@ pub(super) struct StoredServerProfile {
 impl From<StoredServerProfile> for SavedServerProfile {
     fn from(profile: StoredServerProfile) -> Self {
         Self {
+            id: profile.id,
             server_type: profile.server_type,
             url: profile.url,
             username: profile.username,
+            is_current: false,
         }
     }
 }

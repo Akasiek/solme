@@ -18,16 +18,15 @@ use crate::{
 type SetupResult<T> = Result<T, Box<dyn Error>>;
 
 struct AppDirs {
-    config: PathBuf,
     data: PathBuf,
     cache: PathBuf,
 }
 
 pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let dirs = resolve_app_dirs(app)?;
-    let server = create_server(&dirs.config)?;
     let database_path = dirs.data.join(DATABASE_FILE_NAME);
     let repository = create_repository(&database_path)?;
+    let server = create_server(&repository)?;
     let event_bus = create_event_bus(app);
     let library_sync = create_library_sync(&dirs.cache, &server, &repository);
     let player = create_player(&server, &repository, event_bus)?;
@@ -47,13 +46,14 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
 }
 
 pub(crate) async fn connect_saved_server(
+    profile_id: Option<String>,
     server: &Arc<MusicServerService>,
     library: &Arc<LibrarySyncService>,
     player: &Arc<PlayerService>,
     session: &Arc<PlaybackSessionService>,
 ) -> Result<crate::server::ServerInfo, String> {
     session.suspend_monitoring();
-    let connection = server.connect_saved().await;
+    let connection = server.connect_saved(profile_id).await;
     let info = match connection {
         Ok(info) => info,
         Err(error) => {
@@ -73,15 +73,14 @@ pub(crate) async fn connect_saved_server(
 
 fn resolve_app_dirs(app: &tauri::App) -> SetupResult<AppDirs> {
     Ok(AppDirs {
-        config: app.path().app_config_dir()?,
         data: app.path().app_data_dir()?,
         cache: app.path().app_cache_dir()?,
     })
 }
 
-fn create_server(config_dir: &Path) -> SetupResult<Arc<MusicServerService>> {
+fn create_server(repository: &Arc<SqliteRepository>) -> SetupResult<Arc<MusicServerService>> {
     Ok(Arc::new(MusicServerService::new(
-        config_dir.join("server-profile.json"),
+        repository.pool.clone(),
         Box::new(SystemCredentialStore::new().map_err(std::io::Error::other)?),
     )))
 }
@@ -161,7 +160,7 @@ fn start_saved_server_connection(
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
-        match connect_saved_server(&server, &library_sync, &player, &session).await {
+        match connect_saved_server(None, &server, &library_sync, &player, &session).await {
             Ok(_) => {}
             Err(error) if error == "No server profile is saved" => {}
             Err(error) => log::error!("Failed to restore saved music server on startup: {error}"),
