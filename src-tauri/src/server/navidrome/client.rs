@@ -92,14 +92,11 @@ impl NavidromeBackend {
     /// This handles authentication parameters, requests JSON, rejects HTTP
     /// failures, deserializes the Subsonic envelope, and converts a Subsonic
     /// `status = "failed"` response into an error.
-    async fn send_json_request<T>(
+    async fn send_json_request(
         &self,
         endpoint: &str,
         parameters: &[(&str, String)],
-    ) -> Result<SubsonicResponse<T>, String>
-    where
-        T: DeserializeOwned,
-    {
+    ) -> Result<SubsonicResponse, String> {
         let response = self
             .send_json_request_with_body(endpoint, parameters)
             .await?
@@ -108,14 +105,11 @@ impl NavidromeBackend {
         Ok(response)
     }
 
-    async fn send_json_request_with_body<T>(
+    async fn send_json_request_with_body(
         &self,
         endpoint: &str,
         parameters: &[(&str, String)],
-    ) -> Result<(SubsonicResponse<T>, String), String>
-    where
-        T: DeserializeOwned,
-    {
+    ) -> Result<(SubsonicResponse, String), String> {
         let response = self
             .client
             .get(self.endpoint_url(endpoint))
@@ -131,7 +125,7 @@ impl NavidromeBackend {
             .text()
             .await
             .map_err(|error| format!("Failed to read {endpoint} response: {error}"))?;
-        let envelope: SubsonicEnvelope<T> = serde_json::from_str(&body).map_err(|error| {
+        let envelope: SubsonicEnvelope = serde_json::from_str(&body).map_err(|error| {
             log::error!(
                 "{endpoint} returned invalid JSON: {error}; body: {}",
                 abbreviated_body(&body)
@@ -163,13 +157,15 @@ impl NavidromeBackend {
     where
         T: DeserializeOwned,
     {
-        let (response, body) = self.send_json_request_with_body(endpoint, parameters).await?;
-        response.payload.ok_or_else(|| {
+        let (response, body) = self
+            .send_json_request_with_body(endpoint, parameters)
+            .await?;
+        response.into_payload().map_err(|error| {
             log::error!(
-                "{endpoint} response is missing its payload; body: {}",
+                "{endpoint} response payload did not match expected shape: {error}; body: {}",
                 abbreviated_body(&body)
             );
-            format!("{endpoint} response is missing its payload")
+            format!("{endpoint} returned an invalid payload: {error}")
         })
     }
 
@@ -182,8 +178,7 @@ impl NavidromeBackend {
         endpoint: &str,
         parameters: &[(&str, String)],
     ) -> Result<(), String> {
-        self.send_json_request::<serde_json::Value>(endpoint, parameters)
-            .await?;
+        self.send_json_request(endpoint, parameters).await?;
         Ok(())
     }
 
@@ -534,7 +529,7 @@ mod tests {
 
     #[test]
     fn parses_artist_list_response() {
-        let response: SubsonicEnvelope<ArtistsPayload> = serde_json::from_str(
+        let response: SubsonicEnvelope = serde_json::from_str(
             r#"{
               "subsonic-response": {
                 "status": "ok",
@@ -550,14 +545,18 @@ mod tests {
         )
         .unwrap();
 
-        let artists = response.subsonic_response.payload.unwrap().artists;
+        let artists = response
+            .subsonic_response
+            .into_payload::<ArtistsPayload>()
+            .unwrap()
+            .artists;
         assert_eq!(artists.index[0].artist[0].id, "artist-1");
         assert_eq!(artists.index[0].artist[0].album_count, 2);
     }
 
     #[test]
     fn parses_ping_through_generic_envelope() {
-        let response: SubsonicEnvelope<PingPayload> = serde_json::from_str(
+        let response: SubsonicEnvelope = serde_json::from_str(
             r#"{
               "subsonic-response": {
                 "status": "ok",
@@ -569,7 +568,10 @@ mod tests {
         )
         .unwrap();
 
-        let ping = response.subsonic_response.payload.unwrap();
+        let ping = response
+            .subsonic_response
+            .into_payload::<PingPayload>()
+            .unwrap();
         assert_eq!(ping.version, "1.16.1");
         assert_eq!(ping.server_type.as_deref(), Some("navidrome"));
         assert_eq!(ping.server_version.as_deref(), Some("0.58.0"));
@@ -577,7 +579,7 @@ mod tests {
 
     #[test]
     fn parses_album_page_response() {
-        let response: SubsonicEnvelope<AlbumListPayload> = serde_json::from_str(
+        let response: SubsonicEnvelope = serde_json::from_str(
             r#"{
               "subsonic-response": {
                 "status": "ok",
@@ -590,7 +592,16 @@ mod tests {
                     "artist": "Artist",
                     "songCount": 4,
                     "duration": 900,
-                    "coverArt": "cover-1"
+                    "coverArt": "cover-1",
+                    "releaseDate": {"year": 2026, "month": 7, "day": 4}
+                  }, {
+                    "id": "album-2",
+                    "name": "Album without release year",
+                    "artistId": "artist-1",
+                    "artist": "Artist",
+                    "songCount": 1,
+                    "duration": 180,
+                    "releaseDate": {}
                   }]
                 }
               }
@@ -600,12 +611,15 @@ mod tests {
 
         let albums = response
             .subsonic_response
-            .payload
+            .into_payload::<AlbumListPayload>()
             .unwrap()
             .album_list2
             .album;
         assert_eq!(albums[0].id, "album-1");
         assert_eq!(albums[0].song_count, 4);
+        assert_eq!(albums[0].release_date.as_deref(), Some("2026-07-04"));
+        assert_eq!(albums[1].id, "album-2");
+        assert_eq!(albums[1].release_date, None);
     }
 
     fn backend(url: &str) -> NavidromeBackend {
