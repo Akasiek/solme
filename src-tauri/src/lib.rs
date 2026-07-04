@@ -30,7 +30,8 @@ pub fn run() {
         .setup(setup_app)
         .plugin(
             tauri_plugin_log::Builder::new()
-                .level(LevelFilter::Info)
+                .level(LevelFilter::Warn)
+                .level_for("solme_lib", LevelFilter::Info)
                 .targets([
                     Target::new(TargetKind::Stdout),
                     Target::new(TargetKind::LogDir {
