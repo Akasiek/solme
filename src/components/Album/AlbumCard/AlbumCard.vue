@@ -15,13 +15,13 @@ defineProps<{
     <AlbumCardImageSection :album="album" />
 
     <div
-      class="space-y-1 gap-x-2.5 rounded-md border-2 border-zinc-800 px-3 py-3 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
+      class="space-y-1 gap-x-2.5 rounded-md border-2 border-zinc-800 px-2.5 py-3 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
     >
-      <h4 class="line-clamp-1 font-serif font-bold" :title="album.name">{{ album.name }}</h4>
+      <h3 class="line-clamp-1 font-serif font-bold" :title="album.name">{{ album.name }}</h3>
       <RouterLink :to="{ name: 'artist', params: { artistId: album.artistId } }">
-        <h3 class="line-clamp-1 font-sans font-normal text-zinc-300 hover:underline" :title="album.artistName">
+        <h4 class="line-clamp-1 font-sans font-normal text-zinc-300 hover:underline" :title="album.artistName">
           {{ album.artistName }}
-        </h3>
+        </h4>
       </RouterLink>
     </div>
   </RouterLink>
