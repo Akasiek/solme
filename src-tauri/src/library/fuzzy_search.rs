@@ -2,12 +2,12 @@ use std::{cmp::Ordering, collections::HashSet};
 
 use super::models::{CachedAlbum, CachedSong};
 
-const FUZZY_MIN_RESULTS: usize = 5;
+const FUZZY_MIN_RESULTS: usize = 1;
 
 pub fn should_use_fuzzy(query: &str, result_count: usize, limit: i64) -> Option<String> {
     let query = normalized_search_text(query);
 
-    if query.chars().count() < 3 || result_count >= FUZZY_MIN_RESULTS.min(limit as usize) {
+    if query.chars().count() < 1 || result_count >= FUZZY_MIN_RESULTS.min(limit as usize) {
         return None;
     }
 
