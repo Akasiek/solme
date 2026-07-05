@@ -7,4 +7,6 @@
   --font-serif: "Literata", "serif";
 
   --color-accent: #f62440;
+  --color-zinc-850: oklch(24.2% 0.006 285.959);
+  --color-zinc-750: oklch(32.2% 0.0095 285.919);
 }
