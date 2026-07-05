@@ -9,7 +9,9 @@ defineProps<{
 </script>
 
 <template>
-  <div class="aspect-square size-80 overflow-hidden rounded-lg border-2 border-zinc-800 xl:size-96">
+  <div
+    class="aspect-square w-full max-w-80 shrink-0 overflow-hidden rounded-lg border-2 border-zinc-800 lg:w-80 xl:w-96 xl:max-w-96"
+  >
     <img
       v-if="album.artworkPath"
       :src="artworkSource(album.artworkPath)"
