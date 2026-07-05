@@ -38,7 +38,7 @@ const queueAlbumAtEnd = (event: MouseEvent) => {
       v-if="album.artworkPath"
       :src="artworkSource(album.artworkPath)"
       :alt="`${album.name} artwork`"
-      class="h-full w-full object-cover object-center"
+      class="aspect-square h-full w-full object-cover object-center"
     />
     <MissingCoverImage v-else />
 
