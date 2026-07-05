@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { CachedAlbum } from "@/types.js";
-import AlbumCardImageSection from "./AlbumCardImageSection.vue";
+import AlbumCardCoverArt from "./AlbumCardCoverArt.vue";
 
 defineProps<{
   album: CachedAlbum;
@@ -12,7 +12,7 @@ defineProps<{
     class="group grid gap-4 transition-colors duration-300 ease-in-out"
     :to="{ name: 'album', params: { albumId: album.remoteId } }"
   >
-    <AlbumCardImageSection :album="album" />
+    <AlbumCardCoverArt :album="album" />
 
     <div
       class="space-y-1 gap-x-2.5 rounded-md border-2 border-zinc-800 px-2.5 py-3 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
