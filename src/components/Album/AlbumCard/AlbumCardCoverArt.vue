@@ -32,13 +32,13 @@ const queueAlbumAtEnd = (event: MouseEvent) => {
 
 <template>
   <div
-    class="group/image relative overflow-hidden rounded border-2 border-zinc-800 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
+    class="group/image relative aspect-square w-full overflow-hidden rounded border-2 border-zinc-800 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
   >
     <img
       v-if="album.artworkPath"
       :src="artworkSource(album.artworkPath)"
       :alt="`${album.name} artwork`"
-      class="aspect-square h-full w-full object-cover object-center"
+      class="h-full w-full object-cover object-center"
     />
     <MissingCoverImage v-else />
 
