@@ -13,6 +13,8 @@ const viewportRef = useTemplateRef<HTMLElement>("viewport");
 const pageIndex = ref(0);
 const visibleCount = ref(1);
 const navigationDirection = ref<"next" | "previous">("next");
+const shouldAnimatePage = ref(false);
+const hasMeasuredViewport = ref(false);
 let resizeObserver: ResizeObserver | undefined;
 
 const maxPageIndex = computed(() => Math.max(0, Math.ceil(props.albums.length / visibleCount.value) - 1));
@@ -24,7 +26,9 @@ const carouselGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${visibleColumnCount.value}, minmax(0, 1fr))`,
 }));
 const carouselPageKey = computed(() => visibleAlbums.value.map((album) => album.remoteId).join(":"));
-const carouselTransitionName = computed(() => `album-carousel-${navigationDirection.value}`);
+const carouselTransitionName = computed(() =>
+  shouldAnimatePage.value ? `album-carousel-${navigationDirection.value}` : "album-carousel-none",
+);
 const hasControls = computed(() => props.albums.length > visibleCount.value);
 const canGoPrevious = computed(() => startIndex.value > 0);
 const canGoNext = computed(() => startIndex.value < maxStartIndex.value);
@@ -33,43 +37,70 @@ function updateVisibleCount() {
   const viewportWidth = viewportRef.value?.clientWidth ?? 0;
 
   if (viewportWidth === 0) {
-    visibleCount.value = 1;
-    return;
+    return false;
   }
 
   const gapWidth = 16;
   const minCardWidth = viewportWidth >= 1024 ? 220 : viewportWidth >= 768 ? 200 : 180;
   visibleCount.value = Math.max(1, Math.floor((viewportWidth + gapWidth) / (minCardWidth + gapWidth)));
+  return true;
+}
+
+async function measureViewport() {
+  await nextTick();
+
+  if (!viewportRef.value) {
+    return;
+  }
+
+  if (updateVisibleCount()) {
+    hasMeasuredViewport.value = true;
+  }
+
+  if (!resizeObserver) {
+    resizeObserver = new ResizeObserver(() => {
+      shouldAnimatePage.value = false;
+      if (updateVisibleCount()) {
+        hasMeasuredViewport.value = true;
+      }
+    });
+    resizeObserver.observe(viewportRef.value);
+  }
 }
 
 function goPrevious() {
   navigationDirection.value = "previous";
+  shouldAnimatePage.value = true;
   pageIndex.value = Math.max(0, pageIndex.value - 1);
 }
 
 function goNext() {
   navigationDirection.value = "next";
+  shouldAnimatePage.value = true;
   pageIndex.value = Math.min(maxPageIndex.value, pageIndex.value + 1);
 }
 
 watch(
   () => props.albums.length,
-  () => {
+  async (albumCount) => {
+    shouldAnimatePage.value = false;
+    hasMeasuredViewport.value = false;
     pageIndex.value = 0;
+
+    if (albumCount > 0) {
+      await measureViewport();
+    }
   },
 );
 
 watch([visibleCount, maxPageIndex], () => {
+  shouldAnimatePage.value = false;
   pageIndex.value = Math.min(pageIndex.value, maxPageIndex.value);
 });
 
-onMounted(async () => {
-  await nextTick();
-  updateVisibleCount();
-
-  if (viewportRef.value) {
-    resizeObserver = new ResizeObserver(updateVisibleCount);
-    resizeObserver.observe(viewportRef.value);
+onMounted(() => {
+  if (props.albums.length > 0) {
+    void measureViewport();
   }
 });
 
@@ -84,22 +115,26 @@ onBeforeUnmount(() => {
     <p v-if="albums.length === 0" class="text-zinc-400">No albums to show.</p>
     <div v-else ref="viewport" class="relative overflow-hidden">
       <CarouselControlButton
-        v-if="hasControls"
+        v-if="hasMeasuredViewport && hasControls"
         :is-disabled="!canGoPrevious"
         :handle-click="goPrevious"
         variant="previous"
       />
       <div class="relative overflow-hidden">
-        <Transition :name="carouselTransitionName">
+        <Transition v-if="hasMeasuredViewport" :name="carouselTransitionName">
           <div :key="carouselPageKey" class="grid gap-4" :style="carouselGridStyle">
             <div v-for="album in visibleAlbums" :key="album.remoteId" class="min-w-0">
               <AlbumCard :album="album" />
             </div>
           </div>
         </Transition>
-        <div v-if="visibleAlbums.length === 0" class="text-zinc-400">No albums to show.</div>
       </div>
-      <CarouselControlButton v-if="hasControls" :is-disabled="!canGoNext" :handle-click="goNext" variant="next" />
+      <CarouselControlButton
+        v-if="hasMeasuredViewport && hasControls"
+        :is-disabled="!canGoNext"
+        :handle-click="goNext"
+        variant="next"
+      />
     </div>
   </section>
 </template>
