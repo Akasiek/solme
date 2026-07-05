@@ -6,9 +6,11 @@ export interface ServerInfo {
 }
 
 export interface SavedServerProfile {
+  id: string;
   serverType: string;
   url: string;
   username: string;
+  isCurrent: boolean;
 }
 
 export interface LibrarySyncStatus {
@@ -36,6 +38,7 @@ export interface CachedAlbum {
   artistId?: string;
   year?: number;
   releaseDate?: string;
+  originalReleaseDate?: string;
   serverAddedAt?: string;
   songCount: number;
   artworkPath?: string;

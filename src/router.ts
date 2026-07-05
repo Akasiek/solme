@@ -4,7 +4,12 @@ import { invoke } from "@tauri-apps/api/core";
 import HomeView from "@/views/HomeView.vue";
 import AlbumView from "@/views/AlbumView.vue";
 import ArtistView from "@/views/ArtistView.vue";
-import LoginView from "@/views/LoginView.vue";
+import SearchView from "@/views/SearchView.vue";
+import SettingsView from "@/views/settings/SettingsView.vue";
+import SettingsAccountView from "@/views/settings/SettingsAccountView.vue";
+import { showToast } from "@/composables/useToast";
+
+const serverAuthorizationRoute = "settings-account";
 
 async function ensureServerConnection() {
   try {
@@ -12,7 +17,7 @@ async function ensureServerConnection() {
     return true;
   } catch {
     try {
-      await invoke("connect_saved_music_server");
+      await invoke("connect_saved_music_server", { profileId: null });
       return true;
     } catch {
       return false;
@@ -37,6 +42,12 @@ export const router = createRouter({
       meta: { requiresServer: true },
     },
     {
+      path: "/search",
+      name: "search",
+      component: SearchView,
+      meta: { requiresServer: true },
+    },
+    {
       path: "/artist/:artistId",
       name: "artist",
       component: ArtistView,
@@ -44,9 +55,20 @@ export const router = createRouter({
       meta: { requiresServer: true },
     },
     {
-      path: "/login",
-      name: "login",
-      component: LoginView,
+      path: "/settings",
+      component: SettingsView,
+      meta: { requiresServer: true },
+      children: [
+        {
+          path: "",
+          redirect: { name: serverAuthorizationRoute },
+        },
+        {
+          path: "account",
+          name: serverAuthorizationRoute,
+          component: SettingsAccountView,
+        },
+      ],
     },
   ],
 });
@@ -60,5 +82,10 @@ router.beforeEach(async (to) => {
     return true;
   }
 
-  return { name: "login" };
+  if (to.name === serverAuthorizationRoute) {
+    return true;
+  }
+
+  showToast("Connect a music server before using the rest of Solme.");
+  return { name: serverAuthorizationRoute, replace: true };
 });
