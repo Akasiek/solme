@@ -12,6 +12,7 @@ const props = defineProps<{
 const viewportRef = useTemplateRef<HTMLElement>("viewport");
 const pageIndex = ref(0);
 const visibleCount = ref(1);
+const navigationDirection = ref<"next" | "previous">("next");
 let resizeObserver: ResizeObserver | undefined;
 
 const maxPageIndex = computed(() => Math.max(0, Math.ceil(props.albums.length / visibleCount.value) - 1));
@@ -22,6 +23,8 @@ const visibleColumnCount = computed(() => Math.max(1, visibleAlbums.value.length
 const carouselGridStyle = computed(() => ({
   gridTemplateColumns: `repeat(${visibleColumnCount.value}, minmax(0, 1fr))`,
 }));
+const carouselPageKey = computed(() => visibleAlbums.value.map((album) => album.remoteId).join(":"));
+const carouselTransitionName = computed(() => `album-carousel-${navigationDirection.value}`);
 const hasControls = computed(() => props.albums.length > visibleCount.value);
 const canGoPrevious = computed(() => startIndex.value > 0);
 const canGoNext = computed(() => startIndex.value < maxStartIndex.value);
@@ -40,10 +43,12 @@ function updateVisibleCount() {
 }
 
 function goPrevious() {
+  navigationDirection.value = "previous";
   pageIndex.value = Math.max(0, pageIndex.value - 1);
 }
 
 function goNext() {
+  navigationDirection.value = "next";
   pageIndex.value = Math.min(maxPageIndex.value, pageIndex.value + 1);
 }
 
@@ -84,12 +89,55 @@ onBeforeUnmount(() => {
         :handle-click="goPrevious"
         variant="previous"
       />
-      <div class="grid gap-4" :style="carouselGridStyle">
-        <div v-for="album in visibleAlbums" :key="album.remoteId" class="min-w-0">
-          <AlbumCard :album="album" />
-        </div>
+      <div class="relative overflow-hidden">
+        <Transition :name="carouselTransitionName">
+          <div :key="carouselPageKey" class="grid gap-4" :style="carouselGridStyle">
+            <div v-for="album in visibleAlbums" :key="album.remoteId" class="min-w-0">
+              <AlbumCard :album="album" />
+            </div>
+          </div>
+        </Transition>
+        <div v-if="visibleAlbums.length === 0" class="text-zinc-400">No albums to show.</div>
       </div>
       <CarouselControlButton v-if="hasControls" :is-disabled="!canGoNext" :handle-click="goNext" variant="next" />
     </div>
   </section>
 </template>
+
+<style scoped>
+.album-carousel-next-enter-active,
+.album-carousel-next-leave-active,
+.album-carousel-previous-enter-active,
+.album-carousel-previous-leave-active {
+  transition:
+    opacity 120ms ease-out,
+    transform 200ms ease-out;
+}
+
+.album-carousel-next-leave-active,
+.album-carousel-previous-leave-active {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+}
+
+.album-carousel-next-enter-from {
+  opacity: 0;
+  transform: translateX(32px);
+}
+
+.album-carousel-next-leave-to {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.album-carousel-previous-enter-from {
+  opacity: 0;
+  transform: translateX(-32px);
+}
+
+.album-carousel-previous-leave-to {
+  opacity: 0;
+  transform: translateX(32px);
+}
+</style>
