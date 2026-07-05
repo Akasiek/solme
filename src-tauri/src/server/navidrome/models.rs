@@ -100,6 +100,8 @@ pub(super) struct AlbumDto {
     pub year: Option<i64>,
     #[serde(default, deserialize_with = "deserialize_optional_date")]
     pub release_date: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_date")]
+    pub original_release_date: Option<String>,
     pub created: Option<String>,
     #[serde(default)]
     pub song_count: i64,
@@ -122,6 +124,7 @@ impl AlbumDto {
             artist,
             year,
             release_date,
+            original_release_date,
             created,
             song_count,
             duration,
@@ -138,6 +141,7 @@ impl AlbumDto {
             artist_name: artist,
             year,
             release_date,
+            original_release_date,
             server_added_at: created,
             song_count,
             duration_seconds: duration,
@@ -154,6 +158,7 @@ impl AlbumDto {
             artist,
             year,
             release_date,
+            original_release_date,
             created,
             song_count,
             duration,
@@ -175,6 +180,7 @@ impl AlbumDto {
                 artist_name: artist,
                 year,
                 release_date,
+                original_release_date,
                 server_added_at: created,
                 song_count,
                 duration_seconds: duration,

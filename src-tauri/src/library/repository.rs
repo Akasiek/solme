@@ -174,7 +174,7 @@ impl LibraryRepository for SqliteRepository {
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
         sqlx::query_as::<_, CachedAlbum>(
             "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                    a.release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
+                    a.release_date, a.original_release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
              FROM albums a
              JOIN library_sync_state state
                ON state.profile_id = a.profile_id
@@ -382,13 +382,14 @@ mod tests {
                 repository.server_revision("profile").await.unwrap(),
                 Some("revision-1".to_string())
             );
+            let albums = repository
+                .albums("profile", 0, 50, AlbumSort::Artist)
+                .await
+                .unwrap();
+            assert_eq!(albums.len(), 1);
             assert_eq!(
-                repository
-                    .albums("profile", 0, 50, AlbumSort::Artist)
-                    .await
-                    .unwrap()
-                    .len(),
-                1
+                albums[0].original_release_date.as_deref(),
+                Some("2025-12-31")
             );
 
             repository.close().await;
@@ -459,6 +460,47 @@ mod tests {
                     .len(),
                 260
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn recently_released_sort_prefers_original_release_date_before_release_date() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums = vec![
+                album_with_dates("album-1", "Release-only album", None, Some("2024-01-01")),
+                album_with_dates(
+                    "album-2",
+                    "Original-date album",
+                    Some("2023-01-01"),
+                    Some("2025-01-01"),
+                ),
+                album_with_dates(
+                    "album-3",
+                    "Old original-date album",
+                    Some("2020-01-01"),
+                    Some("2026-01-01"),
+                ),
+            ];
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let albums = repository
+                .albums("profile", 0, 50, AlbumSort::RecentlyReleased)
+                .await
+                .unwrap();
+            let ids = albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(ids, vec!["album-1", "album-2", "album-3"]);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -800,6 +842,7 @@ mod tests {
                     artist_name: "Artist".to_string(),
                     year: Some(2026),
                     release_date: Some("2026-01-01".to_string()),
+                    original_release_date: Some("2025-12-31".to_string()),
                     server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                     song_count: songs.len() as i64,
                     duration_seconds: 180,
@@ -812,6 +855,46 @@ mod tests {
                 name: "Jazz".to_string(),
                 song_count: 1,
                 album_count: 1,
+            }],
+        }
+    }
+
+    fn album_with_dates(
+        remote_id: &str,
+        name: &str,
+        original_release_date: Option<&str>,
+        release_date: Option<&str>,
+    ) -> AlbumWithSongs {
+        AlbumWithSongs {
+            album: Album {
+                remote_id: remote_id.to_string(),
+                name: name.to_string(),
+                artist_id: Some("artist-1".to_string()),
+                artist_name: "Artist".to_string(),
+                year: Some(2026),
+                release_date: release_date.map(str::to_string),
+                original_release_date: original_release_date.map(str::to_string),
+                server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
+                song_count: 1,
+                duration_seconds: 180,
+                cover_art_id: Some(format!("cover-{remote_id}")),
+                genres: vec!["Jazz".to_string()],
+            },
+            songs: vec![Song {
+                remote_id: format!("song-{remote_id}"),
+                album_id: remote_id.to_string(),
+                artist_id: Some("artist-1".to_string()),
+                title: format!("Song {remote_id}"),
+                artist_name: "Artist".to_string(),
+                album_name: name.to_string(),
+                track_number: Some(1),
+                disc_number: Some(1),
+                year: Some(2026),
+                duration_seconds: 180,
+                suffix: Some("opus".to_string()),
+                content_type: Some("audio/ogg".to_string()),
+                cover_art_id: Some(format!("cover-{remote_id}")),
+                genres: vec!["Jazz".to_string()],
             }],
         }
     }
@@ -855,6 +938,7 @@ mod tests {
                         artist_name: format!("Artist {index}"),
                         year: Some(2026),
                         release_date: Some("2026-01-01".to_string()),
+                        original_release_date: Some("2025-12-31".to_string()),
                         server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                         song_count: 1,
                         duration_seconds: 180,

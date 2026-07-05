@@ -593,7 +593,8 @@ mod tests {
                     "songCount": 4,
                     "duration": 900,
                     "coverArt": "cover-1",
-                    "releaseDate": {"year": 2026, "month": 7, "day": 4}
+                    "releaseDate": {"year": 2026, "month": 7, "day": 4},
+                    "originalReleaseDate": {"year": 2025, "month": 12, "day": 31}
                   }, {
                     "id": "album-2",
                     "name": "Album without release year",
@@ -601,7 +602,8 @@ mod tests {
                     "artist": "Artist",
                     "songCount": 1,
                     "duration": 180,
-                    "releaseDate": {}
+                    "releaseDate": {},
+                    "originalReleaseDate": {}
                   }]
                 }
               }
@@ -618,8 +620,13 @@ mod tests {
         assert_eq!(albums[0].id, "album-1");
         assert_eq!(albums[0].song_count, 4);
         assert_eq!(albums[0].release_date.as_deref(), Some("2026-07-04"));
+        assert_eq!(
+            albums[0].original_release_date.as_deref(),
+            Some("2025-12-31")
+        );
         assert_eq!(albums[1].id, "album-2");
         assert_eq!(albums[1].release_date, None);
+        assert_eq!(albums[1].original_release_date, None);
     }
 
     fn backend(url: &str) -> NavidromeBackend {

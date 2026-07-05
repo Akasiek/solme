@@ -277,7 +277,10 @@ impl LibrarySyncService {
         stream::iter(album_index)
             .map(|album| {
                 let server = Arc::clone(&server);
-                async move { server.album(&album.remote_id).await }
+                async move {
+                    let details = server.album(&album.remote_id).await?;
+                    Ok(merge_album_index_metadata(album, details))
+                }
             })
             .buffer_unordered(ALBUM_CONCURRENCY)
             .map_ok(|album| {
@@ -367,6 +370,16 @@ impl LibrarySyncService {
             status.phase = phase;
         });
     }
+}
+
+fn merge_album_index_metadata(index: Album, mut details: AlbumWithSongs) -> AlbumWithSongs {
+    if details.album.release_date.is_none() {
+        details.album.release_date = index.release_date;
+    }
+    if details.album.original_release_date.is_none() {
+        details.album.original_release_date = index.original_release_date;
+    }
+    details
 }
 
 #[cfg(test)]
@@ -536,6 +549,52 @@ mod tests {
 
             std::fs::remove_dir_all(directory).unwrap();
         });
+    }
+
+    #[test]
+    fn album_detail_keeps_index_dates_when_detail_omits_them() {
+        let mut index = album();
+        index.release_date = Some("2026-01-01".to_string());
+        index.original_release_date = Some("2025-12-31".to_string());
+
+        let mut detail_album = album();
+        detail_album.release_date = None;
+        detail_album.original_release_date = None;
+        let details = AlbumWithSongs {
+            album: detail_album,
+            songs: vec![song()],
+        };
+
+        let merged = super::merge_album_index_metadata(index, details);
+
+        assert_eq!(merged.album.release_date.as_deref(), Some("2026-01-01"));
+        assert_eq!(
+            merged.album.original_release_date.as_deref(),
+            Some("2025-12-31")
+        );
+    }
+
+    #[test]
+    fn album_detail_dates_override_index_dates() {
+        let mut index = album();
+        index.release_date = Some("2026-01-01".to_string());
+        index.original_release_date = Some("2025-12-31".to_string());
+
+        let mut detail_album = album();
+        detail_album.release_date = Some("2026-02-01".to_string());
+        detail_album.original_release_date = Some("2026-01-31".to_string());
+        let details = AlbumWithSongs {
+            album: detail_album,
+            songs: vec![song()],
+        };
+
+        let merged = super::merge_album_index_metadata(index, details);
+
+        assert_eq!(merged.album.release_date.as_deref(), Some("2026-02-01"));
+        assert_eq!(
+            merged.album.original_release_date.as_deref(),
+            Some("2026-01-31")
+        );
     }
 
     fn service(
@@ -814,6 +873,7 @@ mod tests {
             artist_name: "Artist".to_string(),
             year: Some(2026),
             release_date: Some("2026-01-01".to_string()),
+            original_release_date: Some("2025-12-31".to_string()),
             server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
             song_count: 1,
             duration_seconds: 180,
