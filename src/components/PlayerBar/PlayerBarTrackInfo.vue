@@ -15,9 +15,16 @@ defineProps<{ currentSong: CachedSong }>();
       />
     </div>
     <div class="flex min-w-0 flex-col gap-1">
-      <span class="line-clamp-1 font-serif font-bold">{{ currentSong.title }}</span>
+      <RouterLink
+        :to="{ name: 'album', params: { albumId: currentSong.albumId } }"
+        :title="currentSong.title"
+        class="line-clamp-1 font-serif font-bold text-zinc-100 hover:underline"
+      >
+        {{ currentSong.title }}
+      </RouterLink>
       <RouterLink
         :to="{ name: 'artist', params: { artistId: currentSong.artistId } }"
+        :title="currentSong.artistName"
         class="line-clamp-1 font-sans text-sm text-zinc-300 hover:underline"
       >
         {{ currentSong.artistName }}
