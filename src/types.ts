@@ -44,6 +44,11 @@ export interface CachedAlbum {
   artworkPath?: string;
 }
 
+export interface CachedAlbumDetails {
+  album: CachedAlbum;
+  genres: string[];
+}
+
 export interface HomeAlbumSections {
   randomAlbums: CachedAlbum[];
   newlyAddedAlbums: CachedAlbum[];

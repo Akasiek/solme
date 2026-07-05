@@ -6,6 +6,9 @@ mod repository;
 mod sync;
 mod time;
 
-pub use models::{CachedAlbum, CachedSong, HomeAlbumSections, LibrarySummary, LibrarySyncStatus};
+pub use models::{
+    CachedAlbum, CachedAlbumDetails, CachedSong, HomeAlbumSections, LibrarySummary,
+    LibrarySyncStatus,
+};
 pub(crate) use repository::LibraryRepository;
 pub use sync::LibrarySyncService;

@@ -127,6 +127,13 @@ pub struct CachedAlbum {
     pub artwork_path: Option<String>,
 }
 
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedAlbumDetails {
+    pub album: CachedAlbum,
+    pub genres: Vec<String>,
+}
+
 #[derive(Clone, Debug, Deserialize, PartialEq, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedSong {

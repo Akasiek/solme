@@ -32,6 +32,7 @@ pub trait LibraryRepository: Send + Sync {
         sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String>;
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
+    async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String>;
     async fn search_albums(
         &self,
         profile_id: &str,
@@ -190,6 +191,23 @@ impl LibraryRepository for SqliteRepository {
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| format!("Failed to read cached album: {error}"))
+    }
+
+    async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT ag.genre
+             FROM album_genres ag
+             JOIN library_sync_state state
+               ON state.profile_id = ag.profile_id
+              AND state.active_generation = ag.generation
+             WHERE ag.profile_id = ? AND ag.album_id = ?
+             ORDER BY ag.genre COLLATE NOCASE",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album genres: {error}"))
     }
 
     async fn search_albums(
@@ -391,6 +409,10 @@ mod tests {
                 albums[0].original_release_date.as_deref(),
                 Some("2025-12-31")
             );
+            assert_eq!(
+                repository.album_genres("profile", "album-1").await.unwrap(),
+                vec!["Jazz".to_string()]
+            );
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -581,6 +603,10 @@ mod tests {
                     .map(|album| album.name)
                     .as_deref(),
                 Some("Kind of Blue")
+            );
+            assert_eq!(
+                repository.album_genres("profile", "album-1").await.unwrap(),
+                vec!["Modal Jazz".to_string()]
             );
 
             repository.close().await;

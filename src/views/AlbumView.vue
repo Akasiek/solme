@@ -1,29 +1,36 @@
 <script setup lang="ts">
 import { useAsyncData } from "@/composables/useAsyncData.ts";
 import { invoke } from "@tauri-apps/api/core";
-import { CachedAlbum } from "@/types.ts";
+import { watch } from "vue";
+import { CachedAlbumDetails } from "@/types.ts";
 import AsyncViewState from "@/components/AsyncViewState.vue";
+import AlbumHero from "@/components/Album/AlbumHero/AlbumHero.vue";
 
-const { albumId } = defineProps<{ albumId: string }>();
+const props = defineProps<{ albumId: string }>();
 
 const {
-  data: album,
+  data: albumDetails,
   isLoading,
   error: loadError,
+  reload,
 } = useAsyncData(
   () =>
-    invoke<CachedAlbum>("get_cached_album", {
-      albumId: albumId,
+    invoke<CachedAlbumDetails>("get_cached_album", {
+      albumId: props.albumId,
     }),
   null,
+);
+
+watch(
+  () => props.albumId,
+  () => {
+    void reload();
+  },
 );
 </script>
 
 <template>
   <AsyncViewState :is-loading="isLoading" :error="loadError">
-    <div v-if="album === null">DUPA</div>
-    <div v-else>
-      <h1>{{ album.name }}</h1>
-    </div>
+    <AlbumHero v-if="albumDetails" :album="albumDetails.album" :genres="albumDetails.genres" />
   </AsyncViewState>
 </template>

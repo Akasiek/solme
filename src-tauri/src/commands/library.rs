@@ -3,8 +3,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::library::{
-    CachedAlbum, CachedSong, HomeAlbumSections, LibrarySummary, LibrarySyncService,
-    LibrarySyncStatus,
+    CachedAlbum, CachedAlbumDetails, CachedSong, HomeAlbumSections, LibrarySummary,
+    LibrarySyncService, LibrarySyncStatus,
 };
 
 #[tauri::command]
@@ -50,7 +50,7 @@ pub async fn get_home_album_sections(
 pub async fn get_cached_album(
     album_id: String,
     library: State<'_, Arc<LibrarySyncService>>,
-) -> Result<Option<CachedAlbum>, String> {
+) -> Result<Option<CachedAlbumDetails>, String> {
     library.album(&album_id).await
 }
 

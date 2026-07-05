@@ -795,6 +795,14 @@ mod tests {
             unimplemented!()
         }
 
+        async fn album_genres(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            unimplemented!()
+        }
+
         async fn search_albums(
             &self,
             _profile_id: &str,

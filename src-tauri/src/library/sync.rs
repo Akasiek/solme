@@ -14,8 +14,8 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedSong, HomeAlbumSections,
-        LibrarySnapshot, LibrarySummary, LibrarySyncPhase, LibrarySyncStatus,
+        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedSong,
+        HomeAlbumSections, LibrarySnapshot, LibrarySummary, LibrarySyncPhase, LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -135,11 +135,15 @@ impl LibrarySyncService {
         })
     }
 
-    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbum>, String> {
+    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbumDetails>, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(None);
         };
-        self.repository.album(&profile_id, album_id).await
+        let Some(album) = self.repository.album(&profile_id, album_id).await? else {
+            return Ok(None);
+        };
+        let genres = self.repository.album_genres(&profile_id, album_id).await?;
+        Ok(Some(CachedAlbumDetails { album, genres }))
     }
 
     pub async fn search_albums(&self, query: &str, limit: i64) -> Result<Vec<CachedAlbum>, String> {
@@ -804,6 +808,14 @@ mod tests {
             _album_id: &str,
         ) -> Result<Option<CachedAlbum>, String> {
             Ok(None)
+        }
+
+        async fn album_genres(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
         }
 
         async fn search_albums(
