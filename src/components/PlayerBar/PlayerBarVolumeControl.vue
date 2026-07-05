@@ -70,7 +70,7 @@ const invokeSetNewVolume = async (newVolume: number) => {
 }
 
 .volume-slider-label {
-  @apply pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 rounded bg-zinc-800 px-1.5 py-0.5 text-xs leading-none font-medium text-zinc-100 tabular-nums opacity-0 shadow-md transition-opacity;
+  @apply pointer-events-none absolute bottom-full mb-2 -translate-x-1/2 rounded bg-zinc-800 px-1.5 py-0.5 font-sans text-xs leading-none font-medium text-zinc-100 tabular-nums opacity-0 shadow-md transition-opacity;
 }
 
 .volume-slider-wrapper:hover .volume-slider-label,
