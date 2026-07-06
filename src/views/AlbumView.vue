@@ -31,6 +31,6 @@ watch(
 
 <template>
   <AsyncViewState :is-loading="isLoading" :error="loadError">
-    <AlbumHero v-if="albumDetails" :album="albumDetails.album" :genres="albumDetails.genres" />
+    <AlbumHero v-if="albumDetails" :album-details="albumDetails" />
   </AsyncViewState>
 </template>

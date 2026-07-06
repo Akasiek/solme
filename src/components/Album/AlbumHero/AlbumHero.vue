@@ -1,50 +1,42 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { CachedAlbum } from "@/types.ts";
+import { CachedAlbumDetails } from "@/types.ts";
 import AlbumHeroCoverArt from "@/components/Album/AlbumHero/AlbumHeroCoverArt.vue";
-import dayjs from "dayjs";
+import AlbumHeroGenres from "@/components/Album/AlbumHero/AlbumHeroGenres.vue";
 import AlbumHeroPlayerButtons from "@/components/Album/AlbumHero/AlbumHeroPlayerButtons.vue";
-import AlbumHeroMetadata from "@/components/Album/AlbumHero/AlbumHeroMetadata.vue";
+import AlbumHeroQualityBadge from "@/components/Album/AlbumHero/AlbumHeroQualityBadge.vue";
+import AlbumHeroStats from "@/components/Album/AlbumHero/AlbumHeroStats.vue";
 
-const { album, genres } = defineProps<{
-  album: CachedAlbum;
-  genres: string[];
+const { albumDetails } = defineProps<{
+  albumDetails: CachedAlbumDetails;
 }>();
 
-const albumDateFormat = (album: CachedAlbum) => {
-  return dayjs(album.originalReleaseDate || album.releaseDate).format("MMMM D, YYYY");
-};
-
-const albumGenres = computed(() => genres.filter(Boolean));
+const { album, genres, discCount, audioFormats } = albumDetails;
 </script>
 
 <template>
-  <section class="my-6 px-8">
+  <section class="my-8 px-8">
     <div
-      class="container mx-auto flex flex-col gap-10 rounded-md border-2 border-zinc-800 bg-zinc-900 p-10 shadow-xl lg:flex-row"
+      class="container mx-auto grid items-center gap-10 rounded-lg border border-zinc-800 bg-zinc-900/70 p-8 shadow-2xl shadow-black/20 lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-12 lg:p-10"
     >
       <AlbumHeroCoverArt :album="album" />
 
-      <div class="my-auto min-w-0 flex-1 space-y-4">
-        <div class="rounded border border-zinc-700 p-5">
-          <h1 class="font-serif text-3xl font-bold">{{ album.name }}</h1>
-
-          <p class="my-2 font-sans text-zinc-300">
+      <div class="min-w-0 space-y-6">
+        <div class="space-y-3">
+          <AlbumHeroQualityBadge :audio-formats="audioFormats" />
+          <h1 class="min-w-0 font-serif text-4xl leading-tight font-bold text-white lg:text-5xl">{{ album.name }}</h1>
+          <p class="font-sans text-lg text-zinc-300">
             <RouterLink
               :to="{ name: 'artist', params: { artistId: album.artistId } }"
               :title="album.artistName"
-              class="line-clamp-1 font-sans text-sm text-zinc-300 hover:underline"
+              class="line-clamp-1 hover:text-white hover:underline"
             >
               {{ album.artistName }}
             </RouterLink>
           </p>
-
-          <p class="font-sans text-xs font-semibold tracking-wide text-zinc-500 uppercase">
-            Released on {{ albumDateFormat(album) }}
-          </p>
+          <AlbumHeroStats :album="album" :disc-count="discCount" />
         </div>
 
-        <AlbumHeroMetadata :album-genres="albumGenres" />
+        <AlbumHeroGenres :genres="genres" />
 
         <AlbumHeroPlayerButtons :album="album" />
       </div>

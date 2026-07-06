@@ -9,15 +9,13 @@ defineProps<{
 </script>
 
 <template>
-  <div
-    class="aspect-square w-full max-w-80 shrink-0 overflow-hidden rounded-lg border-2 border-zinc-800 lg:w-80 xl:w-96 xl:max-w-96"
-  >
+  <div class="size-80 flex-none basis-80 overflow-hidden rounded-lg shadow-2xl shadow-black/40">
     <img
       v-if="album.artworkPath"
       :src="artworkSource(album.artworkPath)"
       :alt="`${album.name} artwork`"
       class="h-full w-full object-cover object-center"
     />
-    <MissingCoverImage v-else />
+    <MissingCoverImage v-else class="h-full w-full" />
   </div>
 </template>
