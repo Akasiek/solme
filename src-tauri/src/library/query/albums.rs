@@ -9,7 +9,8 @@ use crate::database::SqliteRepository;
 const SQLITE_BIND_LIMIT: usize = 999;
 const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
     SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-           a.release_date, a.original_release_date, a.server_added_at, a.song_count, art.local_path AS artwork_path
+           a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+           a.duration_seconds, art.local_path AS artwork_path
     FROM albums a
     JOIN library_sync_state s
       ON s.profile_id = a.profile_id
@@ -181,7 +182,8 @@ pub(crate) async fn fuzzy_album_candidates(
 ) -> Result<Vec<CachedAlbum>, String> {
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
+                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                a.duration_seconds, artwork.local_path AS artwork_path
          FROM albums a
          JOIN library_sync_state state
            ON state.profile_id = a.profile_id
@@ -210,7 +212,8 @@ pub(crate) async fn search_albums(
     let limit = limit.clamp(1, 500);
     let results = sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
+                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                a.duration_seconds, artwork.local_path AS artwork_path
          FROM album_search
          JOIN library_sync_state state
            ON state.profile_id = album_search.profile_id

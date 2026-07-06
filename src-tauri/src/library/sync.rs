@@ -143,7 +143,20 @@ impl LibrarySyncService {
             return Ok(None);
         };
         let genres = self.repository.album_genres(&profile_id, album_id).await?;
-        Ok(Some(CachedAlbumDetails { album, genres }))
+        let disc_count = self
+            .repository
+            .album_disc_count(&profile_id, album_id)
+            .await?;
+        let audio_formats = self
+            .repository
+            .album_audio_formats(&profile_id, album_id)
+            .await?;
+        Ok(Some(CachedAlbumDetails {
+            album,
+            genres,
+            disc_count,
+            audio_formats,
+        }))
     }
 
     pub async fn search_albums(&self, query: &str, limit: i64) -> Result<Vec<CachedAlbum>, String> {
@@ -818,6 +831,22 @@ mod tests {
             Ok(Vec::new())
         }
 
+        async fn album_disc_count(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<i64, String> {
+            Ok(1)
+        }
+
+        async fn album_audio_formats(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
+        }
+
         async fn search_albums(
             &self,
             _profile_id: &str,
@@ -908,6 +937,9 @@ mod tests {
             duration_seconds: 180,
             suffix: Some("opus".to_string()),
             content_type: Some("audio/ogg".to_string()),
+            bit_rate: Some(256),
+            bit_depth: Some(24),
+            sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
         }

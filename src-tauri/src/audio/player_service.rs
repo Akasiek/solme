@@ -803,6 +803,22 @@ mod tests {
             unimplemented!()
         }
 
+        async fn album_disc_count(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<i64, String> {
+            unimplemented!()
+        }
+
+        async fn album_audio_formats(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            unimplemented!()
+        }
+
         async fn search_albums(
             &self,
             _profile_id: &str,

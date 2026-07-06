@@ -127,6 +127,7 @@ pub struct CachedAlbum {
     pub original_release_date: Option<String>,
     pub server_added_at: Option<String>,
     pub song_count: i64,
+    pub duration_seconds: i64,
     pub artwork_path: Option<String>,
 }
 
@@ -135,6 +136,7 @@ pub struct CachedAlbum {
 pub struct CachedAlbumDetails {
     pub album: CachedAlbum,
     pub genres: Vec<String>,
+    pub disc_count: i64,
     pub audio_formats: Vec<String>,
 }
 

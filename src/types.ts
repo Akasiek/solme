@@ -41,12 +41,15 @@ export interface CachedAlbum {
   originalReleaseDate?: string;
   serverAddedAt?: string;
   songCount: number;
+  durationSeconds: number;
   artworkPath?: string;
 }
 
 export interface CachedAlbumDetails {
   album: CachedAlbum;
   genres: string[];
+  discCount: number;
+  audioFormats: string[];
 }
 
 export interface HomeAlbumSections {

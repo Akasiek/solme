@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use async_trait::async_trait;
 
@@ -33,6 +33,12 @@ pub trait LibraryRepository: Send + Sync {
     ) -> Result<Vec<CachedAlbum>, String>;
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
     async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String>;
+    async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String>;
+    async fn album_audio_formats(
+        &self,
+        profile_id: &str,
+        album_id: &str,
+    ) -> Result<Vec<String>, String>;
     async fn search_albums(
         &self,
         profile_id: &str,
@@ -63,6 +69,13 @@ pub trait LibraryRepository: Send + Sync {
 }
 
 impl SqliteRepository {}
+
+fn audio_format_label(suffix: Option<&str>, content_type: Option<&str>) -> Option<String> {
+    suffix
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| content_type.and_then(|value| value.rsplit('/').next()))
+        .map(|value| value.trim().to_uppercase())
+}
 
 #[async_trait]
 impl LibraryRepository for SqliteRepository {
@@ -175,7 +188,8 @@ impl LibraryRepository for SqliteRepository {
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
         sqlx::query_as::<_, CachedAlbum>(
             "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
-                    a.release_date, a.original_release_date, a.server_added_at, a.song_count, artwork.local_path AS artwork_path
+                    a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                    a.duration_seconds, artwork.local_path AS artwork_path
              FROM albums a
              JOIN library_sync_state state
                ON state.profile_id = a.profile_id
@@ -208,6 +222,54 @@ impl LibraryRepository for SqliteRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(|error| format!("Failed to read cached album genres: {error}"))
+    }
+
+    async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String> {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(DISTINCT COALESCE(NULLIF(song.disc_number, 0), 1))
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             WHERE song.profile_id = ? AND song.album_id = ?",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album disc count: {error}"))
+    }
+
+    async fn album_audio_formats(
+        &self,
+        profile_id: &str,
+        album_id: &str,
+    ) -> Result<Vec<String>, String> {
+        let rows = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT DISTINCT song.suffix, song.content_type
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             WHERE song.profile_id = ?
+               AND song.album_id = ?
+               AND COALESCE(NULLIF(song.suffix, ''), song.content_type) IS NOT NULL
+             ORDER BY 1",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album audio formats: {error}"))?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|(suffix, content_type)| {
+                audio_format_label(suffix.as_deref(), content_type.as_deref())
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect())
     }
 
     async fn search_albums(
@@ -370,11 +432,19 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::LibraryRepository;
+    use super::{audio_format_label, LibraryRepository};
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
         Album, AlbumSort, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song,
     };
+
+    #[test]
+    fn formats_audio_format_label() {
+        assert_eq!(
+            audio_format_label(Some("flac"), Some("audio/flac")),
+            Some("FLAC".to_string())
+        );
+    }
 
     #[test]
     fn activates_complete_generation() {
@@ -661,6 +731,9 @@ mod tests {
                     duration_seconds: 545,
                     suffix: None,
                     content_type: None,
+                    bit_rate: None,
+                    bit_depth: None,
+                    sample_rate: None,
                     cover_art_id: Some("cover-1".to_string()),
                     genres: vec!["Modal Jazz".to_string()],
                 },
@@ -677,6 +750,9 @@ mod tests {
                     duration_seconds: 589,
                     suffix: None,
                     content_type: None,
+                    bit_rate: None,
+                    bit_depth: None,
+                    sample_rate: None,
                     cover_art_id: Some("cover-1".to_string()),
                     genres: vec!["Blues".to_string()],
                 },
@@ -919,6 +995,9 @@ mod tests {
                 duration_seconds: 180,
                 suffix: Some("opus".to_string()),
                 content_type: Some("audio/ogg".to_string()),
+                bit_rate: Some(256),
+                bit_depth: Some(24),
+                sample_rate: Some(48000),
                 cover_art_id: Some(format!("cover-{remote_id}")),
                 genres: vec!["Jazz".to_string()],
             }],
@@ -939,6 +1018,9 @@ mod tests {
             duration_seconds: 180,
             suffix: Some("opus".to_string()),
             content_type: Some("audio/ogg".to_string()),
+            bit_rate: Some(256),
+            bit_depth: Some(24),
+            sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
         }
@@ -984,6 +1066,9 @@ mod tests {
                         duration_seconds: 180,
                         suffix: Some("opus".to_string()),
                         content_type: Some("audio/ogg".to_string()),
+                        bit_rate: Some(256),
+                        bit_depth: Some(24),
+                        sample_rate: Some(48000),
                         cover_art_id: Some(format!("cover-{index}")),
                         genres: vec!["Jazz".to_string()],
                     }],
