@@ -14,12 +14,12 @@ pub(crate) async fn insert_songs(
     generation: &str,
     songs: &[&Song],
 ) -> Result<(), String> {
-    for songs in songs.chunks(SQLITE_BIND_LIMIT / 15) {
+    for songs in songs.chunks(SQLITE_BIND_LIMIT / 18) {
         let mut query = QueryBuilder::new(
             "INSERT INTO songs
              (profile_id, generation, remote_id, album_id, artist_id, title,
               artist_name, album_name, track_number, disc_number, year,
-              duration_seconds, suffix, content_type, cover_art_id) ",
+              duration_seconds, suffix, content_type, bit_rate, bit_depth, sample_rate, cover_art_id) ",
         );
         query.push_values(songs, |mut row, song| {
             row.push_bind(profile_id)
@@ -36,6 +36,9 @@ pub(crate) async fn insert_songs(
                 .push_bind(song.duration_seconds)
                 .push_bind(&song.suffix)
                 .push_bind(&song.content_type)
+                .push_bind(song.bit_rate)
+                .push_bind(song.bit_depth)
+                .push_bind(song.sample_rate)
                 .push_bind(&song.cover_art_id);
         });
         query

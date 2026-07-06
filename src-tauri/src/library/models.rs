@@ -37,6 +37,9 @@ pub struct Song {
     pub duration_seconds: i64,
     pub suffix: Option<String>,
     pub content_type: Option<String>,
+    pub bit_rate: Option<i64>,
+    pub bit_depth: Option<i64>,
+    pub sample_rate: Option<i64>,
     pub cover_art_id: Option<String>,
     pub genres: Vec<String>,
 }
@@ -132,6 +135,7 @@ pub struct CachedAlbum {
 pub struct CachedAlbumDetails {
     pub album: CachedAlbum,
     pub genres: Vec<String>,
+    pub audio_formats: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, sqlx::FromRow, Serialize)]

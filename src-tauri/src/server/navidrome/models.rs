@@ -213,6 +213,9 @@ struct SongDto {
     duration: i64,
     suffix: Option<String>,
     content_type: Option<String>,
+    bit_rate: Option<i64>,
+    bit_depth: Option<i64>,
+    sampling_rate: Option<i64>,
     cover_art: Option<String>,
     genre: Option<String>,
     #[serde(default)]
@@ -241,6 +244,9 @@ impl SongDto {
             duration_seconds: self.duration,
             suffix: self.suffix,
             content_type: self.content_type,
+            bit_rate: self.bit_rate,
+            bit_depth: self.bit_depth,
+            sample_rate: self.sampling_rate,
             cover_art_id: self.cover_art,
             genres: collect_genres(self.genre, self.genres),
         }
