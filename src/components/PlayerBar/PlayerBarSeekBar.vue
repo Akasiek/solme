@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { computed, onMounted, onUnmounted, ref, watch } from "vue";
 import { PlayerStatus } from "@/types.ts";
+import { formatTime } from "@/utils/format.ts";
 
 const { playerStatus } = defineProps<{
   playerStatus: PlayerStatus;
@@ -65,14 +66,6 @@ const onSeekChange = async (event: Event) => {
   } finally {
     isSeeking.value = false;
   }
-};
-
-const formatTime = (seconds: number) => {
-  const safeSeconds = Math.max(0, Math.round(seconds));
-  const minutes = Math.floor(safeSeconds / 60);
-  const remainingSeconds = safeSeconds % 60;
-
-  return `${minutes}:${remainingSeconds.toString().padStart(2, "0")}`;
 };
 </script>
 
