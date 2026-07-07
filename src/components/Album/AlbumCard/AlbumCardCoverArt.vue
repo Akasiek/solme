@@ -32,7 +32,7 @@ const queueAlbumAtEnd = (event: MouseEvent) => {
 
 <template>
   <div
-    class="group/image relative aspect-square w-full overflow-hidden rounded border-2 border-zinc-800 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
+    class="group/image relative aspect-square w-full overflow-hidden rounded border border-zinc-800 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
   >
     <img
       v-if="album.artworkPath"
