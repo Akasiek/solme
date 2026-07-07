@@ -110,6 +110,7 @@ pub enum AlbumSort {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct HomeAlbumSections {
+    pub hero_random_albums: Vec<CachedAlbum>,
     pub random_albums: Vec<CachedAlbum>,
     pub newly_added_albums: Vec<CachedAlbum>,
     pub newly_released_albums: Vec<CachedAlbum>,

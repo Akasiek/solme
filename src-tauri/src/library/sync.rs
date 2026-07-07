@@ -109,12 +109,17 @@ impl LibrarySyncService {
     pub async fn home_album_sections(&self, limit: i64) -> Result<HomeAlbumSections, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(HomeAlbumSections {
+                hero_random_albums: Vec::new(),
                 random_albums: Vec::new(),
                 newly_added_albums: Vec::new(),
                 newly_released_albums: Vec::new(),
             });
         };
         let limit = limit.clamp(1, 50);
+        let hero_random_albums = self
+            .repository
+            .albums(&profile_id, 0, 5, AlbumSort::Random)
+            .await?;
         let random_albums = self
             .repository
             .albums(&profile_id, 0, limit, AlbumSort::Random)
@@ -129,6 +134,7 @@ impl LibrarySyncService {
             .await?;
 
         Ok(HomeAlbumSections {
+            hero_random_albums,
             random_albums,
             newly_added_albums,
             newly_released_albums,
@@ -614,6 +620,34 @@ mod tests {
         );
     }
 
+    #[test]
+    fn home_album_sections_use_separate_random_queries_for_hero_and_explore() {
+        tauri::async_runtime::block_on(async {
+            let server = Arc::new(MockMusicServer::new(Some("revision-1")));
+            let repository = Arc::new(MockRepository::new(Some("revision-1")));
+            let service = service(server, Arc::clone(&repository));
+
+            let sections = service.home_album_sections(48).await.unwrap();
+
+            let hero_ids = sections
+                .hero_random_albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            let explore_ids = sections
+                .random_albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                hero_ids,
+                vec!["hero-1", "hero-2", "hero-3", "hero-4", "hero-5"]
+            );
+            assert_eq!(explore_ids, vec!["explore-1", "explore-2"]);
+            assert_eq!(*repository.random_album_limits.lock().unwrap(), vec![5, 48]);
+        });
+    }
+
     fn service(
         server: Arc<MockMusicServer>,
         repository: Arc<MockRepository>,
@@ -761,6 +795,7 @@ mod tests {
         artwork_candidates: Mutex<Vec<ArtworkCandidate>>,
         saved_artwork: Mutex<Vec<ArtworkCacheRecord>>,
         freshness: Mutex<HashMap<String, bool>>,
+        random_album_limits: Mutex<Vec<i64>>,
     }
 
     impl MockRepository {
@@ -771,6 +806,7 @@ mod tests {
                 artwork_candidates: Mutex::new(Vec::new()),
                 saved_artwork: Mutex::new(Vec::new()),
                 freshness: Mutex::new(HashMap::new()),
+                random_album_limits: Mutex::new(Vec::new()),
             }
         }
     }
@@ -809,10 +845,27 @@ mod tests {
             &self,
             _profile_id: &str,
             _offset: i64,
-            _limit: i64,
-            _sort: AlbumSort,
+            limit: i64,
+            sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
-            Ok(Vec::new())
+            if sort != AlbumSort::Random {
+                return Ok(Vec::new());
+            }
+
+            let call_index = {
+                let mut limits = self.random_album_limits.lock().unwrap();
+                limits.push(limit);
+                limits.len()
+            };
+            let albums = match call_index {
+                1 => (1..=5)
+                    .map(|index| cached_album(&format!("hero-{index}")))
+                    .collect::<Vec<_>>(),
+                2 => vec![cached_album("explore-1"), cached_album("explore-2")],
+                _ => Vec::new(),
+            };
+
+            Ok(albums.into_iter().take(limit as usize).collect())
         }
 
         async fn album(
@@ -920,6 +973,22 @@ mod tests {
             duration_seconds: 180,
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
+        }
+    }
+
+    fn cached_album(remote_id: &str) -> CachedAlbum {
+        CachedAlbum {
+            remote_id: remote_id.to_string(),
+            name: remote_id.to_string(),
+            artist_name: "Artist".to_string(),
+            artist_id: Some("artist-1".to_string()),
+            year: Some(2026),
+            release_date: Some("2026-01-01".to_string()),
+            original_release_date: Some("2025-12-31".to_string()),
+            server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
+            song_count: 1,
+            duration_seconds: 180,
+            artwork_path: None,
         }
     }
 

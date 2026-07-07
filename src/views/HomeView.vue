@@ -2,6 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { HomeAlbumSections } from "@/types.ts";
 import AsyncViewState from "@/components/AsyncViewState.vue";
+import HomeHero from "@/components/Home/HomeHero";
 import HomeAlbumCarousel from "@/components/Home/HomeAlbumCarousel";
 import { useAsyncData } from "@/composables/useAsyncData";
 
@@ -15,6 +16,7 @@ const {
       limit: 48,
     }),
   {
+    heroRandomAlbums: [],
     randomAlbums: [],
     newlyAddedAlbums: [],
     newlyReleasedAlbums: [],
@@ -23,17 +25,19 @@ const {
 </script>
 
 <template>
-  <section class="space-y-6 p-6">
-    <div class="space-y-2">
-      <h1 class="font-serif text-4xl font-bold">Home</h1>
-      <hr class="border-zinc-800" />
-    </div>
-
+  <section class="space-y-8 p-6">
     <AsyncViewState :is-loading="isLoading" :error="loadError">
       <div class="space-y-8">
-        <HomeAlbumCarousel title="Explore library" :albums="albumSections.randomAlbums" />
-        <HomeAlbumCarousel title="Recently added albums" :albums="albumSections.newlyAddedAlbums" />
-        <HomeAlbumCarousel title="Recently released albums" :albums="albumSections.newlyReleasedAlbums" />
+        <HomeHero :album-sections="albumSections" />
+        <div id="explore-library" class="scroll-mt-6">
+          <HomeAlbumCarousel title="Explore library" :albums="albumSections.randomAlbums" />
+        </div>
+        <div id="recently-added" class="scroll-mt-6">
+          <HomeAlbumCarousel title="Recently added albums" :albums="albumSections.newlyAddedAlbums" />
+        </div>
+        <div id="recently-released" class="scroll-mt-6">
+          <HomeAlbumCarousel title="Recently released albums" :albums="albumSections.newlyReleasedAlbums" />
+        </div>
       </div>
     </AsyncViewState>
   </section>

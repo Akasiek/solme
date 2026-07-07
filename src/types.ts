@@ -53,6 +53,7 @@ export interface CachedAlbumDetails {
 }
 
 export interface HomeAlbumSections {
+  heroRandomAlbums: CachedAlbum[];
   randomAlbums: CachedAlbum[];
   newlyAddedAlbums: CachedAlbum[];
   newlyReleasedAlbums: CachedAlbum[];
