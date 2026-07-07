@@ -14,6 +14,8 @@ use super::{
 };
 use crate::events::EventBus;
 
+const PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS: f64 = 5.0;
+
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
     server: Arc<MusicServerService>,
@@ -80,6 +82,12 @@ impl PlayerService {
 
     fn notify_status_changed(&self) -> Result<(), String> {
         let status = self.status()?;
+        self.event_bus.publish_player_status(status)
+    }
+
+    fn notify_status_changed_with_position(&self, position_seconds: f64) -> Result<(), String> {
+        let mut status = self.status()?;
+        status.position_seconds = position_seconds.max(0.0);
         self.event_bus.publish_player_status(status)
     }
 
@@ -163,13 +171,18 @@ impl PlayerService {
     }
 
     pub fn previous(&self) -> Result<(), String> {
-        self.audio.previous()?;
-        self.notify_status_changed()
+        let position_seconds = self.audio.status().position_seconds;
+        if position_seconds > PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS {
+            self.seek(0.0)
+        } else {
+            self.audio.previous()?;
+            self.notify_status_changed()
+        }
     }
 
     pub fn seek(&self, position_seconds: f64) -> Result<(), String> {
         self.audio.seek(position_seconds)?;
-        self.notify_status_changed()
+        self.notify_status_changed_with_position(position_seconds)
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
@@ -532,6 +545,95 @@ mod tests {
         });
     }
 
+    #[test]
+    fn seek_event_reports_requested_position_when_backend_status_is_stale() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 37.5,
+                keep_stale_position_after_seek: true,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+            let mut status_receiver = player.subscribe_status();
+
+            player.seek(0.0).unwrap();
+
+            let status = status_receiver.recv().await.unwrap();
+            assert_eq!(status.position_seconds, 0.0);
+            assert_eq!(audio_state.lock().unwrap().position_seconds, 37.5);
+        });
+    }
+
+    #[test]
+    fn previous_restarts_current_song_after_threshold() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 6.0,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.previous().unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.position_seconds, 0.0);
+            assert_eq!(audio.previous_calls, 0);
+        });
+    }
+
+    #[test]
+    fn previous_moves_to_previous_song_before_threshold() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 5.0,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.previous().unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.position_seconds, 5.0);
+            assert_eq!(audio.previous_calls, 1);
+        });
+    }
+
     fn song(id: &str) -> CachedSong {
         CachedSong {
             remote_id: id.to_string(),
@@ -573,6 +675,8 @@ mod tests {
         paused: bool,
         position_seconds: f64,
         volume: f64,
+        previous_calls: usize,
+        keep_stale_position_after_seek: bool,
     }
 
     struct MockAudioBackend {
@@ -648,11 +752,15 @@ mod tests {
         }
 
         fn previous(&self) -> Result<(), String> {
+            self.state.lock().unwrap().previous_calls += 1;
             Ok(())
         }
 
         fn seek(&self, position_seconds: f64) -> Result<(), String> {
-            self.state.lock().unwrap().position_seconds = position_seconds;
+            let mut state = self.state.lock().unwrap();
+            if !state.keep_stale_position_after_seek {
+                state.position_seconds = position_seconds;
+            }
             Ok(())
         }
 

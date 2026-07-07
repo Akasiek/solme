@@ -16,7 +16,9 @@ const onPlayPause = (playerState: PlayerStatus["state"]) => {
 };
 
 const canGoBack = computed(() => {
-  return playerStatus.queuePosition !== undefined && playerStatus.queuePosition > 1;
+  return (
+    playerStatus.queuePosition !== undefined && (playerStatus.queuePosition > 1 || playerStatus.positionSeconds > 5)
+  );
 });
 
 const canGoNext = computed(
