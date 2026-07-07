@@ -15,6 +15,14 @@ const coverAlbums = computed(() => props.albumSections.heroRandomAlbums.slice(0,
 const featuredAlbum = computed(() => coverAlbums.value[0]);
 const hasLibraryAlbums = computed(() => coverAlbums.value.length > 0);
 const librarySections = [{ label: "Albums" }, { label: "Artists" }, { label: "Genres" }];
+const heroDescriptions = [
+  "Put something on, follow a thread, and let the next record find you.",
+  "Start anywhere in the shelf and see where the mood takes you.",
+  "A quiet place to rediscover what you already saved for later.",
+  "Pick a cover, press play, and let the library open up from there.",
+  "Old favorites, recent finds, and the next album you forgot you loved.",
+];
+const heroDescription = heroDescriptions[Math.floor(Math.random() * heroDescriptions.length)];
 const router = useRouter();
 </script>
 
@@ -22,7 +30,7 @@ const router = useRouter();
   <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
     <div class="grid min-h-96 gap-8 p-6 md:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:p-10">
       <div class="max-w-3xl space-y-7">
-        <div class="flex items-center gap-2 text-sm font-semibold tracking-wide text-accent uppercase">
+        <div class="flex items-center gap-2 text-sm font-semibold tracking-wide text-accent uppercase font-sans">
           <Library class="size-4" aria-hidden="true" />
           Library
         </div>
@@ -30,7 +38,7 @@ const router = useRouter();
         <div class="space-y-4">
           <h1 class="text-4xl leading-tight font-bold text-white md:text-5xl">Home</h1>
           <p class="max-w-2xl font-sans text-base leading-7 text-zinc-300 md:text-lg">
-            Browse your music library by albums, artists, and genres.
+            {{ heroDescription }}
           </p>
         </div>
 
