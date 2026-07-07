@@ -30,7 +30,7 @@ const router = useRouter();
   <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
     <div class="grid min-h-96 gap-8 p-6 md:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:p-10">
       <div class="max-w-3xl space-y-7">
-        <div class="flex items-center gap-2 text-sm font-semibold tracking-wide text-accent uppercase font-sans">
+        <div class="flex items-center gap-2 font-sans text-sm font-semibold tracking-wide text-accent uppercase">
           <Library class="size-4" aria-hidden="true" />
           Library
         </div>
