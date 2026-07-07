@@ -14,9 +14,9 @@ const { album, genres, discCount, audioFormats } = albumDetails;
 </script>
 
 <template>
-  <section class="my-8 px-8">
+  <section class="my-6 px-6">
     <div
-      class="container mx-auto grid items-center gap-10 rounded-lg border border-zinc-800 bg-zinc-900/70 p-8 shadow-2xl shadow-black/20 lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-12 lg:p-10"
+      class="container mx-auto grid items-center gap-10 rounded-lg border border-zinc-800 bg-zinc-950/70 p-8 shadow-2xl shadow-black/20 lg:grid-cols-[20rem_minmax(0,1fr)] lg:gap-12 lg:p-10"
     >
       <AlbumHeroCoverArt :album="album" />
 
