@@ -7,6 +7,7 @@ import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
+import { overrideKeyAction } from "@/utils/hotkeys";
 
 const playerStatus = ref<PlayerStatus | null>(null);
 let unlistenPlayerStatusChanged: (() => void) | null = null;
@@ -15,6 +16,20 @@ const currentSong = computed(() => playerStatus.value?.currentSong ?? null);
 const loadPlayerStatus = async () => {
   playerStatus.value = await invoke<PlayerStatus>("get_player_status");
 };
+
+const togglePlayback = () => {
+  const status = playerStatus.value;
+  if (!status?.currentSong) {
+    return;
+  }
+
+  const cmd = status.state === "playing" ? "player_pause" : "player_resume";
+  invoke(cmd).catch((error) => {
+    console.error(`Failed to ${status.state === "playing" ? "pause" : "resume"} player:`, error);
+  });
+};
+
+overrideKeyAction(" ", togglePlayback);
 
 onMounted(async () => {
   await loadPlayerStatus();
