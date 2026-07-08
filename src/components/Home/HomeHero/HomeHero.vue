@@ -28,16 +28,16 @@ const router = useRouter();
 
 <template>
   <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
-    <div class="grid min-h-96 gap-8 p-6 md:p-8 lg:grid-cols-[minmax(0,1fr)_28rem] lg:items-center lg:p-10">
-      <div class="max-w-3xl space-y-7">
+    <div class="grid min-h-72 gap-6 p-5 md:p-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center lg:p-7">
+      <div class="max-w-3xl space-y-5">
         <div class="flex items-center gap-2 font-sans text-sm font-semibold tracking-wide text-accent uppercase">
           <Library class="size-4" aria-hidden="true" />
           Library
         </div>
 
-        <div class="space-y-4">
+        <div class="space-y-3">
           <h1 class="text-4xl leading-tight font-bold text-white md:text-5xl">Home</h1>
-          <p class="max-w-2xl font-sans text-base leading-7 text-zinc-300 md:text-lg">
+          <p class="max-w-2xl font-sans text-base leading-7 text-zinc-300">
             {{ heroDescription }}
           </p>
         </div>
@@ -53,14 +53,14 @@ const router = useRouter();
         </div>
       </div>
 
-      <div class="relative min-h-80">
+      <div class="relative min-h-72">
         <div
-          class="absolute inset-x-6 top-14 bottom-0 rounded-lg border border-zinc-800 bg-zinc-900/80 shadow-2xl shadow-black/40"
+          class="absolute inset-x-5 top-12 bottom-0 rounded-lg border border-zinc-800 bg-zinc-900/80 shadow-2xl shadow-black/40"
         />
         <RouterLink
           v-if="featuredAlbum"
           :to="{ name: 'album', params: { albumId: featuredAlbum.remoteId } }"
-          class="group absolute top-0 left-0 w-56 transition-colors duration-300 ease-in-out sm:w-64 lg:w-72"
+          class="group absolute top-0 left-0 w-48 transition-colors duration-300 ease-in-out sm:w-56 lg:w-64"
         >
           <div
             class="relative aspect-square w-full overflow-hidden rounded border-2 border-zinc-800 transition delay-100 duration-300 ease-in-out group-hover:-translate-y-1 group-hover:border-zinc-600 hover:delay-0"
@@ -76,12 +76,12 @@ const router = useRouter();
         </RouterLink>
         <div
           v-else
-          class="absolute top-0 left-0 aspect-square w-56 overflow-hidden rounded border-2 border-zinc-800 bg-zinc-900 sm:w-64 lg:w-72"
+          class="absolute top-0 left-0 aspect-square w-48 overflow-hidden rounded border-2 border-zinc-800 bg-zinc-900 sm:w-56 lg:w-64"
         >
           <MissingCoverImage />
         </div>
 
-        <div v-if="hasLibraryAlbums" class="absolute right-0 bottom-4 grid w-64 grid-cols-2 gap-3">
+        <div v-if="hasLibraryAlbums" class="absolute right-0 bottom-3 grid w-56 grid-cols-2 gap-2.5">
           <RouterLink
             v-for="album in coverAlbums.slice(1)"
             :key="album.remoteId"
