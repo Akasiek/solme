@@ -7,6 +7,8 @@ pub struct ServerConnectionConfig {
     pub profile_id: Option<String>,
     pub server_type: ServerType,
     pub url: String,
+    #[serde(default)]
+    pub secondary_url: Option<String>,
     pub username: String,
     pub password: String,
     pub save_credentials: bool,
@@ -39,6 +41,7 @@ pub struct SavedServerProfile {
     pub id: String,
     pub server_type: ServerType,
     pub url: String,
+    pub secondary_url: Option<String>,
     pub username: String,
     pub is_current: bool,
 }
@@ -64,6 +67,7 @@ pub(super) struct StoredServerProfile {
     pub id: String,
     pub server_type: ServerType,
     pub url: String,
+    pub secondary_url: Option<String>,
     pub username: String,
 }
 
@@ -73,6 +77,7 @@ impl From<StoredServerProfile> for SavedServerProfile {
             id: profile.id,
             server_type: profile.server_type,
             url: profile.url,
+            secondary_url: profile.secondary_url,
             username: profile.username,
             is_current: false,
         }

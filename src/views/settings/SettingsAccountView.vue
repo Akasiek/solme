@@ -11,6 +11,7 @@ import { ServerInfo } from "@/types";
 interface ServerAuthorizationPayload {
   profileId?: string;
   url: string;
+  secondaryUrl?: string;
   username: string;
   password: string;
 }
@@ -42,6 +43,7 @@ const saveServerAuthorization = async (payload: ServerAuthorizationPayload) => {
         profileId: payload.profileId,
         serverType: "navidrome",
         url: payload.url,
+        secondaryUrl: payload.secondaryUrl,
         username: payload.username,
         password: payload.password,
         saveCredentials: true,
@@ -66,6 +68,14 @@ const addServer = () => {
 <template>
   <section class="space-y-6">
     <SettingsAccountHeader :server-info="serverInfo" :can-add-server="hasProfiles" @add-server="addServer" />
+
+    <div
+      v-if="!isProfilesLoading && hasProfiles && !serverInfo"
+      class="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100"
+    >
+      No connection to the configured music server. Check the server URL, network connection, or add a secondary URL
+      for fallback access.
+    </div>
 
     <ServerAuthorizationForm
       v-if="!isProfilesLoading && (!hasProfiles || isAddingServer)"

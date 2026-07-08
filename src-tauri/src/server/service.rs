@@ -40,16 +40,38 @@ impl MusicServerService {
             profile_id,
             server_type,
             url,
+            secondary_url,
             username,
             password,
             save_credentials,
         } = config;
+        let url = normalize_required_url(url)?;
+        let secondary_url = normalize_optional_url(secondary_url);
+        let should_update_password = !password.is_empty();
+        let resolved_password = match (profile_id.as_deref(), should_update_password) {
+            (_, true) => password.clone(),
+            (Some(profile_id), false) => self.load_password(profile_id).await?,
+            (None, false) => password.clone(),
+        };
 
-        let server = create_server(server_type, url.clone(), username.clone(), password.clone())?;
-        let info = server.ping().await?;
+        let (server, info) = create_connected_server(
+            server_type,
+            &url,
+            secondary_url.as_deref(),
+            &username,
+            &resolved_password,
+        )
+        .await?;
         let profile_id = if save_credentials {
-            self.save_profile(profile_id, server_type, url, username, password)
-                .await?
+            self.save_profile(
+                profile_id,
+                server_type,
+                url,
+                secondary_url,
+                username,
+                should_update_password.then_some(password),
+            )
+            .await?
         } else {
             Uuid::new_v4().to_string()
         };
@@ -61,8 +83,14 @@ impl MusicServerService {
     pub async fn connect_saved(&self, profile_id: Option<String>) -> Result<ServerInfo, String> {
         let (profile, password) = self.load_profile_with_password(profile_id).await?;
         let profile_id = profile.id.clone();
-        let server = create_server(profile.server_type, profile.url, profile.username, password)?;
-        let info = server.ping().await?;
+        let (server, info) = create_connected_server(
+            profile.server_type,
+            &profile.url,
+            profile.secondary_url.as_deref(),
+            &profile.username,
+            &password,
+        )
+        .await?;
 
         self.set_current_server(profile_id, server)?;
         Ok(info)
@@ -110,6 +138,7 @@ impl MusicServerService {
                 id: profile.id,
                 server_type: profile.server_type,
                 url: profile.url,
+                secondary_url: profile.secondary_url,
                 username: profile.username,
                 is_current,
             }
@@ -133,6 +162,7 @@ impl MusicServerService {
                     id: profile.id,
                     server_type: profile.server_type,
                     url: profile.url,
+                    secondary_url: profile.secondary_url,
                     username: profile.username,
                     is_current,
                 }
@@ -185,10 +215,10 @@ impl MusicServerService {
         profile_id: Option<String>,
         server_type: ServerType,
         url: String,
+        secondary_url: Option<String>,
         username: String,
-        password: String,
+        password: Option<String>,
     ) -> Result<String, String> {
-        let credentials = Arc::clone(&self.credentials);
         let id = match profile_id {
             Some(profile_id) => profile_id,
             None => self
@@ -208,18 +238,13 @@ impl MusicServerService {
             id: id.clone(),
             server_type,
             url,
+            secondary_url,
             username,
         };
 
-        let credential_id = id.clone();
-        tauri::async_runtime::spawn_blocking(move || {
-            credentials
-                .lock()
-                .map_err(|_| "Credential store lock was poisoned".to_string())?
-                .save(&credential_id, &password)
-        })
-        .await
-        .map_err(|error| format!("Failed to save server credentials: {error}"))??;
+        if let Some(password) = password {
+            self.save_password(&id, password).await?;
+        }
 
         self.profiles.save(&profile).await?;
         Ok(id)
@@ -229,8 +254,6 @@ impl MusicServerService {
         &self,
         profile_id: Option<String>,
     ) -> Result<(StoredServerProfile, String), String> {
-        let credentials = Arc::clone(&self.credentials);
-
         let profile = match profile_id {
             Some(profile_id) => self
                 .profiles
@@ -243,8 +266,30 @@ impl MusicServerService {
                 .await?
                 .ok_or_else(|| "No server profile is saved".to_string())?,
         };
-        let credential_id = profile.id.clone();
-        let password = tauri::async_runtime::spawn_blocking(move || {
+        let password = self.load_password(&profile.id).await?;
+
+        Ok((profile, password))
+    }
+
+    async fn save_password(&self, profile_id: &str, password: String) -> Result<(), String> {
+        let credentials = Arc::clone(&self.credentials);
+        let credential_id = profile_id.to_string();
+
+        tauri::async_runtime::spawn_blocking(move || {
+            credentials
+                .lock()
+                .map_err(|_| "Credential store lock was poisoned".to_string())?
+                .save(&credential_id, &password)
+        })
+        .await
+        .map_err(|error| format!("Failed to save server credentials: {error}"))?
+    }
+
+    async fn load_password(&self, profile_id: &str) -> Result<String, String> {
+        let credentials = Arc::clone(&self.credentials);
+        let credential_id = profile_id.to_string();
+
+        tauri::async_runtime::spawn_blocking(move || {
             let password = credentials
                 .lock()
                 .map_err(|_| "Credential store lock was poisoned".to_string())?
@@ -252,9 +297,7 @@ impl MusicServerService {
             Ok::<String, String>(password)
         })
         .await
-        .map_err(|error| format!("Failed to load saved credentials: {error}"))??;
-
-        Ok((profile, password))
+        .map_err(|error| format!("Failed to load saved credentials: {error}"))?
     }
 
     pub(crate) fn set_current_server(
@@ -283,4 +326,54 @@ fn create_server(
     match server_type {
         ServerType::Navidrome => Ok(Arc::new(NavidromeBackend::new(url, username, password)?)),
     }
+}
+
+async fn create_connected_server(
+    server_type: ServerType,
+    url: &str,
+    secondary_url: Option<&str>,
+    username: &str,
+    password: &str,
+) -> Result<(Arc<dyn MusicServer>, ServerInfo), String> {
+    match connect_server_url(server_type, url, username, password).await {
+        Ok(connection) => Ok(connection),
+        Err(primary_error) => match secondary_url {
+            Some(secondary_url) => {
+                log::warn!(
+                    "Primary music server connection failed, trying secondary URL: {primary_error}"
+                );
+                connect_server_url(server_type, secondary_url, username, password).await
+            }
+            None => Err(primary_error),
+        },
+    }
+}
+
+async fn connect_server_url(
+    server_type: ServerType,
+    url: &str,
+    username: &str,
+    password: &str,
+) -> Result<(Arc<dyn MusicServer>, ServerInfo), String> {
+    let server = create_server(
+        server_type,
+        url.to_string(),
+        username.to_string(),
+        password.to_string(),
+    )?;
+    let info = server.ping().await?;
+    Ok((server, info))
+}
+
+fn normalize_required_url(url: String) -> Result<String, String> {
+    let url = url.trim().to_string();
+    if url.is_empty() {
+        return Err("Server URL cannot be empty".to_string());
+    }
+    Ok(url)
+}
+
+fn normalize_optional_url(url: Option<String>) -> Option<String> {
+    url.map(|url| url.trim().to_string())
+        .filter(|url| !url.is_empty())
 }

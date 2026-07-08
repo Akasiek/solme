@@ -9,6 +9,7 @@ import { SavedServerProfile, ServerInfo } from "@/types";
 interface ServerAuthorizationPayload {
   profileId?: string;
   url: string;
+  secondaryUrl?: string;
   username: string;
   password: string;
 }
@@ -62,6 +63,7 @@ const saveServerAuthorization = async (payload: ServerAuthorizationPayload) => {
         profileId: payload.profileId,
         serverType: "navidrome",
         url: payload.url,
+        secondaryUrl: payload.secondaryUrl,
         username: payload.username,
         password: payload.password,
         saveCredentials: true,

@@ -16,6 +16,7 @@ const emit = defineEmits<{
     payload: {
       profileId?: string;
       url: string;
+      secondaryUrl?: string;
       username: string;
       password: string;
     },
@@ -25,12 +26,14 @@ const emit = defineEmits<{
 
 const form = reactive({
   url: "",
+  secondaryUrl: "",
   username: "",
   password: "",
 });
 
 const resetForm = () => {
   form.url = props.profile?.url ?? "";
+  form.secondaryUrl = props.profile?.secondaryUrl ?? "";
   form.username = props.profile?.username ?? "";
   form.password = "";
 };
@@ -39,6 +42,7 @@ const submit = () => {
   emit("submit", {
     profileId: props.profile?.id,
     url: form.url,
+    secondaryUrl: form.secondaryUrl || undefined,
     username: form.username,
     password: form.password,
   });
@@ -58,15 +62,22 @@ watch(() => props.profile, resetForm, { immediate: true });
         placeholder="https://music.example.com"
       />
 
+      <TextInput
+        v-model="form.secondaryUrl"
+        field-label="Secondary server URL"
+        type="url"
+        placeholder="https://music-local.example.com"
+      />
+
       <TextInput v-model="form.username" field-label="Username" required autocomplete="username" />
 
       <TextInput
         v-model="form.password"
         field-label="Password"
-        required
+        :required="!profile"
         type="password"
         autocomplete="current-password"
-        class="md:col-span-2"
+        :placeholder="profile ? 'Leave blank to keep current password' : undefined"
       />
     </div>
 

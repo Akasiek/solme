@@ -26,7 +26,7 @@ impl ServerProfileStore {
 
     pub async fn load_by_id(&self, id: &str) -> Result<Option<StoredServerProfile>, String> {
         let row = sqlx::query(
-            "SELECT id, server_type, url, username
+            "SELECT id, server_type, url, secondary_url, username
              FROM server_profiles
              WHERE id = ?",
         )
@@ -40,7 +40,7 @@ impl ServerProfileStore {
 
     pub async fn load_all(&self) -> Result<Vec<StoredServerProfile>, String> {
         let rows = sqlx::query(
-            "SELECT id, server_type, url, username
+            "SELECT id, server_type, url, secondary_url, username
              FROM server_profiles
              ORDER BY rowid",
         )
@@ -128,7 +128,7 @@ impl ServerProfileStore {
 
     async fn load_first(&self) -> Result<Option<StoredServerProfile>, String> {
         let row = sqlx::query(
-            "SELECT id, server_type, url, username
+            "SELECT id, server_type, url, secondary_url, username
              FROM server_profiles
              ORDER BY rowid
              LIMIT 1",
@@ -146,16 +146,18 @@ async fn save_profile(
     profile: &StoredServerProfile,
 ) -> Result<(), String> {
     sqlx::query(
-        "INSERT INTO server_profiles (id, server_type, url, username)
-         VALUES (?, ?, ?, ?)
+        "INSERT INTO server_profiles (id, server_type, url, secondary_url, username)
+         VALUES (?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
              server_type = excluded.server_type,
              url = excluded.url,
+             secondary_url = excluded.secondary_url,
              username = excluded.username",
     )
     .bind(&profile.id)
     .bind(profile.server_type.as_storage_value())
     .bind(&profile.url)
+    .bind(&profile.secondary_url)
     .bind(&profile.username)
     .execute(&mut **transaction)
     .await
@@ -197,6 +199,7 @@ fn profile_from_row(row: sqlx::sqlite::SqliteRow) -> Result<StoredServerProfile,
         id: row.get("id"),
         server_type,
         url: row.get("url"),
+        secondary_url: row.get("secondary_url"),
         username: row.get("username"),
     })
 }
@@ -219,6 +222,7 @@ mod tests {
                 id: Uuid::new_v4().to_string(),
                 server_type: ServerType::Navidrome,
                 url: "https://music.example.com".to_string(),
+                secondary_url: Some("https://music-fallback.example.com".to_string()),
                 username: "listener".to_string(),
             };
 
@@ -227,6 +231,7 @@ mod tests {
             let loaded = store.load().await.unwrap().unwrap();
             assert_eq!(loaded.id, profile.id);
             assert_eq!(loaded.url, profile.url);
+            assert_eq!(loaded.secondary_url, profile.secondary_url);
             assert_eq!(loaded.username, profile.username);
 
             store.delete(Some(&profile.id)).await.unwrap();
@@ -243,12 +248,14 @@ mod tests {
                 id: Uuid::new_v4().to_string(),
                 server_type: ServerType::Navidrome,
                 url: "https://first.example.com".to_string(),
+                secondary_url: None,
                 username: "first".to_string(),
             };
             let second = StoredServerProfile {
                 id: Uuid::new_v4().to_string(),
                 server_type: ServerType::Navidrome,
                 url: "https://second.example.com".to_string(),
+                secondary_url: Some("https://second-fallback.example.com".to_string()),
                 username: "second".to_string(),
             };
 

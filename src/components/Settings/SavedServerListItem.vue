@@ -7,6 +7,7 @@ import { SavedServerProfile } from "@/types";
 interface ServerAuthorizationPayload {
   profileId?: string;
   url: string;
+  secondaryUrl?: string;
   username: string;
   password: string;
 }
@@ -36,6 +37,9 @@ const emit = defineEmits<{
           <span v-if="profile.isCurrent" class="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300"> Current </span>
         </div>
         <p class="truncate font-sans text-sm text-zinc-400">{{ profile.url }}</p>
+        <p v-if="profile.secondaryUrl" class="truncate font-sans text-sm text-zinc-500">
+          Fallback: {{ profile.secondaryUrl }}
+        </p>
       </div>
 
       <div class="flex gap-2">

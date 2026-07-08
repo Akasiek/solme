@@ -9,6 +9,7 @@ export interface SavedServerProfile {
   id: string;
   serverType: string;
   url: string;
+  secondaryUrl?: string;
   username: string;
   isCurrent: boolean;
 }
