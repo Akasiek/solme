@@ -3,6 +3,8 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { House, PanelLeftClose, PanelLeftOpen, Search, Settings } from "@lucide/vue";
 import { useRouter } from "vue-router";
 
+import solmeLogo from "@/assets/solme-logo-dark.svg";
+
 const router = useRouter();
 const defaultWidth = 224;
 const minWidth = 208;
@@ -167,12 +169,15 @@ onUnmounted(() => {
           class="mb-4 flex items-center gap-2"
           :class="{ 'justify-center': isCollapsed, 'justify-between': !isCollapsed }"
         >
-          <h1
-            class="overflow-hidden font-serif text-2xl font-bold whitespace-nowrap text-white transition-[max-width,opacity] duration-150"
+          <div
+            class="flex min-w-0 items-center gap-2 overflow-hidden transition-[max-width,opacity] duration-150"
             :class="isCollapsed ? 'hidden' : 'max-w-32 opacity-100'"
           >
-            Solm<span class="text-accent">ë</span>
-          </h1>
+            <img :src="solmeLogo" alt="" class="size-8 shrink-0" />
+            <h1 class="overflow-hidden font-serif text-2xl font-bold whitespace-nowrap text-white">
+              Solm<span class="text-accent">ë</span>
+            </h1>
+          </div>
           <button
             type="button"
             class="grid size-8 shrink-0 cursor-pointer place-items-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
