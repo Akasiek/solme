@@ -8,6 +8,10 @@ use libmpv2::{events::Event, Format, Mpv, SetData};
 
 use super::backend::{AudioBackend, AudioBackendStatus, AudioStatusChangeCallback};
 
+const DEMUXER_READAHEAD_SECS: f64 = 30.0;
+const DEMUXER_MAX_BYTES: i64 = 256 * 1024 * 1024;
+const STREAM_BUFFER_SIZE: i64 = 4 * 1024 * 1024;
+
 pub struct MpvBackend {
     mpv: Mpv,
     status_change_callback: Arc<Mutex<Option<AudioStatusChangeCallback>>>,
@@ -26,6 +30,24 @@ impl MpvBackend {
 
         audio.set_property("vo", "null", "disable video output")?;
         audio.set_property("idle", true, "enable mpv idle mode")?;
+        audio.set_property("gapless-audio", "yes", "enable gapless audio")?;
+        audio.set_property("cache", "yes", "enable mpv stream cache")?;
+        audio.set_property("prefetch-playlist", true, "prefetch next playlist entry")?;
+        audio.set_property(
+            "stream-buffer-size",
+            STREAM_BUFFER_SIZE,
+            "increase stream buffer",
+        )?;
+        audio.set_property(
+            "demuxer-readahead-secs",
+            DEMUXER_READAHEAD_SECS,
+            "increase audio readahead",
+        )?;
+        audio.set_property(
+            "demuxer-max-bytes",
+            DEMUXER_MAX_BYTES,
+            "increase demuxer cache",
+        )?;
 
         Ok(audio)
     }
