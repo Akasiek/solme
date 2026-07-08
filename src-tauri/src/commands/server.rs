@@ -2,7 +2,9 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::server::{MusicServerService, SavedServerProfile, ServerConnectionConfig, ServerInfo};
+use crate::server::{
+    MusicServerService, SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig, ServerInfo,
+};
 use crate::{
     audio::{PlaybackSessionService, PlayerService},
     library::LibrarySyncService,
@@ -65,6 +67,26 @@ pub async fn connect_saved_music_server(
 ) -> Result<ServerInfo, String> {
     setup::connect_saved_server(
         profile_id,
+        &server.inner().clone(),
+        &library.inner().clone(),
+        &player.inner().clone(),
+        &session.inner().clone(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn connect_saved_music_server_endpoint(
+    profile_id: Option<String>,
+    endpoint: SavedServerEndpoint,
+    server: State<'_, Arc<MusicServerService>>,
+    library: State<'_, Arc<LibrarySyncService>>,
+    player: State<'_, Arc<PlayerService>>,
+    session: State<'_, Arc<PlaybackSessionService>>,
+) -> Result<ServerInfo, String> {
+    setup::connect_saved_server_endpoint(
+        profile_id,
+        endpoint,
         &server.inner().clone(),
         &library.inner().clone(),
         &player.inner().clone(),

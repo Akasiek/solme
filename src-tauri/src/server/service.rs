@@ -8,7 +8,8 @@ use crate::credentials::CredentialStore;
 use super::{
     backend::MusicServer,
     models::{
-        SavedServerProfile, ServerConnectionConfig, ServerInfo, ServerType, StoredServerProfile,
+        SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig, ServerInfo, ServerType,
+        StoredServerProfile,
     },
     navidrome::NavidromeBackend,
     profile_store::ServerProfileStore,
@@ -91,6 +92,27 @@ impl MusicServerService {
             &password,
         )
         .await?;
+
+        self.set_current_server(profile_id, server)?;
+        Ok(info)
+    }
+
+    pub async fn connect_saved_endpoint(
+        &self,
+        profile_id: Option<String>,
+        endpoint: SavedServerEndpoint,
+    ) -> Result<ServerInfo, String> {
+        let (profile, password) = self.load_profile_with_password(profile_id).await?;
+        let profile_id = profile.id.clone();
+        let url = match endpoint {
+            SavedServerEndpoint::Primary => profile.url.as_str(),
+            SavedServerEndpoint::Secondary => profile
+                .secondary_url
+                .as_deref()
+                .ok_or_else(|| "Saved server profile has no secondary URL".to_string())?,
+        };
+        let (server, info) =
+            connect_server_url(profile.server_type, url, &profile.username, &password).await?;
 
         self.set_current_server(profile_id, server)?;
         Ok(info)

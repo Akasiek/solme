@@ -1,29 +1,14 @@
 import { createRouter, createWebHashHistory } from "vue-router";
-import { invoke } from "@tauri-apps/api/core";
 
+import { installServerConnectionGuard } from "@/router/serverConnectionGuard";
 import HomeView from "@/views/HomeView.vue";
 import AlbumView from "@/views/AlbumView.vue";
 import ArtistView from "@/views/ArtistView.vue";
 import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/settings/SettingsView.vue";
 import SettingsAccountView from "@/views/settings/SettingsAccountView.vue";
-import { showToast } from "@/composables/useToast";
 
 const serverAuthorizationRoute = "settings-account";
-
-async function ensureServerConnection() {
-  try {
-    await invoke("ping_music_server");
-    return true;
-  } catch {
-    try {
-      await invoke("connect_saved_music_server", { profileId: null });
-      return true;
-    } catch {
-      return false;
-    }
-  }
-}
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -57,7 +42,6 @@ export const router = createRouter({
     {
       path: "/settings",
       component: SettingsView,
-      meta: { requiresServer: true },
       children: [
         {
           path: "",
@@ -73,19 +57,4 @@ export const router = createRouter({
   ],
 });
 
-router.beforeEach(async (to) => {
-  if (!to.meta.requiresServer) {
-    return true;
-  }
-
-  if (await ensureServerConnection()) {
-    return true;
-  }
-
-  if (to.name === serverAuthorizationRoute) {
-    return true;
-  }
-
-  showToast("Connect a music server before using the rest of Solme.");
-  return { name: serverAuthorizationRoute, replace: true };
-});
+installServerConnectionGuard(router);

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AsideMenu from "@/components/AsideMenu";
 import PlayerBar from "@/components/PlayerBar";
+import ServerConnectionOverlay from "@/components/ServerConnectionOverlay.vue";
 import ToastHost from "@/components/ToastHost.vue";
 </script>
 
@@ -13,6 +14,7 @@ import ToastHost from "@/components/ToastHost.vue";
       </main>
     </div>
     <PlayerBar />
+    <ServerConnectionOverlay />
     <ToastHost />
   </div>
 </template>

@@ -35,6 +35,13 @@ impl ServerType {
     }
 }
 
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SavedServerEndpoint {
+    Primary,
+    Secondary,
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SavedServerProfile {

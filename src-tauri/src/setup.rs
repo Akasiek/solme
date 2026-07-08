@@ -12,7 +12,7 @@ use crate::{
     database::{SqliteRepository, DATABASE_FILE_NAME},
     events::{EventBus, EventEmitter},
     library::LibrarySyncService,
-    server::MusicServerService,
+    server::{MusicServerService, SavedServerEndpoint},
 };
 
 type SetupResult<T> = Result<T, Box<dyn Error>>;
@@ -54,6 +54,28 @@ pub(crate) async fn connect_saved_server(
 ) -> Result<crate::server::ServerInfo, String> {
     session.suspend_monitoring();
     let connection = server.connect_saved(profile_id).await;
+    finish_saved_server_connection(connection, library, player, session).await
+}
+
+pub(crate) async fn connect_saved_server_endpoint(
+    profile_id: Option<String>,
+    endpoint: SavedServerEndpoint,
+    server: &Arc<MusicServerService>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
+    session.suspend_monitoring();
+    let connection = server.connect_saved_endpoint(profile_id, endpoint).await;
+    finish_saved_server_connection(connection, library, player, session).await
+}
+
+async fn finish_saved_server_connection(
+    connection: Result<crate::server::ServerInfo, String>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
     let info = match connection {
         Ok(info) => info,
         Err(error) => {
