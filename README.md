@@ -1,3 +1,3 @@
 # Solmë
 
-![Solmë Logo](./design/logo/logo_solme_dark.svg)
+![Solmë Logo](./design/logo/logo_dark.svg)
