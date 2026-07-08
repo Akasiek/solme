@@ -23,6 +23,9 @@ const API_VERSION: &str = "1.16.1";
 const CLIENT_NAME: &str = "solme";
 const ALBUM_PAGE_SIZE: u32 = 500;
 const LOG_BODY_LIMIT: usize = 4000;
+const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
+const PING_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub struct NavidromeBackend {
     client: Client,
@@ -47,7 +50,8 @@ impl NavidromeBackend {
         }
 
         let client = Client::builder()
-            .timeout(Duration::from_secs(30))
+            .timeout(REQUEST_TIMEOUT)
+            .connect_timeout(CONNECT_TIMEOUT)
             .build()
             .map_err(|error| format!("Failed to create HTTP client: {error}"))?;
 
@@ -110,11 +114,17 @@ impl NavidromeBackend {
         endpoint: &str,
         parameters: &[(&str, String)],
     ) -> Result<(SubsonicResponse, String), String> {
-        let response = self
+        let mut request = self
             .client
             .get(self.endpoint_url(endpoint))
             .query(&self.subsonic_json_parameters())
-            .query(parameters)
+            .query(parameters);
+
+        if endpoint == "ping" {
+            request = request.timeout(PING_TIMEOUT);
+        }
+
+        let response = request
             .send()
             .await
             .map_err(|error| format!("Failed to call {endpoint}: {error}"))?
