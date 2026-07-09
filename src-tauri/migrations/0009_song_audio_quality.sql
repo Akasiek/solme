@@ -1,0 +1,3 @@
+ALTER TABLE songs ADD COLUMN bit_rate INTEGER;
+ALTER TABLE songs ADD COLUMN bit_depth INTEGER;
+ALTER TABLE songs ADD COLUMN sample_rate INTEGER;

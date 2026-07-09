@@ -7,19 +7,22 @@ use crate::{
 
 use super::{
     backend::AudioBackend,
-    fader::PlaybackFader,
+    fader::FadingAudioBackend,
     models::{PlaybackState, PlayerStatus},
     preference::{PreferenceRepository, PreferenceService},
     session::PlaybackSession,
 };
+use crate::events::EventBus;
+
+const PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS: f64 = 5.0;
 
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
-    fader: PlaybackFader,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
     preference: PreferenceService,
-    queue: Mutex<Vec<CachedSong>>,
+    event_bus: Arc<EventBus>,
+    queue: Arc<Mutex<Vec<CachedSong>>>,
 }
 
 impl PlayerService {
@@ -28,18 +31,25 @@ impl PlayerService {
         server: Arc<MusicServerService>,
         repository: Arc<dyn LibraryRepository>,
         preference: Arc<dyn PreferenceRepository>,
+        event_bus: Arc<EventBus>,
     ) -> Self {
-        let audio: Arc<dyn AudioBackend> = audio.into();
-        let fader = PlaybackFader::new(Arc::clone(&audio));
+        let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
+        let queue = Arc::new(Mutex::new(Vec::new()));
+
+        audio.set_status_change_callback(Self::status_change_callback(
+            Arc::clone(&audio),
+            Arc::clone(&queue),
+            Arc::clone(&event_bus),
+        ));
 
         Self {
             audio,
-            fader,
             server,
             repository,
             preference,
-            queue: Mutex::new(Vec::new()),
+            event_bus,
+            queue,
         }
     }
 
@@ -60,9 +70,29 @@ impl PlayerService {
         Ok(())
     }
 
+    fn prepend_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
+        self.lock_queue()?.splice(0..0, songs);
+        Ok(())
+    }
+
     fn clear_queue(&self) -> Result<(), String> {
         self.lock_queue()?.clear();
         Ok(())
+    }
+
+    fn notify_status_changed(&self) -> Result<(), String> {
+        let status = self.status()?;
+        self.event_bus.publish_player_status(status)
+    }
+
+    fn notify_status_changed_with_position(&self, position_seconds: f64) -> Result<(), String> {
+        let mut status = self.status()?;
+        status.position_seconds = position_seconds.max(0.0);
+        self.event_bus.publish_player_status(status)
+    }
+
+    pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<PlayerStatus> {
+        self.event_bus.subscribe_player_status()
     }
 
     pub async fn play_album(
@@ -70,11 +100,7 @@ impl PlayerService {
         album_id: &str,
         start_song_id: Option<&str>,
     ) -> Result<(), String> {
-        let (profile_id, server) = self.server.current_server()?;
-        let songs = self.repository.songs(&profile_id, album_id).await?;
-        if songs.is_empty() {
-            return Err("Album has no cached songs".to_string());
-        }
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
 
         let start_index = match start_song_id {
             Some(song_id) => songs
@@ -83,17 +109,32 @@ impl PlayerService {
                 .ok_or_else(|| "Selected song does not belong to this album".to_string())?,
             None => 0,
         };
-        let sources = songs
-            .iter()
-            .map(|song| server.playback_uri(&song.remote_id))
-            .collect::<Result<Vec<_>, _>>()?;
 
-        self.fader.cancel()?;
         self.audio.load_queue(&sources, start_index)?;
-        self.replace_queue(songs)
+        self.replace_queue(songs)?;
+        self.notify_status_changed()
     }
 
-    pub async fn queue_album(&self, album_id: &str) -> Result<(), String> {
+    pub async fn queue_album_at_start(&self, album_id: &str) -> Result<(), String> {
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
+
+        self.audio.prepend_queue(&sources)?;
+        self.prepend_queue(songs)?;
+        self.notify_status_changed()
+    }
+
+    pub async fn queue_album_at_end(&self, album_id: &str) -> Result<(), String> {
+        let (songs, sources) = self.album_queue_sources(album_id).await?;
+
+        self.audio.append_queue(&sources)?;
+        self.append_queue(songs)?;
+        self.notify_status_changed()
+    }
+
+    async fn album_queue_sources(
+        &self,
+        album_id: &str,
+    ) -> Result<(Vec<CachedSong>, Vec<String>), String> {
         let (profile_id, server) = self.server.current_server()?;
         let songs = self.repository.songs(&profile_id, album_id).await?;
         if songs.is_empty() {
@@ -105,70 +146,54 @@ impl PlayerService {
             .map(|song| server.playback_uri(&song.remote_id))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.audio.append_queue(&sources)?;
-        self.append_queue(songs)
+        Ok((songs, sources))
     }
 
     pub fn pause(&self) -> Result<(), String> {
-        self.fader.pause()
+        self.audio.pause()?;
+        self.notify_status_changed()
     }
 
     pub fn resume(&self) -> Result<(), String> {
-        self.fader.resume()
+        self.audio.resume()?;
+        self.notify_status_changed()
     }
 
     pub fn stop(&self) -> Result<(), String> {
-        self.fader.cancel()?;
         self.audio.stop()?;
-        self.clear_queue()
+        self.clear_queue()?;
+        self.notify_status_changed()
     }
 
     pub fn next(&self) -> Result<(), String> {
-        self.fader.cancel()?;
-        self.audio.next()
+        self.audio.next()?;
+        self.notify_status_changed()
     }
 
     pub fn previous(&self) -> Result<(), String> {
-        self.fader.cancel()?;
-        self.audio.previous()
+        let position_seconds = self.audio.status().position_seconds;
+        if position_seconds > PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS {
+            self.seek(0.0)
+        } else {
+            self.audio.previous()?;
+            self.notify_status_changed()
+        }
     }
 
     pub fn seek(&self, position_seconds: f64) -> Result<(), String> {
-        self.audio.seek(position_seconds)
+        self.audio.seek(position_seconds)?;
+        self.notify_status_changed_with_position(position_seconds)
     }
 
     pub fn set_volume(&self, volume: f64) -> Result<(), String> {
         let volume = volume.clamp(0.0, 100.0);
-        self.fader.set_volume(volume)?;
+        self.audio.set_volume(volume)?;
         self.preference.save_volume(volume);
-        Ok(())
+        self.notify_status_changed()
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
-        let audio_status = self.audio.status();
-        let volume = self.fader.volume()?;
-        let queue = self.lock_queue()?;
-        let current_song = audio_status
-            .playlist_position
-            .and_then(|position| queue.get(position))
-            .cloned();
-        let state = if !audio_status.playing {
-            PlaybackState::Stopped
-        } else if audio_status.paused {
-            PlaybackState::Paused
-        } else {
-            PlaybackState::Playing
-        };
-
-        Ok(PlayerStatus {
-            state,
-            current_song,
-            position_seconds: audio_status.position_seconds,
-            duration_seconds: audio_status.duration_seconds,
-            queue_position: audio_status.playlist_position.map(|position| position + 1),
-            queue_length: queue.len(),
-            volume,
-        })
+        Self::player_status(&self.audio, &self.queue)
     }
 
     pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
@@ -200,14 +225,13 @@ impl PlayerService {
             .map(|song| server.playback_uri(&song.remote_id))
             .collect::<Result<Vec<_>, _>>()?;
 
-        self.fader.cancel()?;
         self.replace_queue(session.queue)?;
         self.audio.load_queue_paused(
             &sources,
             session.active_index,
             Some(session.position_seconds),
         )?;
-        Ok(())
+        self.notify_status_changed()
     }
 
     pub async fn restore_preferences(&self) -> Result<(), String> {
@@ -215,20 +239,66 @@ impl PlayerService {
             return Ok(());
         };
 
-        self.fader.set_volume(volume)
+        self.audio.set_volume(volume)?;
+        self.notify_status_changed()
+    }
+
+    fn status_change_callback(
+        audio: Arc<dyn AudioBackend>,
+        queue: Arc<Mutex<Vec<CachedSong>>>,
+        event_bus: Arc<EventBus>,
+    ) -> super::backend::AudioStatusChangeCallback {
+        Arc::new(move || match Self::player_status(&audio, &queue) {
+            Ok(status) => {
+                if let Err(error) = event_bus.publish_player_status(status) {
+                    log::error!("Failed to emit player status change: {error}");
+                }
+            }
+            Err(error) => log::error!("Failed to build player status change: {error}"),
+        })
+    }
+
+    fn player_status(
+        audio: &Arc<dyn AudioBackend>,
+        queue: &Arc<Mutex<Vec<CachedSong>>>,
+    ) -> Result<PlayerStatus, String> {
+        let audio_status = audio.status();
+        let queue = queue
+            .lock()
+            .map_err(|_| "Player queue lock was poisoned".to_string())?;
+        let current_song = audio_status
+            .playlist_position
+            .and_then(|position| queue.get(position))
+            .cloned();
+        let state = if !audio_status.playing {
+            PlaybackState::Stopped
+        } else if audio_status.paused {
+            PlaybackState::Paused
+        } else {
+            PlaybackState::Playing
+        };
+
+        Ok(PlayerStatus {
+            state,
+            current_song,
+            position_seconds: audio_status.position_seconds,
+            duration_seconds: audio_status.duration_seconds,
+            queue_position: audio_status.playlist_position.map(|position| position + 1),
+            queue_length: queue.len(),
+            volume: audio_status.volume,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        path::PathBuf,
-        sync::{Arc, Mutex},
-    };
+    use std::sync::{Arc, Mutex};
 
     use async_trait::async_trait;
+    use sqlx::SqlitePool;
 
     use super::PlayerService;
+    use crate::events::EventBus;
     use crate::{
         audio::{
             backend::{AudioBackend, AudioBackendStatus},
@@ -239,8 +309,8 @@ mod tests {
         credentials::CredentialStore,
         library::{
             models::{
-                Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
-                CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
+                Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate,
+                BinaryArtwork, CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
             },
             LibraryRepository,
         },
@@ -250,13 +320,7 @@ mod tests {
     #[test]
     fn plays_full_album_from_selected_song() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2"), song("song-3")];
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
@@ -270,6 +334,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
@@ -300,13 +365,7 @@ mod tests {
     #[test]
     fn rejects_song_outside_selected_album() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
                 songs: vec![song("song-1")],
             });
@@ -317,6 +376,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
             );
 
             assert_eq!(
@@ -332,13 +392,7 @@ mod tests {
     #[test]
     fn appends_album_to_current_queue() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2")];
             let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
@@ -352,10 +406,11 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
-            player.queue_album("album-2").await.unwrap();
+            player.queue_album_at_end("album-2").await.unwrap();
 
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.start_index, 1);
@@ -376,15 +431,50 @@ mod tests {
     }
 
     #[test]
+    fn prepends_album_to_current_queue() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+
+            let songs = vec![song("song-1"), song("song-2")];
+            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+                songs: songs.clone(),
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.play_album("album-1", Some("song-2")).await.unwrap();
+            player.queue_album_at_start("album-2").await.unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.start_index, 3);
+            assert_eq!(
+                audio.prepended_sources,
+                [
+                    "https://music.example.com/song-1",
+                    "https://music.example.com/song-2"
+                ]
+            );
+            drop(audio);
+
+            let status = player.status().unwrap();
+            assert_eq!(status.current_song.unwrap().remote_id, "song-2");
+            assert_eq!(status.queue_position, Some(4));
+            assert_eq!(status.queue_length, 4);
+        });
+    }
+
+    #[test]
     fn restores_paused_playback_session() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
@@ -395,6 +485,7 @@ mod tests {
                 server_service,
                 repository,
                 Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
             );
             let queue = vec![song("song-1"), song("song-2"), song("song-3")];
 
@@ -430,13 +521,7 @@ mod tests {
     #[test]
     fn restores_saved_volume_preference() {
         tauri::async_runtime::block_on(async {
-            let server_service = Arc::new(MusicServerService::new(
-                PathBuf::from("/tmp/solme-player-test-profile.json"),
-                Box::new(MemoryCredentialStore),
-            ));
-            server_service
-                .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
-                .unwrap();
+            let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let preferences = Arc::new(MockPreferenceRepository {
@@ -450,6 +535,7 @@ mod tests {
                 server_service,
                 repository,
                 preferences,
+                noop_event_bus(),
             );
 
             player.restore_preferences().await.unwrap();
@@ -459,10 +545,100 @@ mod tests {
         });
     }
 
+    #[test]
+    fn seek_event_reports_requested_position_when_backend_status_is_stale() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 37.5,
+                keep_stale_position_after_seek: true,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+            let mut status_receiver = player.subscribe_status();
+
+            player.seek(0.0).unwrap();
+
+            let status = status_receiver.recv().await.unwrap();
+            assert_eq!(status.position_seconds, 0.0);
+            assert_eq!(audio_state.lock().unwrap().position_seconds, 37.5);
+        });
+    }
+
+    #[test]
+    fn previous_restarts_current_song_after_threshold() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 6.0,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.previous().unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.position_seconds, 0.0);
+            assert_eq!(audio.previous_calls, 0);
+        });
+    }
+
+    #[test]
+    fn previous_moves_to_previous_song_before_threshold() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 5.0,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.previous().unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.position_seconds, 5.0);
+            assert_eq!(audio.previous_calls, 1);
+        });
+    }
+
     fn song(id: &str) -> CachedSong {
         CachedSong {
             remote_id: id.to_string(),
             album_id: "album-1".to_string(),
+            artist_id: Some("artist-1".to_string()),
             title: id.to_string(),
             artist_name: "Artist".to_string(),
             album_name: "Album".to_string(),
@@ -473,15 +649,34 @@ mod tests {
         }
     }
 
+    async fn test_server_service() -> Arc<MusicServerService> {
+        let database = SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let server_service = Arc::new(MusicServerService::new(
+            database,
+            Box::new(MemoryCredentialStore),
+        ));
+        server_service
+            .set_current_server("profile".to_string(), Arc::new(MockMusicServer))
+            .unwrap();
+        server_service
+    }
+
+    fn noop_event_bus() -> Arc<EventBus> {
+        Arc::new(EventBus::disabled())
+    }
+
     #[derive(Default)]
     struct MockAudioState {
         sources: Vec<String>,
+        prepended_sources: Vec<String>,
         appended_sources: Vec<String>,
         start_index: usize,
         playing: bool,
         paused: bool,
         position_seconds: f64,
         volume: f64,
+        previous_calls: usize,
+        keep_stale_position_after_seek: bool,
     }
 
     struct MockAudioBackend {
@@ -489,6 +684,12 @@ mod tests {
     }
 
     impl AudioBackend for MockAudioBackend {
+        fn set_status_change_callback(
+            &self,
+            _callback: crate::audio::backend::AudioStatusChangeCallback,
+        ) {
+        }
+
         fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.sources = sources.to_vec();
@@ -524,6 +725,13 @@ mod tests {
             Ok(())
         }
 
+        fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.prepended_sources.extend_from_slice(sources);
+            state.start_index += sources.len();
+            Ok(())
+        }
+
         fn pause(&self) -> Result<(), String> {
             self.state.lock().unwrap().paused = true;
             Ok(())
@@ -544,11 +752,15 @@ mod tests {
         }
 
         fn previous(&self) -> Result<(), String> {
+            self.state.lock().unwrap().previous_calls += 1;
             Ok(())
         }
 
         fn seek(&self, position_seconds: f64) -> Result<(), String> {
-            self.state.lock().unwrap().position_seconds = position_seconds;
+            let mut state = self.state.lock().unwrap();
+            if !state.keep_stale_position_after_seek {
+                state.position_seconds = position_seconds;
+            }
             Ok(())
         }
 
@@ -678,6 +890,7 @@ mod tests {
             _profile_id: &str,
             _offset: i64,
             _limit: i64,
+            _sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
             unimplemented!()
         }
@@ -690,12 +903,45 @@ mod tests {
             unimplemented!()
         }
 
+        async fn album_genres(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            unimplemented!()
+        }
+
+        async fn album_disc_count(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<i64, String> {
+            unimplemented!()
+        }
+
+        async fn album_audio_formats(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            unimplemented!()
+        }
+
         async fn search_albums(
             &self,
             _profile_id: &str,
             _query: &str,
             _limit: i64,
         ) -> Result<Vec<CachedAlbum>, String> {
+            unimplemented!()
+        }
+
+        async fn search_songs(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedSong>, String> {
             unimplemented!()
         }
 

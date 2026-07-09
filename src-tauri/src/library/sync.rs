@@ -14,8 +14,8 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumWithSongs, CachedAlbum, CachedSong, LibrarySnapshot, LibrarySummary,
-        LibrarySyncPhase, LibrarySyncStatus,
+        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedSong,
+        HomeAlbumSections, LibrarySnapshot, LibrarySummary, LibrarySyncPhase, LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -55,6 +55,7 @@ impl LibrarySyncService {
         let service = Arc::clone(self);
         tauri::async_runtime::spawn(async move {
             if let Err(error) = service.synchronize(force).await {
+                log::error!("Library synchronization failed: {error}");
                 service.update_status(|status| {
                     status.phase = LibrarySyncPhase::Failed;
                     status.last_error = Some(error);
@@ -100,14 +101,68 @@ impl LibrarySyncService {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(Vec::new());
         };
-        self.repository.albums(&profile_id, offset, limit).await
+        self.repository
+            .albums(&profile_id, offset, limit, AlbumSort::Artist)
+            .await
     }
 
-    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbum>, String> {
+    pub async fn home_album_sections(&self, limit: i64) -> Result<HomeAlbumSections, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(HomeAlbumSections {
+                hero_random_albums: Vec::new(),
+                random_albums: Vec::new(),
+                newly_added_albums: Vec::new(),
+                newly_released_albums: Vec::new(),
+            });
+        };
+        let limit = limit.clamp(1, 50);
+        let hero_random_albums = self
+            .repository
+            .albums(&profile_id, 0, 5, AlbumSort::Random)
+            .await?;
+        let random_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::Random)
+            .await?;
+        let newly_added_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::RecentlyAdded)
+            .await?;
+        let newly_released_albums = self
+            .repository
+            .albums(&profile_id, 0, limit, AlbumSort::RecentlyReleased)
+            .await?;
+
+        Ok(HomeAlbumSections {
+            hero_random_albums,
+            random_albums,
+            newly_added_albums,
+            newly_released_albums,
+        })
+    }
+
+    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbumDetails>, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(None);
         };
-        self.repository.album(&profile_id, album_id).await
+        let Some(album) = self.repository.album(&profile_id, album_id).await? else {
+            return Ok(None);
+        };
+        let genres = self.repository.album_genres(&profile_id, album_id).await?;
+        let disc_count = self
+            .repository
+            .album_disc_count(&profile_id, album_id)
+            .await?;
+        let audio_formats = self
+            .repository
+            .album_audio_formats(&profile_id, album_id)
+            .await?;
+        Ok(Some(CachedAlbumDetails {
+            album,
+            genres,
+            disc_count,
+            audio_formats,
+        }))
     }
 
     pub async fn search_albums(&self, query: &str, limit: i64) -> Result<Vec<CachedAlbum>, String> {
@@ -119,6 +174,18 @@ impl LibrarySyncService {
         };
         self.repository
             .search_albums(&profile_id, query, limit)
+            .await
+    }
+
+    pub async fn search_songs(&self, query: &str, limit: i64) -> Result<Vec<CachedSong>, String> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository
+            .search_songs(&profile_id, query, limit)
             .await
     }
 
@@ -233,7 +300,10 @@ impl LibrarySyncService {
         stream::iter(album_index)
             .map(|album| {
                 let server = Arc::clone(&server);
-                async move { server.album(&album.remote_id).await }
+                async move {
+                    let details = server.album(&album.remote_id).await?;
+                    Ok(merge_album_index_metadata(album, details))
+                }
             })
             .buffer_unordered(ALBUM_CONCURRENCY)
             .map_ok(|album| {
@@ -325,6 +395,16 @@ impl LibrarySyncService {
     }
 }
 
+fn merge_album_index_metadata(index: Album, mut details: AlbumWithSongs) -> AlbumWithSongs {
+    if details.album.release_date.is_none() {
+        details.album.release_date = index.release_date;
+    }
+    if details.album.original_release_date.is_none() {
+        details.album.original_release_date = index.original_release_date;
+    }
+    details
+}
+
 #[cfg(test)]
 mod tests {
     use std::{
@@ -340,6 +420,7 @@ mod tests {
     use uuid::Uuid;
 
     use super::LibrarySyncService;
+    use crate::library::models::AlbumSort;
     use crate::{
         credentials::CredentialStore,
         library::{
@@ -417,15 +498,17 @@ mod tests {
 
     #[test]
     fn rejects_second_running_sync() {
-        let server = Arc::new(MockMusicServer::new(Some("revision-1")));
-        let repository = Arc::new(MockRepository::new(Some("revision-1")));
-        let service = service(server, repository);
-        service.running.store(true, Ordering::SeqCst);
+        tauri::async_runtime::block_on(async {
+            let server = Arc::new(MockMusicServer::new(Some("revision-1")));
+            let repository = Arc::new(MockRepository::new(Some("revision-1")));
+            let service = service(server, repository);
+            service.running.store(true, Ordering::SeqCst);
 
-        assert_eq!(
-            service.start(false).unwrap_err(),
-            "Library synchronization is already running"
-        );
+            assert_eq!(
+                service.start(false).unwrap_err(),
+                "Library synchronization is already running"
+            );
+        });
     }
 
     #[test]
@@ -491,6 +574,80 @@ mod tests {
         });
     }
 
+    #[test]
+    fn album_detail_keeps_index_dates_when_detail_omits_them() {
+        let mut index = album();
+        index.release_date = Some("2026-01-01".to_string());
+        index.original_release_date = Some("2025-12-31".to_string());
+
+        let mut detail_album = album();
+        detail_album.release_date = None;
+        detail_album.original_release_date = None;
+        let details = AlbumWithSongs {
+            album: detail_album,
+            songs: vec![song()],
+        };
+
+        let merged = super::merge_album_index_metadata(index, details);
+
+        assert_eq!(merged.album.release_date.as_deref(), Some("2026-01-01"));
+        assert_eq!(
+            merged.album.original_release_date.as_deref(),
+            Some("2025-12-31")
+        );
+    }
+
+    #[test]
+    fn album_detail_dates_override_index_dates() {
+        let mut index = album();
+        index.release_date = Some("2026-01-01".to_string());
+        index.original_release_date = Some("2025-12-31".to_string());
+
+        let mut detail_album = album();
+        detail_album.release_date = Some("2026-02-01".to_string());
+        detail_album.original_release_date = Some("2026-01-31".to_string());
+        let details = AlbumWithSongs {
+            album: detail_album,
+            songs: vec![song()],
+        };
+
+        let merged = super::merge_album_index_metadata(index, details);
+
+        assert_eq!(merged.album.release_date.as_deref(), Some("2026-02-01"));
+        assert_eq!(
+            merged.album.original_release_date.as_deref(),
+            Some("2026-01-31")
+        );
+    }
+
+    #[test]
+    fn home_album_sections_use_separate_random_queries_for_hero_and_explore() {
+        tauri::async_runtime::block_on(async {
+            let server = Arc::new(MockMusicServer::new(Some("revision-1")));
+            let repository = Arc::new(MockRepository::new(Some("revision-1")));
+            let service = service(server, Arc::clone(&repository));
+
+            let sections = service.home_album_sections(48).await.unwrap();
+
+            let hero_ids = sections
+                .hero_random_albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            let explore_ids = sections
+                .random_albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(
+                hero_ids,
+                vec!["hero-1", "hero-2", "hero-3", "hero-4", "hero-5"]
+            );
+            assert_eq!(explore_ids, vec!["explore-1", "explore-2"]);
+            assert_eq!(*repository.random_album_limits.lock().unwrap(), vec![5, 48]);
+        });
+    }
+
     fn service(
         server: Arc<MockMusicServer>,
         repository: Arc<MockRepository>,
@@ -504,10 +661,9 @@ mod tests {
         repository: Arc<MockRepository>,
         artwork_root: PathBuf,
     ) -> Arc<LibrarySyncService> {
-        let profile_path =
-            std::env::temp_dir().join(format!("solme-profile-{}.json", Uuid::new_v4()));
+        let database = sqlx::SqlitePool::connect_lazy("sqlite::memory:").unwrap();
         let server_service = Arc::new(MusicServerService::new(
-            profile_path,
+            database,
             Box::new(MemoryCredentialStore),
         ));
         server_service
@@ -639,6 +795,7 @@ mod tests {
         artwork_candidates: Mutex<Vec<ArtworkCandidate>>,
         saved_artwork: Mutex<Vec<ArtworkCacheRecord>>,
         freshness: Mutex<HashMap<String, bool>>,
+        random_album_limits: Mutex<Vec<i64>>,
     }
 
     impl MockRepository {
@@ -649,6 +806,7 @@ mod tests {
                 artwork_candidates: Mutex::new(Vec::new()),
                 saved_artwork: Mutex::new(Vec::new()),
                 freshness: Mutex::new(HashMap::new()),
+                random_album_limits: Mutex::new(Vec::new()),
             }
         }
     }
@@ -687,9 +845,27 @@ mod tests {
             &self,
             _profile_id: &str,
             _offset: i64,
-            _limit: i64,
+            limit: i64,
+            sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
-            Ok(Vec::new())
+            if sort != AlbumSort::Random {
+                return Ok(Vec::new());
+            }
+
+            let call_index = {
+                let mut limits = self.random_album_limits.lock().unwrap();
+                limits.push(limit);
+                limits.len()
+            };
+            let albums = match call_index {
+                1 => (1..=5)
+                    .map(|index| cached_album(&format!("hero-{index}")))
+                    .collect::<Vec<_>>(),
+                2 => vec![cached_album("explore-1"), cached_album("explore-2")],
+                _ => Vec::new(),
+            };
+
+            Ok(albums.into_iter().take(limit as usize).collect())
         }
 
         async fn album(
@@ -700,12 +876,45 @@ mod tests {
             Ok(None)
         }
 
+        async fn album_genres(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
+        }
+
+        async fn album_disc_count(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<i64, String> {
+            Ok(1)
+        }
+
+        async fn album_audio_formats(
+            &self,
+            _profile_id: &str,
+            _album_id: &str,
+        ) -> Result<Vec<String>, String> {
+            Ok(Vec::new())
+        }
+
         async fn search_albums(
             &self,
             _profile_id: &str,
             _query: &str,
             _limit: i64,
         ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(Vec::new())
+        }
+
+        async fn search_songs(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedSong>, String> {
             Ok(Vec::new())
         }
 
@@ -757,10 +966,29 @@ mod tests {
             artist_id: Some("artist-1".to_string()),
             artist_name: "Artist".to_string(),
             year: Some(2026),
+            release_date: Some("2026-01-01".to_string()),
+            original_release_date: Some("2025-12-31".to_string()),
+            server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
             song_count: 1,
             duration_seconds: 180,
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
+        }
+    }
+
+    fn cached_album(remote_id: &str) -> CachedAlbum {
+        CachedAlbum {
+            remote_id: remote_id.to_string(),
+            name: remote_id.to_string(),
+            artist_name: "Artist".to_string(),
+            artist_id: Some("artist-1".to_string()),
+            year: Some(2026),
+            release_date: Some("2026-01-01".to_string()),
+            original_release_date: Some("2025-12-31".to_string()),
+            server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
+            song_count: 1,
+            duration_seconds: 180,
+            artwork_path: None,
         }
     }
 
@@ -778,6 +1006,9 @@ mod tests {
             duration_seconds: 180,
             suffix: Some("opus".to_string()),
             content_type: Some("audio/ogg".to_string()),
+            bit_rate: Some(256),
+            bit_depth: Some(24),
+            sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
         }

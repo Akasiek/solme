@@ -14,6 +14,9 @@ pub struct Album {
     pub artist_id: Option<String>,
     pub artist_name: String,
     pub year: Option<i64>,
+    pub release_date: Option<String>,
+    pub original_release_date: Option<String>,
+    pub server_added_at: Option<String>,
     pub song_count: i64,
     pub duration_seconds: i64,
     pub cover_art_id: Option<String>,
@@ -34,6 +37,9 @@ pub struct Song {
     pub duration_seconds: i64,
     pub suffix: Option<String>,
     pub content_type: Option<String>,
+    pub bit_rate: Option<i64>,
+    pub bit_depth: Option<i64>,
+    pub sample_rate: Option<i64>,
     pub cover_art_id: Option<String>,
     pub genres: Vec<String>,
 }
@@ -93,22 +99,54 @@ pub struct LibrarySummary {
     pub last_success_at: Option<i64>,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlbumSort {
+    Artist,
+    Random,
+    RecentlyAdded,
+    RecentlyReleased,
+}
+
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct HomeAlbumSections {
+    pub hero_random_albums: Vec<CachedAlbum>,
+    pub random_albums: Vec<CachedAlbum>,
+    pub newly_added_albums: Vec<CachedAlbum>,
+    pub newly_released_albums: Vec<CachedAlbum>,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedAlbum {
     pub remote_id: String,
     pub name: String,
     pub artist_name: String,
+    pub artist_id: Option<String>,
     pub year: Option<i64>,
+    pub release_date: Option<String>,
+    pub original_release_date: Option<String>,
+    pub server_added_at: Option<String>,
     pub song_count: i64,
+    pub duration_seconds: i64,
     pub artwork_path: Option<String>,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedAlbumDetails {
+    pub album: CachedAlbum,
+    pub genres: Vec<String>,
+    pub disc_count: i64,
+    pub audio_formats: Vec<String>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CachedSong {
     pub remote_id: String,
     pub album_id: String,
+    pub artist_id: Option<String>,
     pub title: String,
     pub artist_name: String,
     pub album_name: String,

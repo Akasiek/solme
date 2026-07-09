@@ -6,9 +6,12 @@ export interface ServerInfo {
 }
 
 export interface SavedServerProfile {
+  id: string;
   serverType: string;
   url: string;
+  secondaryUrl?: string;
   username: string;
+  isCurrent: boolean;
 }
 
 export interface LibrarySyncStatus {
@@ -33,9 +36,28 @@ export interface CachedAlbum {
   remoteId: string;
   name: string;
   artistName: string;
+  artistId?: string;
   year?: number;
+  releaseDate?: string;
+  originalReleaseDate?: string;
+  serverAddedAt?: string;
   songCount: number;
+  durationSeconds: number;
   artworkPath?: string;
+}
+
+export interface CachedAlbumDetails {
+  album: CachedAlbum;
+  genres: string[];
+  discCount: number;
+  audioFormats: string[];
+}
+
+export interface HomeAlbumSections {
+  heroRandomAlbums: CachedAlbum[];
+  randomAlbums: CachedAlbum[];
+  newlyAddedAlbums: CachedAlbum[];
+  newlyReleasedAlbums: CachedAlbum[];
 }
 
 export interface CachedSong {
@@ -43,6 +65,7 @@ export interface CachedSong {
   albumId: string;
   title: string;
   artistName: string;
+  artistId?: string;
   albumName: string;
   artworkPath?: string;
   trackNumber?: number;

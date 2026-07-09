@@ -1,16 +1,16 @@
-use std::path::Path;
+use std::{collections::BTreeSet, path::Path};
 
 use async_trait::async_trait;
-use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use crate::database::SqliteRepository;
 
-use super::models::{
-    AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, Genre,
-    LibrarySnapshot, LibrarySummary, Song,
+use super::{
+    models::{
+        AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
+        LibrarySummary,
+    },
+    query,
 };
-
-const SQLITE_BIND_LIMIT: usize = 999;
 
 #[async_trait]
 pub trait LibraryRepository: Send + Sync {
@@ -29,14 +29,28 @@ pub trait LibraryRepository: Send + Sync {
         profile_id: &str,
         offset: i64,
         limit: i64,
+        sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String>;
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
+    async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String>;
+    async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String>;
+    async fn album_audio_formats(
+        &self,
+        profile_id: &str,
+        album_id: &str,
+    ) -> Result<Vec<String>, String>;
     async fn search_albums(
         &self,
         profile_id: &str,
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedAlbum>, String>;
+    async fn search_songs(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedSong>, String>;
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String>;
     async fn artwork_is_fresh(
         &self,
@@ -54,225 +68,13 @@ pub trait LibraryRepository: Send + Sync {
     ) -> Result<(), String>;
 }
 
-impl SqliteRepository {
-    async fn insert_artists(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        artists: &[Artist],
-    ) -> Result<(), String> {
-        for artists in artists.chunks(SQLITE_BIND_LIMIT / 5) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO artists
-                 (profile_id, generation, remote_id, name, album_count) ",
-            );
-            query.push_values(artists, |mut row, artist| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&artist.remote_id)
-                    .push_bind(&artist.name)
-                    .push_bind(artist.album_count);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache artists: {error}"))?;
-        }
-        Ok(())
-    }
+impl SqliteRepository {}
 
-    async fn insert_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        genres: &[Genre],
-    ) -> Result<(), String> {
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 5) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO genres
-                 (profile_id, generation, name, song_count, album_count) ",
-            );
-            query.push_values(genres, |mut row, genre| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&genre.name)
-                    .push_bind(genre.song_count)
-                    .push_bind(genre.album_count);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_albums(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        albums: &[AlbumWithSongs],
-    ) -> Result<(), String> {
-        for albums in albums.chunks(SQLITE_BIND_LIMIT / 10) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO albums
-                 (profile_id, generation, remote_id, name, artist_id, artist_name,
-                  year, song_count, duration_seconds, cover_art_id) ",
-            );
-            query.push_values(albums, |mut row, details| {
-                let album = &details.album;
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&album.remote_id)
-                    .push_bind(&album.name)
-                    .push_bind(&album.artist_id)
-                    .push_bind(&album.artist_name)
-                    .push_bind(album.year)
-                    .push_bind(album.song_count)
-                    .push_bind(album.duration_seconds)
-                    .push_bind(&album.cover_art_id);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache albums: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_album_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        albums: &[AlbumWithSongs],
-    ) -> Result<(), String> {
-        let genres = albums
-            .iter()
-            .flat_map(|details| {
-                details
-                    .album
-                    .genres
-                    .iter()
-                    .map(|genre| (&details.album.remote_id, genre))
-            })
-            .collect::<Vec<_>>();
-
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 4) {
-            let mut query = QueryBuilder::new(
-                "INSERT OR IGNORE INTO album_genres
-                 (profile_id, generation, album_id, genre) ",
-            );
-            query.push_values(genres, |mut row, (album_id, genre)| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(album_id)
-                    .push_bind(genre);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache album genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_songs(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        songs: &[&Song],
-    ) -> Result<(), String> {
-        for songs in songs.chunks(SQLITE_BIND_LIMIT / 15) {
-            let mut query = QueryBuilder::new(
-                "INSERT INTO songs
-                 (profile_id, generation, remote_id, album_id, artist_id, title,
-                  artist_name, album_name, track_number, disc_number, year,
-                  duration_seconds, suffix, content_type, cover_art_id) ",
-            );
-            query.push_values(songs, |mut row, song| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(&song.remote_id)
-                    .push_bind(&song.album_id)
-                    .push_bind(&song.artist_id)
-                    .push_bind(&song.title)
-                    .push_bind(&song.artist_name)
-                    .push_bind(&song.album_name)
-                    .push_bind(song.track_number)
-                    .push_bind(song.disc_number)
-                    .push_bind(song.year)
-                    .push_bind(song.duration_seconds)
-                    .push_bind(&song.suffix)
-                    .push_bind(&song.content_type)
-                    .push_bind(&song.cover_art_id);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache songs: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn insert_song_genres(
-        transaction: &mut Transaction<'_, Sqlite>,
-        profile_id: &str,
-        generation: &str,
-        songs: &[&Song],
-    ) -> Result<(), String> {
-        let genres = songs
-            .iter()
-            .flat_map(|song| song.genres.iter().map(|genre| (&song.remote_id, genre)))
-            .collect::<Vec<_>>();
-
-        for genres in genres.chunks(SQLITE_BIND_LIMIT / 4) {
-            let mut query = QueryBuilder::new(
-                "INSERT OR IGNORE INTO song_genres
-                 (profile_id, generation, song_id, genre) ",
-            );
-            query.push_values(genres, |mut row, (song_id, genre)| {
-                row.push_bind(profile_id)
-                    .push_bind(generation)
-                    .push_bind(song_id)
-                    .push_bind(genre);
-            });
-            query
-                .build()
-                .execute(&mut **transaction)
-                .await
-                .map_err(|error| format!("Failed to cache song genres: {error}"))?;
-        }
-        Ok(())
-    }
-
-    async fn delete_stale_generations(&self, profile_id: &str, generation: &str) {
-        let _ = sqlx::query!(
-            "DELETE FROM albums WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM genres WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-        let _ = sqlx::query!(
-            "DELETE FROM artists WHERE profile_id = ? AND generation <> ?",
-            profile_id,
-            generation,
-        )
-        .execute(&self.pool)
-        .await;
-    }
+fn audio_format_label(suffix: Option<&str>, content_type: Option<&str>) -> Option<String> {
+    suffix
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| content_type.and_then(|value| value.rsplit('/').next()))
+        .map(|value| value.trim().to_uppercase())
 }
 
 #[async_trait]
@@ -302,10 +104,12 @@ impl LibraryRepository for SqliteRepository {
             .await
             .map_err(|error| format!("Failed to begin library transaction: {error}"))?;
 
-        Self::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
-        Self::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
-        Self::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
-        Self::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
+        query::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
+        query::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
+        query::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
+        query::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
+            .await?;
+        query::insert_album_search(&mut transaction, profile_id, generation, &snapshot.albums)
             .await?;
 
         let songs = snapshot
@@ -313,8 +117,9 @@ impl LibraryRepository for SqliteRepository {
             .iter()
             .flat_map(|details| &details.songs)
             .collect::<Vec<_>>();
-        Self::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
-        Self::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
+        query::insert_song_search(&mut transaction, profile_id, generation, &songs).await?;
         let song_count = songs.len() as i64;
 
         sqlx::query!(
@@ -346,7 +151,7 @@ impl LibraryRepository for SqliteRepository {
             .await
             .map_err(|error| format!("Failed to commit library generation: {error}"))?;
 
-        self.delete_stale_generations(profile_id, generation).await;
+        query::delete_stale_generations(self, profile_id, generation).await;
 
         Ok(())
     }
@@ -375,53 +180,96 @@ impl LibraryRepository for SqliteRepository {
         profile_id: &str,
         offset: i64,
         limit: i64,
+        sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String> {
-        let limit = limit.clamp(1, 500);
-        let offset = offset.max(0);
-        sqlx::query_as!(
-            CachedAlbum,
-            "SELECT a.remote_id, a.name, a.artist_name, a.year, a.song_count,
-                    art.local_path AS artwork_path
-             FROM albums a
-             JOIN library_sync_state s
-               ON s.profile_id = a.profile_id
-              AND s.active_generation = a.generation
-             LEFT JOIN artwork_cache art
-               ON art.profile_id = a.profile_id
-              AND art.kind = 'album'
-              AND art.remote_id = a.remote_id
-             WHERE a.profile_id = ?
-             ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE
-             LIMIT ? OFFSET ?",
-            profile_id,
-            limit,
-            offset,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached albums: {error}"))
+        query::albums(self, profile_id, offset, limit, sort).await
     }
 
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
-        sqlx::query_as!(
-            CachedAlbum,
-            "SELECT album.remote_id, album.name, album.artist_name, album.year,
-                    album.song_count, artwork.local_path AS artwork_path
-             FROM albums album
+        sqlx::query_as::<_, CachedAlbum>(
+            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+                    a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                    a.duration_seconds, artwork.local_path AS artwork_path
+             FROM albums a
              JOIN library_sync_state state
-               ON state.profile_id = album.profile_id
-              AND state.active_generation = album.generation
+               ON state.profile_id = a.profile_id
+              AND state.active_generation = a.generation
              LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = album.profile_id
+               ON artwork.profile_id = a.profile_id
               AND artwork.kind = 'album'
-              AND artwork.remote_id = album.remote_id
-             WHERE album.profile_id = ? AND album.remote_id = ?",
-            profile_id,
-            album_id,
+              AND artwork.remote_id = a.remote_id
+             WHERE a.profile_id = ? AND a.remote_id = ?",
         )
+        .bind(profile_id)
+        .bind(album_id)
         .fetch_optional(&self.pool)
         .await
         .map_err(|error| format!("Failed to read cached album: {error}"))
+    }
+
+    async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String> {
+        sqlx::query_scalar::<_, String>(
+            "SELECT ag.genre
+             FROM album_genres ag
+             JOIN library_sync_state state
+               ON state.profile_id = ag.profile_id
+              AND state.active_generation = ag.generation
+             WHERE ag.profile_id = ? AND ag.album_id = ?
+             ORDER BY ag.genre COLLATE NOCASE",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album genres: {error}"))
+    }
+
+    async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String> {
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(DISTINCT COALESCE(NULLIF(song.disc_number, 0), 1))
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             WHERE song.profile_id = ? AND song.album_id = ?",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_one(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album disc count: {error}"))
+    }
+
+    async fn album_audio_formats(
+        &self,
+        profile_id: &str,
+        album_id: &str,
+    ) -> Result<Vec<String>, String> {
+        let rows = sqlx::query_as::<_, (Option<String>, Option<String>)>(
+            "SELECT DISTINCT song.suffix, song.content_type
+             FROM songs song
+             JOIN library_sync_state state
+               ON state.profile_id = song.profile_id
+              AND state.active_generation = song.generation
+             WHERE song.profile_id = ?
+               AND song.album_id = ?
+               AND COALESCE(NULLIF(song.suffix, ''), song.content_type) IS NOT NULL
+             ORDER BY 1",
+        )
+        .bind(profile_id)
+        .bind(album_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album audio formats: {error}"))?;
+
+        Ok(rows
+            .into_iter()
+            .filter_map(|(suffix, content_type)| {
+                audio_format_label(suffix.as_deref(), content_type.as_deref())
+            })
+            .collect::<BTreeSet<_>>()
+            .into_iter()
+            .collect())
     }
 
     async fn search_albums(
@@ -430,41 +278,22 @@ impl LibraryRepository for SqliteRepository {
         query: &str,
         limit: i64,
     ) -> Result<Vec<CachedAlbum>, String> {
-        let pattern = format!("%{}%", query.trim());
-        let limit = limit.clamp(1, 500);
-        sqlx::query_as!(
-            CachedAlbum,
-            "SELECT album.remote_id, album.name, album.artist_name, album.year,
-                    album.song_count, artwork.local_path AS artwork_path
-             FROM albums album
-             JOIN library_sync_state state
-               ON state.profile_id = album.profile_id
-              AND state.active_generation = album.generation
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = album.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = album.remote_id
-             WHERE album.profile_id = ?
-               AND (album.name LIKE ? COLLATE NOCASE
-                    OR album.artist_name LIKE ? COLLATE NOCASE)
-             ORDER BY album.artist_name COLLATE NOCASE,
-                      album.year,
-                      album.name COLLATE NOCASE
-             LIMIT ?",
-            profile_id,
-            pattern,
-            pattern,
-            limit,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to search cached albums: {error}"))
+        query::search_albums(self, profile_id, query, limit).await
+    }
+
+    async fn search_songs(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedSong>, String> {
+        query::search_songs(self, profile_id, query, limit).await
     }
 
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {
         sqlx::query_as!(
             CachedSong,
-            "SELECT song.remote_id, song.album_id, song.title, song.artist_name,
+            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                     song.album_name, artwork.local_path AS artwork_path,
                     song.track_number, song.disc_number, song.duration_seconds
              FROM songs song
@@ -603,9 +432,19 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::LibraryRepository;
+    use super::{audio_format_label, LibraryRepository};
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
-    use crate::library::models::{Album, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song};
+    use crate::library::models::{
+        Album, AlbumSort, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song,
+    };
+
+    #[test]
+    fn formats_audio_format_label() {
+        assert_eq!(
+            audio_format_label(Some("flac"), Some("audio/flac")),
+            Some("FLAC".to_string())
+        );
+    }
 
     #[test]
     fn activates_complete_generation() {
@@ -631,7 +470,19 @@ mod tests {
                 repository.server_revision("profile").await.unwrap(),
                 Some("revision-1".to_string())
             );
-            assert_eq!(repository.albums("profile", 0, 50).await.unwrap().len(), 1);
+            let albums = repository
+                .albums("profile", 0, 50, AlbumSort::Artist)
+                .await
+                .unwrap();
+            assert_eq!(albums.len(), 1);
+            assert_eq!(
+                albums[0].original_release_date.as_deref(),
+                Some("2025-12-31")
+            );
+            assert_eq!(
+                repository.album_genres("profile", "album-1").await.unwrap(),
+                vec!["Jazz".to_string()]
+            );
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -694,9 +545,54 @@ mod tests {
             assert_eq!(summary.album_count, 260);
             assert_eq!(summary.song_count, 260);
             assert_eq!(
-                repository.albums("profile", 0, 500).await.unwrap().len(),
+                repository
+                    .albums("profile", 0, 500, AlbumSort::Artist)
+                    .await
+                    .unwrap()
+                    .len(),
                 260
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn recently_released_sort_prefers_original_release_date_before_release_date() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums = vec![
+                album_with_dates("album-1", "Release-only album", None, Some("2024-01-01")),
+                album_with_dates(
+                    "album-2",
+                    "Original-date album",
+                    Some("2023-01-01"),
+                    Some("2025-01-01"),
+                ),
+                album_with_dates(
+                    "album-3",
+                    "Old original-date album",
+                    Some("2020-01-01"),
+                    Some("2026-01-01"),
+                ),
+            ];
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let albums = repository
+                .albums("profile", 0, 50, AlbumSort::RecentlyReleased)
+                .await
+                .unwrap();
+            let ids = albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+            assert_eq!(ids, vec!["album-1", "album-2", "album-3"]);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -741,6 +637,7 @@ mod tests {
             let mut snapshot = snapshot(false);
             snapshot.albums[0].album.name = "Kind of Blue".to_string();
             snapshot.albums[0].album.artist_name = "Miles Davis".to_string();
+            snapshot.albums[0].album.genres = vec!["Modal Jazz".to_string()];
 
             repository
                 .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
@@ -755,8 +652,18 @@ mod tests {
                 .search_albums("profile", "MILES", 20)
                 .await
                 .unwrap();
+            let by_genre = repository
+                .search_albums("profile", "modal", 20)
+                .await
+                .unwrap();
+            let by_prefix = repository
+                .search_albums("profile", "mil", 20)
+                .await
+                .unwrap();
             assert_eq!(by_album.len(), 1);
             assert_eq!(by_artist.len(), 1);
+            assert_eq!(by_genre.len(), 1);
+            assert_eq!(by_prefix.len(), 1);
             assert_eq!(by_album[0].remote_id, "album-1");
             assert_eq!(
                 repository
@@ -767,6 +674,241 @@ mod tests {
                     .as_deref(),
                 Some("Kind of Blue")
             );
+            assert_eq!(
+                repository.album_genres("profile", "album-1").await.unwrap(),
+                vec!["Modal Jazz".to_string()]
+            );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn album_search_uses_fuzzy_fallback_for_typos() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Nevermind".to_string();
+            snapshot.albums[0].album.artist_name = "Nirvana".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_artist_typo = repository
+                .search_albums("profile", "nibana", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_artist_typo.len(), 1);
+            assert_eq!(by_artist_typo[0].remote_id, "album-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn searches_active_songs_by_title_artist_album_or_genre() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Kind of Blue".to_string();
+            snapshot.albums[0].album.artist_name = "Miles Davis".to_string();
+            snapshot.albums[0].songs = vec![
+                Song {
+                    remote_id: "song-1".to_string(),
+                    album_id: "album-1".to_string(),
+                    artist_id: Some("artist-1".to_string()),
+                    title: "So What".to_string(),
+                    artist_name: "Miles Davis".to_string(),
+                    album_name: "Kind of Blue".to_string(),
+                    track_number: Some(1),
+                    disc_number: Some(1),
+                    year: Some(1959),
+                    duration_seconds: 545,
+                    suffix: None,
+                    content_type: None,
+                    bit_rate: None,
+                    bit_depth: None,
+                    sample_rate: None,
+                    cover_art_id: Some("cover-1".to_string()),
+                    genres: vec!["Modal Jazz".to_string()],
+                },
+                Song {
+                    remote_id: "song-2".to_string(),
+                    album_id: "album-1".to_string(),
+                    artist_id: Some("artist-1".to_string()),
+                    title: "Freddie Freeloader".to_string(),
+                    artist_name: "Miles Davis".to_string(),
+                    album_name: "Kind of Blue".to_string(),
+                    track_number: Some(2),
+                    disc_number: Some(1),
+                    year: Some(1959),
+                    duration_seconds: 589,
+                    suffix: None,
+                    content_type: None,
+                    bit_rate: None,
+                    bit_depth: None,
+                    sample_rate: None,
+                    cover_art_id: Some("cover-1".to_string()),
+                    genres: vec!["Blues".to_string()],
+                },
+            ];
+            snapshot.albums[0].album.song_count = snapshot.albums[0].songs.len() as i64;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_title = repository
+                .search_songs("profile", "fredd", 20)
+                .await
+                .unwrap();
+            let by_artist = repository
+                .search_songs("profile", "miles", 20)
+                .await
+                .unwrap();
+            let by_album = repository
+                .search_songs("profile", "blue", 20)
+                .await
+                .unwrap();
+            let by_genre = repository
+                .search_songs("profile", "modal", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_title.len(), 1);
+            assert_eq!(by_title[0].remote_id, "song-2");
+            assert_eq!(by_artist.len(), 2);
+            assert_eq!(by_album.len(), 2);
+            assert_eq!(by_genre.len(), 1);
+            assert_eq!(by_genre[0].remote_id, "song-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn song_search_uses_fuzzy_fallback_for_typos() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.name = "Nevermind".to_string();
+            snapshot.albums[0].album.artist_name = "Nirvana".to_string();
+            snapshot.albums[0].songs[0].title = "Smells Like Teen Spirit".to_string();
+            snapshot.albums[0].songs[0].artist_name = "Nirvana".to_string();
+            snapshot.albums[0].songs[0].album_name = "Nevermind".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_title_typo = repository
+                .search_songs("profile", "smels", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_title_typo.len(), 1);
+            assert_eq!(by_title_typo[0].remote_id, "song-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn searches_only_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut old_snapshot = snapshot(false);
+            old_snapshot.albums[0].album.name = "Old Album".to_string();
+            old_snapshot.albums[0].songs[0].title = "Old Song".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &old_snapshot, 123)
+                .await
+                .unwrap();
+
+            let mut new_snapshot = snapshot(false);
+            new_snapshot.albums[0].album.name = "New Album".to_string();
+            new_snapshot.albums[0].songs[0].title = "New Song".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-2", None, &new_snapshot, 124)
+                .await
+                .unwrap();
+
+            assert!(repository
+                .search_albums("profile", "old", 20)
+                .await
+                .unwrap()
+                .is_empty());
+            assert!(repository
+                .search_songs("profile", "old", 20)
+                .await
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                repository
+                    .search_albums("profile", "new", 20)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
+            assert_eq!(
+                repository
+                    .search_songs("profile", "new", 20)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn rejects_snapshot_with_missing_album_artist_reference() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.artists.clear();
+
+            let result = repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await;
+
+            assert!(result.is_err());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn allows_song_artist_without_matching_artist_row() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums[0].songs[0].artist_id = Some("guest-artist".to_string());
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let songs = repository.songs("profile", "album-1").await.unwrap();
+            assert_eq!(songs.len(), 1);
+            assert_eq!(songs[0].artist_name, "Artist");
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -801,6 +943,9 @@ mod tests {
                     artist_id: Some("artist-1".to_string()),
                     artist_name: "Artist".to_string(),
                     year: Some(2026),
+                    release_date: Some("2026-01-01".to_string()),
+                    original_release_date: Some("2025-12-31".to_string()),
+                    server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                     song_count: songs.len() as i64,
                     duration_seconds: 180,
                     cover_art_id: Some("cover-1".to_string()),
@@ -812,6 +957,49 @@ mod tests {
                 name: "Jazz".to_string(),
                 song_count: 1,
                 album_count: 1,
+            }],
+        }
+    }
+
+    fn album_with_dates(
+        remote_id: &str,
+        name: &str,
+        original_release_date: Option<&str>,
+        release_date: Option<&str>,
+    ) -> AlbumWithSongs {
+        AlbumWithSongs {
+            album: Album {
+                remote_id: remote_id.to_string(),
+                name: name.to_string(),
+                artist_id: Some("artist-1".to_string()),
+                artist_name: "Artist".to_string(),
+                year: Some(2026),
+                release_date: release_date.map(str::to_string),
+                original_release_date: original_release_date.map(str::to_string),
+                server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
+                song_count: 1,
+                duration_seconds: 180,
+                cover_art_id: Some(format!("cover-{remote_id}")),
+                genres: vec!["Jazz".to_string()],
+            },
+            songs: vec![Song {
+                remote_id: format!("song-{remote_id}"),
+                album_id: remote_id.to_string(),
+                artist_id: Some("artist-1".to_string()),
+                title: format!("Song {remote_id}"),
+                artist_name: "Artist".to_string(),
+                album_name: name.to_string(),
+                track_number: Some(1),
+                disc_number: Some(1),
+                year: Some(2026),
+                duration_seconds: 180,
+                suffix: Some("opus".to_string()),
+                content_type: Some("audio/ogg".to_string()),
+                bit_rate: Some(256),
+                bit_depth: Some(24),
+                sample_rate: Some(48000),
+                cover_art_id: Some(format!("cover-{remote_id}")),
+                genres: vec!["Jazz".to_string()],
             }],
         }
     }
@@ -830,6 +1018,9 @@ mod tests {
             duration_seconds: 180,
             suffix: Some("opus".to_string()),
             content_type: Some("audio/ogg".to_string()),
+            bit_rate: Some(256),
+            bit_depth: Some(24),
+            sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
         }
@@ -854,6 +1045,9 @@ mod tests {
                         artist_id: Some(artist_id.clone()),
                         artist_name: format!("Artist {index}"),
                         year: Some(2026),
+                        release_date: Some("2026-01-01".to_string()),
+                        original_release_date: Some("2025-12-31".to_string()),
+                        server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
                         song_count: 1,
                         duration_seconds: 180,
                         cover_art_id: Some(format!("cover-{index}")),
@@ -872,6 +1066,9 @@ mod tests {
                         duration_seconds: 180,
                         suffix: Some("opus".to_string()),
                         content_type: Some("audio/ogg".to_string()),
+                        bit_rate: Some(256),
+                        bit_depth: Some(24),
+                        sample_rate: Some(48000),
                         cover_art_id: Some(format!("cover-{index}")),
                         genres: vec!["Jazz".to_string()],
                     }],

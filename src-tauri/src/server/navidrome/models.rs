@@ -1,19 +1,28 @@
-use serde::Deserialize;
+use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
 use crate::library::models::{Album, AlbumWithSongs, Song};
 
 #[derive(Deserialize)]
-pub(super) struct SubsonicEnvelope<T> {
+pub(super) struct SubsonicEnvelope {
     #[serde(rename = "subsonic-response")]
-    pub subsonic_response: SubsonicResponse<T>,
+    pub subsonic_response: SubsonicResponse,
 }
 
 #[derive(Deserialize)]
-pub(super) struct SubsonicResponse<T> {
+pub(super) struct SubsonicResponse {
     pub status: String,
     pub error: Option<SubsonicError>,
     #[serde(flatten)]
-    pub payload: Option<T>,
+    pub payload: serde_json::Map<String, serde_json::Value>,
+}
+
+impl SubsonicResponse {
+    pub fn into_payload<T>(self) -> Result<T, serde_json::Error>
+    where
+        T: DeserializeOwned,
+    {
+        serde_json::from_value(serde_json::Value::Object(self.payload))
+    }
 }
 
 #[derive(Deserialize)]
@@ -89,6 +98,11 @@ pub(super) struct AlbumDto {
     #[serde(default)]
     pub artist: String,
     pub year: Option<i64>,
+    #[serde(default, deserialize_with = "deserialize_optional_date")]
+    pub release_date: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_date")]
+    pub original_release_date: Option<String>,
+    pub created: Option<String>,
     #[serde(default)]
     pub song_count: i64,
     #[serde(default)]
@@ -109,6 +123,9 @@ impl AlbumDto {
             artist_id,
             artist,
             year,
+            release_date,
+            original_release_date,
+            created,
             song_count,
             duration,
             cover_art,
@@ -123,6 +140,9 @@ impl AlbumDto {
             artist_id,
             artist_name: artist,
             year,
+            release_date,
+            original_release_date,
+            server_added_at: created,
             song_count,
             duration_seconds: duration,
             cover_art_id: cover_art,
@@ -137,6 +157,9 @@ impl AlbumDto {
             artist_id,
             artist,
             year,
+            release_date,
+            original_release_date,
+            created,
             song_count,
             duration,
             cover_art,
@@ -156,6 +179,9 @@ impl AlbumDto {
                 artist_id,
                 artist_name: artist,
                 year,
+                release_date,
+                original_release_date,
+                server_added_at: created,
                 song_count,
                 duration_seconds: duration,
                 cover_art_id: cover_art,
@@ -187,6 +213,9 @@ struct SongDto {
     duration: i64,
     suffix: Option<String>,
     content_type: Option<String>,
+    bit_rate: Option<i64>,
+    bit_depth: Option<i64>,
+    sampling_rate: Option<i64>,
     cover_art: Option<String>,
     genre: Option<String>,
     #[serde(default)]
@@ -215,6 +244,9 @@ impl SongDto {
             duration_seconds: self.duration,
             suffix: self.suffix,
             content_type: self.content_type,
+            bit_rate: self.bit_rate,
+            bit_depth: self.bit_depth,
+            sample_rate: self.sampling_rate,
             cover_art_id: self.cover_art,
             genres: collect_genres(self.genre, self.genres),
         }
@@ -224,6 +256,36 @@ impl SongDto {
 #[derive(Deserialize)]
 struct NamedGenreDto {
     name: String,
+}
+
+fn deserialize_optional_date<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let Some(value) = Option::<serde_json::Value>::deserialize(deserializer)? else {
+        return Ok(None);
+    };
+
+    match value {
+        serde_json::Value::Null => Ok(None),
+        serde_json::Value::String(value) => Ok(Some(value)),
+        serde_json::Value::Object(date) => Ok(deserialize_date_object(&date)),
+        value => Err(serde::de::Error::custom(format!(
+            "expected date string or object, got {value}"
+        ))),
+    }
+}
+
+fn deserialize_date_object(date: &serde_json::Map<String, serde_json::Value>) -> Option<String> {
+    let year = date.get("year").and_then(serde_json::Value::as_i64)?;
+    let Some(month) = date.get("month").and_then(serde_json::Value::as_u64) else {
+        return Some(format!("{year:04}"));
+    };
+    let Some(day) = date.get("day").and_then(serde_json::Value::as_u64) else {
+        return Some(format!("{year:04}-{month:02}"));
+    };
+
+    Some(format!("{year:04}-{month:02}-{day:02}"))
 }
 
 fn collect_genres(primary: Option<String>, genres: Vec<NamedGenreDto>) -> Vec<String> {

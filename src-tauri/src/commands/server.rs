@@ -2,10 +2,13 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::server::{MusicServerService, SavedServerProfile, ServerConnectionConfig, ServerInfo};
+use crate::server::{
+    MusicServerService, SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig, ServerInfo,
+};
 use crate::{
     audio::{PlaybackSessionService, PlayerService},
     library::LibrarySyncService,
+    setup,
 };
 
 #[tauri::command]
@@ -48,32 +51,54 @@ pub async fn get_saved_server_profile(
 }
 
 #[tauri::command]
+pub async fn get_saved_server_profiles(
+    server: State<'_, Arc<MusicServerService>>,
+) -> Result<Vec<SavedServerProfile>, String> {
+    server.saved_profiles().await
+}
+
+#[tauri::command]
 pub async fn connect_saved_music_server(
+    profile_id: Option<String>,
     server: State<'_, Arc<MusicServerService>>,
     library: State<'_, Arc<LibrarySyncService>>,
     player: State<'_, Arc<PlayerService>>,
     session: State<'_, Arc<PlaybackSessionService>>,
 ) -> Result<ServerInfo, String> {
-    session.suspend_monitoring();
-    let connection = server.connect_saved().await;
-    let info = match connection {
-        Ok(info) => info,
-        Err(error) => {
-            session.resume_monitoring();
-            return Err(error);
-        }
-    };
-    let _ = player.restore_preferences().await;
-    let _ = session.restore().await;
-    session.resume_monitoring();
-    session.start();
-    let _ = library.start(false);
-    Ok(info)
+    setup::connect_saved_server(
+        profile_id,
+        &server.inner().clone(),
+        &library.inner().clone(),
+        &player.inner().clone(),
+        &session.inner().clone(),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn connect_saved_music_server_endpoint(
+    profile_id: Option<String>,
+    endpoint: SavedServerEndpoint,
+    server: State<'_, Arc<MusicServerService>>,
+    library: State<'_, Arc<LibrarySyncService>>,
+    player: State<'_, Arc<PlayerService>>,
+    session: State<'_, Arc<PlaybackSessionService>>,
+) -> Result<ServerInfo, String> {
+    setup::connect_saved_server_endpoint(
+        profile_id,
+        endpoint,
+        &server.inner().clone(),
+        &library.inner().clone(),
+        &player.inner().clone(),
+        &session.inner().clone(),
+    )
+    .await
 }
 
 #[tauri::command]
 pub async fn forget_saved_server_profile(
+    profile_id: Option<String>,
     server: State<'_, Arc<MusicServerService>>,
 ) -> Result<(), String> {
-    server.forget_saved_profile().await
+    server.forget_saved_profile(profile_id).await
 }

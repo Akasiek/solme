@@ -10,25 +10,26 @@ use crate::{
     audio::{MpvBackend, PlaybackSessionService, PlayerService, ScrobbleService},
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
+    events::{EventBus, EventEmitter},
     library::LibrarySyncService,
-    server::MusicServerService,
+    server::{MusicServerService, SavedServerEndpoint},
 };
 
 type SetupResult<T> = Result<T, Box<dyn Error>>;
 
 struct AppDirs {
-    config: PathBuf,
     data: PathBuf,
     cache: PathBuf,
 }
 
 pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let dirs = resolve_app_dirs(app)?;
-    let server = create_server(&dirs.config)?;
     let database_path = dirs.data.join(DATABASE_FILE_NAME);
     let repository = create_repository(&database_path)?;
+    let server = create_server(&repository)?;
+    let event_bus = create_event_bus(app);
     let library_sync = create_library_sync(&dirs.cache, &server, &repository);
-    let player = create_player(&server, &repository)?;
+    let player = create_player(&server, &repository, event_bus)?;
     let scrobble_service = create_scrobble_service(&player, &server, &repository);
     let session_service = create_session_service(&player, &server, &repository);
 
@@ -44,17 +45,64 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     Ok(())
 }
 
+pub(crate) async fn connect_saved_server(
+    profile_id: Option<String>,
+    server: &Arc<MusicServerService>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
+    session.suspend_monitoring();
+    let connection = server.connect_saved(profile_id).await;
+    finish_saved_server_connection(connection, library, player, session).await
+}
+
+pub(crate) async fn connect_saved_server_endpoint(
+    profile_id: Option<String>,
+    endpoint: SavedServerEndpoint,
+    server: &Arc<MusicServerService>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
+    session.suspend_monitoring();
+    let connection = server.connect_saved_endpoint(profile_id, endpoint).await;
+    finish_saved_server_connection(connection, library, player, session).await
+}
+
+async fn finish_saved_server_connection(
+    connection: Result<crate::server::ServerInfo, String>,
+    library: &Arc<LibrarySyncService>,
+    player: &Arc<PlayerService>,
+    session: &Arc<PlaybackSessionService>,
+) -> Result<crate::server::ServerInfo, String> {
+    let info = match connection {
+        Ok(info) => info,
+        Err(error) => {
+            session.resume_monitoring();
+            return Err(error);
+        }
+    };
+
+    let _ = player.restore_preferences().await;
+    let _ = session.restore().await;
+    session.resume_monitoring();
+    session.start();
+    library.start(false)?;
+
+    Ok(info)
+}
+
 fn resolve_app_dirs(app: &tauri::App) -> SetupResult<AppDirs> {
     Ok(AppDirs {
-        config: app.path().app_config_dir()?,
         data: app.path().app_data_dir()?,
         cache: app.path().app_cache_dir()?,
     })
 }
 
-fn create_server(config_dir: &Path) -> SetupResult<Arc<MusicServerService>> {
+fn create_server(repository: &Arc<SqliteRepository>) -> SetupResult<Arc<MusicServerService>> {
     Ok(Arc::new(MusicServerService::new(
-        config_dir.join("server-profile.json"),
+        repository.pool.clone(),
         Box::new(SystemCredentialStore::new().map_err(std::io::Error::other)?),
     )))
 }
@@ -63,6 +111,12 @@ fn create_repository(database_path: &Path) -> SetupResult<Arc<SqliteRepository>>
     let repository = tauri::async_runtime::block_on(SqliteRepository::open(database_path))
         .map_err(std::io::Error::other)?;
     Ok(Arc::new(repository))
+}
+
+fn create_event_bus(app: &tauri::App) -> Arc<EventBus> {
+    Arc::new(EventBus::new(Arc::new(EventEmitter::new(
+        app.handle().clone(),
+    ))))
 }
 
 fn create_library_sync(
@@ -81,6 +135,7 @@ fn create_library_sync(
 fn create_player(
     server: &Arc<MusicServerService>,
     repository: &Arc<SqliteRepository>,
+    event_bus: Arc<EventBus>,
 ) -> SetupResult<Arc<PlayerService>> {
     let audio = MpvBackend::new().map_err(std::io::Error::other)?;
     let library_repository = Arc::clone(repository);
@@ -90,6 +145,7 @@ fn create_player(
         Arc::clone(server),
         library_repository,
         preference_repository,
+        event_bus,
     )))
 }
 
@@ -126,11 +182,10 @@ fn start_saved_server_connection(
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
-        if server.connect_saved().await.is_ok() {
-            let _ = player.restore_preferences().await;
-            let _ = session.restore().await;
-            session.start();
-            let _ = library_sync.start(false);
+        match connect_saved_server(None, &server, &library_sync, &player, &session).await {
+            Ok(_) => {}
+            Err(error) if error == "No server profile is saved" => {}
+            Err(error) => log::error!("Failed to restore saved music server on startup: {error}"),
         }
     });
 }
