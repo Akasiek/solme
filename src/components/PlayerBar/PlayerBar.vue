@@ -1,21 +1,16 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
-import { computed, onMounted, onUnmounted, ref } from "vue";
-import { PlayerStatus } from "@/types.js";
+import { computed, onMounted } from "vue";
+import { usePlayerStatusStore } from "@/stores/playerStatus.ts";
 import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
 import { overrideKeyAction } from "@/utils/hotkeys";
 
-const playerStatus = ref<PlayerStatus | null>(null);
-let unlistenPlayerStatusChanged: (() => void) | null = null;
-const currentSong = computed(() => playerStatus.value?.currentSong ?? null);
-
-const loadPlayerStatus = async () => {
-  playerStatus.value = await invoke<PlayerStatus>("get_player_status");
-};
+const playerStatusStore = usePlayerStatusStore();
+const playerStatus = computed(() => playerStatusStore.status);
+const currentSong = computed(() => playerStatusStore.currentSong);
 
 const togglePlayback = () => {
   const status = playerStatus.value;
@@ -32,15 +27,7 @@ const togglePlayback = () => {
 overrideKeyAction(" ", togglePlayback);
 
 onMounted(async () => {
-  await loadPlayerStatus();
-
-  unlistenPlayerStatusChanged = await listen<PlayerStatus>("player-status-changed", (event) => {
-    playerStatus.value = event.payload;
-  });
-});
-
-onUnmounted(() => {
-  unlistenPlayerStatusChanged?.();
+  await playerStatusStore.startListening();
 });
 </script>
 
