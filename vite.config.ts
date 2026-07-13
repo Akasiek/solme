@@ -15,6 +15,18 @@ export default defineConfig(async () => ({
       "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
+  build: {
+    rolldownOptions: {
+      onwarn(warning, defaultHandler) {
+        const source = [warning.id, warning.loc?.file, warning.message].filter(Boolean).join(" ");
+        if (warning.code === "INVALID_ANNOTATION" && source.includes("@vueuse/core")) {
+          return;
+        }
+
+        defaultHandler(warning);
+      },
+    },
+  },
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
