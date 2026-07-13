@@ -425,18 +425,20 @@ impl FailoverMusicServer {
 
         if active.endpoint == SavedServerEndpoint::Secondary {
             match self.connect_endpoint(SavedServerEndpoint::Primary).await {
-                Ok(primary) => return match operation(Arc::clone(&primary)).await {
-                    Ok(value) => {
-                        self.set_active_server(SavedServerEndpoint::Primary, primary)?;
-                        Ok(value)
-                    }
-                    Err(error) => {
-                        log::warn!(
+                Ok(primary) => {
+                    return match operation(Arc::clone(&primary)).await {
+                        Ok(value) => {
+                            self.set_active_server(SavedServerEndpoint::Primary, primary)?;
+                            Ok(value)
+                        }
+                        Err(error) => {
+                            log::warn!(
                             "Recovered primary music server request failed, returning to secondary URL: {error}"
                         );
-                        operation(Arc::clone(&active.backend)).await
+                            operation(Arc::clone(&active.backend)).await
+                        }
                     }
-                },
+                }
                 Err(error) => {
                     log::debug!("Primary music server is still unavailable: {error}");
                 }
