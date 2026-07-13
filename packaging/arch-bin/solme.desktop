@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Solmë
+GenericName=Music player
+Comment=Play music from your library
+Exec=solme
+Icon=solme
+Terminal=false
+Categories=Audio;AudioVideo;Player;
+Keywords=solme;solmë;music;audio;player;
+StartupNotify=true
+StartupWMClass=solme

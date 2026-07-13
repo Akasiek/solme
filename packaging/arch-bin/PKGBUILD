@@ -1,0 +1,35 @@
+# Maintainer: Akasiek
+
+pkgname=solme-bin
+pkgver=0.1.0
+pkgrel=1
+pkgdesc="Music player built with Tauri"
+arch=("x86_64")
+url="https://codeberg.org/Akasiek/solme"
+license=("custom")
+depends=(
+  "gtk3"
+  "hicolor-icon-theme"
+  "mpv"
+  "webkit2gtk-4.1"
+)
+optdepends=(
+  "gnome-keyring: Secret Service credential storage"
+  "keepassxc: alternative Secret Service credential storage"
+)
+provides=("solme")
+conflicts=("solme")
+
+_debname="solme_${pkgver}_amd64.deb"
+source=("file://${PWD}/../../src-tauri/target/release/bundle/deb/${_debname}")
+noextract=("${_debname}")
+sha256sums=("SKIP")
+
+package() {
+  bsdtar -xf "${srcdir}/${_debname}" -C "${srcdir}" data.tar.gz
+  bsdtar --no-same-owner -xpf "${srcdir}/data.tar.gz" -C "${pkgdir}"
+
+  install -Dm644 "${startdir}/solme.desktop" "${pkgdir}/usr/share/applications/solme.desktop"
+  install -Dm644 "${startdir}/../../design/logo/logo_dark.svg" \
+    "${pkgdir}/usr/share/icons/hicolor/scalable/apps/solme.svg"
+}
