@@ -12,7 +12,7 @@ pub trait MusicServer: Send + Sync {
     async fn albums(&self) -> Result<Vec<Album>, String>;
     async fn album(&self, id: &str) -> Result<AlbumWithSongs, String>;
     async fn genres(&self) -> Result<Vec<Genre>, String>;
-    fn playback_uri(&self, song_id: &str) -> Result<String, String>;
+    async fn playback_uri(&self, song_id: &str) -> Result<String, String>;
     async fn scrobble(
         &self,
         song_id: &str,

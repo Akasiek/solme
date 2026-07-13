@@ -40,7 +40,7 @@ impl PlaybackSessionService {
             return Ok(());
         };
 
-        self.player.restore_session(session)
+        self.player.restore_session(session).await
     }
 
     pub fn start(self: &Arc<Self>) {

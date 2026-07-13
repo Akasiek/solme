@@ -758,7 +758,7 @@ mod tests {
             }])
         }
 
-        fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+        async fn playback_uri(&self, song_id: &str) -> Result<String, String> {
             Ok(format!("https://music.example.com/stream/{song_id}"))
         }
 

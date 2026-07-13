@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, RwLock};
+use std::{
+    future::Future,
+    sync::{Arc, Mutex, RwLock},
+};
 
 use sqlx::SqlitePool;
 use uuid::Uuid;
@@ -25,6 +28,18 @@ pub struct MusicServerService {
 struct CurrentServer {
     profile_id: String,
     backend: Arc<dyn MusicServer>,
+}
+
+#[derive(Clone)]
+struct ActiveServer {
+    endpoint: SavedServerEndpoint,
+    backend: Arc<dyn MusicServer>,
+}
+
+struct FailoverMusicServer {
+    profile: StoredServerProfile,
+    password: String,
+    active: RwLock<ActiveServer>,
 }
 
 impl MusicServerService {
@@ -55,26 +70,29 @@ impl MusicServerService {
             (None, false) => password.clone(),
         };
 
-        let (server, info) = create_connected_server(
+        let profile = StoredServerProfile {
+            id: profile_id
+                .clone()
+                .unwrap_or_else(|| Uuid::new_v4().to_string()),
             server_type,
-            &url,
-            secondary_url.as_deref(),
-            &username,
-            &resolved_password,
-        )
-        .await?;
+            url,
+            secondary_url,
+            username,
+        };
+        let (server, info) =
+            create_connected_server(profile.clone(), resolved_password.clone()).await?;
         let profile_id = if save_credentials {
             self.save_profile(
                 profile_id,
                 server_type,
-                url,
-                secondary_url,
-                username,
+                profile.url,
+                profile.secondary_url,
+                profile.username,
                 should_update_password.then_some(password),
             )
             .await?
         } else {
-            Uuid::new_v4().to_string()
+            profile.id
         };
 
         self.set_current_server(profile_id, server)?;
@@ -84,14 +102,7 @@ impl MusicServerService {
     pub async fn connect_saved(&self, profile_id: Option<String>) -> Result<ServerInfo, String> {
         let (profile, password) = self.load_profile_with_password(profile_id).await?;
         let profile_id = profile.id.clone();
-        let (server, info) = create_connected_server(
-            profile.server_type,
-            &profile.url,
-            profile.secondary_url.as_deref(),
-            &profile.username,
-            &password,
-        )
-        .await?;
+        let (server, info) = create_connected_server(profile, password).await?;
 
         self.set_current_server(profile_id, server)?;
         Ok(info)
@@ -111,8 +122,11 @@ impl MusicServerService {
                 .as_deref()
                 .ok_or_else(|| "Saved server profile has no secondary URL".to_string())?,
         };
-        let (server, info) =
+        let (backend, info) =
             connect_server_url(profile.server_type, url, &profile.username, &password).await?;
+        let server = Arc::new(FailoverMusicServer::new(
+            profile, password, endpoint, backend,
+        ));
 
         self.set_current_server(profile_id, server)?;
         Ok(info)
@@ -339,6 +353,228 @@ impl MusicServerService {
     }
 }
 
+impl FailoverMusicServer {
+    fn new(
+        profile: StoredServerProfile,
+        password: String,
+        endpoint: SavedServerEndpoint,
+        backend: Arc<dyn MusicServer>,
+    ) -> Self {
+        Self {
+            profile,
+            password,
+            active: RwLock::new(ActiveServer { endpoint, backend }),
+        }
+    }
+
+    async fn connect(
+        profile: StoredServerProfile,
+        password: String,
+    ) -> Result<(Arc<dyn MusicServer>, ServerInfo), String> {
+        match connect_server_url(
+            profile.server_type,
+            &profile.url,
+            &profile.username,
+            &password,
+        )
+        .await
+        {
+            Ok((backend, info)) => Ok((
+                Arc::new(Self::new(
+                    profile,
+                    password,
+                    SavedServerEndpoint::Primary,
+                    backend,
+                )),
+                info,
+            )),
+            Err(primary_error) => {
+                let Some(secondary_url) = profile.secondary_url.as_deref() else {
+                    return Err(primary_error);
+                };
+
+                log::warn!(
+                    "Primary music server connection failed, trying secondary URL: {primary_error}"
+                );
+                let (backend, info) = connect_server_url(
+                    profile.server_type,
+                    secondary_url,
+                    &profile.username,
+                    &password,
+                )
+                .await?;
+                Ok((
+                    Arc::new(Self::new(
+                        profile,
+                        password,
+                        SavedServerEndpoint::Secondary,
+                        backend,
+                    )),
+                    info,
+                ))
+            }
+        }
+    }
+
+    async fn with_failover<T, Fut, Operation>(&self, operation: Operation) -> Result<T, String>
+    where
+        Operation: Fn(Arc<dyn MusicServer>) -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+    {
+        let active = self.active_server()?;
+
+        if active.endpoint == SavedServerEndpoint::Secondary {
+            match self.connect_endpoint(SavedServerEndpoint::Primary).await {
+                Ok(primary) => return match operation(Arc::clone(&primary)).await {
+                    Ok(value) => {
+                        self.set_active_server(SavedServerEndpoint::Primary, primary)?;
+                        Ok(value)
+                    }
+                    Err(error) => {
+                        log::warn!(
+                            "Recovered primary music server request failed, returning to secondary URL: {error}"
+                        );
+                        operation(Arc::clone(&active.backend)).await
+                    }
+                },
+                Err(error) => {
+                    log::debug!("Primary music server is still unavailable: {error}");
+                }
+            }
+        }
+
+        match operation(Arc::clone(&active.backend)).await {
+            Ok(value) => Ok(value),
+            Err(error) if active.endpoint == SavedServerEndpoint::Primary => {
+                if self.profile.secondary_url.is_none() {
+                    return Err(error);
+                }
+
+                log::warn!("Primary music server request failed, trying secondary URL: {error}");
+                let secondary = self
+                    .connect_endpoint(SavedServerEndpoint::Secondary)
+                    .await?;
+                let value = operation(Arc::clone(&secondary)).await?;
+                self.set_active_server(SavedServerEndpoint::Secondary, secondary)?;
+                Ok(value)
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    fn active_server(&self) -> Result<ActiveServer, String> {
+        self.active
+            .read()
+            .map_err(|_| "Music server state lock was poisoned".to_string())
+            .map(|active| active.clone())
+    }
+
+    async fn connect_endpoint(
+        &self,
+        endpoint: SavedServerEndpoint,
+    ) -> Result<Arc<dyn MusicServer>, String> {
+        let url = match endpoint {
+            SavedServerEndpoint::Primary => self.profile.url.as_str(),
+            SavedServerEndpoint::Secondary => self
+                .profile
+                .secondary_url
+                .as_deref()
+                .ok_or_else(|| "Saved server profile has no secondary URL".to_string())?,
+        };
+        let (backend, _) = connect_server_url(
+            self.profile.server_type,
+            url,
+            &self.profile.username,
+            &self.password,
+        )
+        .await?;
+
+        Ok(backend)
+    }
+
+    fn set_active_server(
+        &self,
+        endpoint: SavedServerEndpoint,
+        backend: Arc<dyn MusicServer>,
+    ) -> Result<(), String> {
+        let mut active = self
+            .active
+            .write()
+            .map_err(|_| "Music server state lock was poisoned".to_string())?;
+        *active = ActiveServer { endpoint, backend };
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl MusicServer for FailoverMusicServer {
+    async fn ping(&self) -> Result<ServerInfo, String> {
+        self.with_failover(|server| async move { server.ping().await })
+            .await
+    }
+
+    async fn library_revision(&self) -> Result<Option<String>, String> {
+        self.with_failover(|server| async move { server.library_revision().await })
+            .await
+    }
+
+    async fn artists(&self) -> Result<Vec<crate::library::models::Artist>, String> {
+        self.with_failover(|server| async move { server.artists().await })
+            .await
+    }
+
+    async fn albums(&self) -> Result<Vec<crate::library::models::Album>, String> {
+        self.with_failover(|server| async move { server.albums().await })
+            .await
+    }
+
+    async fn album(&self, id: &str) -> Result<crate::library::models::AlbumWithSongs, String> {
+        self.with_failover(|server| async move { server.album(id).await })
+            .await
+    }
+
+    async fn genres(&self) -> Result<Vec<crate::library::models::Genre>, String> {
+        self.with_failover(|server| async move { server.genres().await })
+            .await
+    }
+
+    async fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+        self.with_failover(|server| async move {
+            server.ping().await?;
+            server.playback_uri(song_id).await
+        })
+        .await
+    }
+
+    async fn scrobble(
+        &self,
+        song_id: &str,
+        started_at_ms: i64,
+        event: super::models::ScrobbleEvent,
+    ) -> Result<(), String> {
+        self.with_failover(
+            |server| async move { server.scrobble(song_id, started_at_ms, event).await },
+        )
+        .await
+    }
+
+    async fn album_artwork(
+        &self,
+        cover_art_id: &str,
+    ) -> Result<Option<crate::library::models::BinaryArtwork>, String> {
+        self.with_failover(|server| async move { server.album_artwork(cover_art_id).await })
+            .await
+    }
+
+    async fn artist_artwork(
+        &self,
+        artist_id: &str,
+    ) -> Result<Option<crate::library::models::BinaryArtwork>, String> {
+        self.with_failover(|server| async move { server.artist_artwork(artist_id).await })
+            .await
+    }
+}
+
 fn create_server(
     server_type: ServerType,
     url: String,
@@ -351,24 +587,10 @@ fn create_server(
 }
 
 async fn create_connected_server(
-    server_type: ServerType,
-    url: &str,
-    secondary_url: Option<&str>,
-    username: &str,
-    password: &str,
+    profile: StoredServerProfile,
+    password: String,
 ) -> Result<(Arc<dyn MusicServer>, ServerInfo), String> {
-    match connect_server_url(server_type, url, username, password).await {
-        Ok(connection) => Ok(connection),
-        Err(primary_error) => match secondary_url {
-            Some(secondary_url) => {
-                log::warn!(
-                    "Primary music server connection failed, trying secondary URL: {primary_error}"
-                );
-                connect_server_url(server_type, secondary_url, username, password).await
-            }
-            None => Err(primary_error),
-        },
-    }
+    FailoverMusicServer::connect(profile, password).await
 }
 
 async fn connect_server_url(

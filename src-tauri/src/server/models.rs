@@ -35,7 +35,7 @@ impl ServerType {
     }
 }
 
-#[derive(Clone, Copy, Deserialize)]
+#[derive(Clone, Copy, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum SavedServerEndpoint {
     Primary,

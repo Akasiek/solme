@@ -141,10 +141,7 @@ impl PlayerService {
             return Err("Album has no cached songs".to_string());
         }
 
-        let sources = songs
-            .iter()
-            .map(|song| server.playback_uri(&song.remote_id))
-            .collect::<Result<Vec<_>, _>>()?;
+        let sources = Self::playback_sources(&server, &songs).await?;
 
         Ok((songs, sources))
     }
@@ -213,17 +210,13 @@ impl PlayerService {
         }))
     }
 
-    pub(crate) fn restore_session(&self, session: PlaybackSession) -> Result<(), String> {
+    pub(crate) async fn restore_session(&self, session: PlaybackSession) -> Result<(), String> {
         if session.queue.is_empty() || session.active_index >= session.queue.len() {
             return Err("Stored playback session has an invalid queue".to_string());
         }
 
         let (_, server) = self.server.current_server()?;
-        let sources = session
-            .queue
-            .iter()
-            .map(|song| server.playback_uri(&song.remote_id))
-            .collect::<Result<Vec<_>, _>>()?;
+        let sources = Self::playback_sources(&server, &session.queue).await?;
 
         self.replace_queue(session.queue)?;
         self.audio.load_queue_paused(
@@ -232,6 +225,17 @@ impl PlayerService {
             Some(session.position_seconds),
         )?;
         self.notify_status_changed()
+    }
+
+    async fn playback_sources(
+        server: &Arc<dyn crate::server::backend::MusicServer>,
+        songs: &[CachedSong],
+    ) -> Result<Vec<String>, String> {
+        let mut sources = Vec::with_capacity(songs.len());
+        for song in songs {
+            sources.push(server.playback_uri(&song.remote_id).await?);
+        }
+        Ok(sources)
     }
 
     pub async fn restore_preferences(&self) -> Result<(), String> {
@@ -495,6 +499,7 @@ mod tests {
                     active_index: 1,
                     position_seconds: 37.5,
                 })
+                .await
                 .unwrap();
 
             let audio = audio_state.lock().unwrap();
@@ -835,7 +840,7 @@ mod tests {
             unimplemented!()
         }
 
-        fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+        async fn playback_uri(&self, song_id: &str) -> Result<String, String> {
             Ok(format!("https://music.example.com/{song_id}"))
         }
 

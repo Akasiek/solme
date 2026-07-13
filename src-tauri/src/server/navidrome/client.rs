@@ -309,7 +309,7 @@ impl MusicServer for NavidromeBackend {
             .collect())
     }
 
-    fn playback_uri(&self, song_id: &str) -> Result<String, String> {
+    async fn playback_uri(&self, song_id: &str) -> Result<String, String> {
         if song_id.is_empty() {
             return Err("Song ID cannot be empty".to_string());
         }
@@ -505,7 +505,10 @@ mod tests {
     #[test]
     fn builds_authenticated_stream_url_without_transcoding() {
         let backend = backend("https://example.com/music");
-        let url = reqwest::Url::parse(&backend.playback_uri("song-1").unwrap()).unwrap();
+        let url = reqwest::Url::parse(
+            &tauri::async_runtime::block_on(backend.playback_uri("song-1")).unwrap(),
+        )
+        .unwrap();
         let query = url
             .query_pairs()
             .collect::<std::collections::HashMap<_, _>>();
