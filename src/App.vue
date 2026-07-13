@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import AppTitleBar from "@/components/AppTitleBar.vue";
 import AsideMenu from "@/components/AsideMenu";
 import PlayerBar from "@/components/PlayerBar";
 import ServerConnectionOverlay from "@/components/ServerConnectionOverlay.vue";
@@ -7,6 +8,7 @@ import ToastHost from "@/components/ToastHost.vue";
 
 <template>
   <div class="flex h-dvh flex-col bg-zinc-950 font-serif text-zinc-100">
+    <AppTitleBar />
     <div class="flex min-h-0 flex-1">
       <AsideMenu />
       <main class="min-w-0 flex-1 overflow-y-auto">
