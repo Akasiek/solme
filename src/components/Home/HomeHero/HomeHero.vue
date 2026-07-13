@@ -27,7 +27,7 @@ const router = useRouter();
 </script>
 
 <template>
-  <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-950">
+  <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
     <div class="grid min-h-72 gap-6 p-5 md:p-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center lg:p-7">
       <div class="max-w-3xl space-y-5">
         <div class="flex items-center gap-2 font-sans text-sm font-semibold tracking-wide text-accent uppercase">
@@ -55,7 +55,7 @@ const router = useRouter();
 
       <div class="relative min-h-72">
         <div
-          class="absolute inset-x-5 top-12 bottom-0 rounded-lg border border-zinc-800 bg-zinc-900/80 shadow-2xl shadow-black/40"
+          class="absolute inset-x-5 top-12 bottom-0 rounded-lg border border-zinc-800 bg-zinc-950/80 shadow-2xl shadow-black/40"
         />
         <RouterLink
           v-if="featuredAlbum"
@@ -76,7 +76,7 @@ const router = useRouter();
         </RouterLink>
         <div
           v-else
-          class="absolute top-0 left-0 aspect-square w-48 overflow-hidden rounded border-2 border-zinc-800 bg-zinc-900 sm:w-56 lg:w-64"
+          class="absolute top-0 left-0 aspect-square w-48 overflow-hidden rounded border-2 border-zinc-800 bg-zinc-950 sm:w-56 lg:w-64"
         >
           <MissingCoverImage />
         </div>

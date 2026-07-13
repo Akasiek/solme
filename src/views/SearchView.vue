@@ -64,7 +64,7 @@ async function search() {
         v-model="query"
         type="search"
         placeholder="Search albums and songs"
-        class="w-full rounded border border-zinc-700 bg-zinc-900 p-2 text-zinc-100 focus:border-zinc-500 focus:outline-none"
+        class="w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-zinc-100 focus:border-zinc-500 focus:outline-none"
       />
       <Button type="submit">Search</Button>
     </form>

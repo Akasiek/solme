@@ -65,7 +65,7 @@ onMounted(async () => {
 <template>
   <section class="px-6 pb-12">
     <div
-      class="container mx-auto rounded-lg border border-zinc-800 bg-zinc-950/70 p-6 shadow-2xl shadow-black/20 lg:p-8"
+      class="container mx-auto rounded-lg border border-zinc-800 bg-zinc-900/70 p-6 shadow-2xl shadow-black/20 lg:p-8"
     >
       <div class="mb-5 flex items-end justify-between gap-4">
         <div class="min-w-0">

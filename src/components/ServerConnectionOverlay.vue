@@ -47,7 +47,7 @@ const description = computed(() => {
     leave-from-class="opacity-100"
     leave-to-class="opacity-0"
   >
-    <div v-if="isVisible" class="fixed inset-0 z-50 grid place-items-center bg-zinc-950/95 p-6 text-zinc-100">
+    <div v-if="isVisible" class="fixed inset-0 z-50 grid place-items-center bg-zinc-900/95 p-6 text-zinc-100">
       <div class="w-full max-w-md space-y-4 text-center transition duration-300 ease-in-out">
         <div
           v-if="serverConnectionStatus.phase !== 'failed'"

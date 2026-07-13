@@ -11,7 +11,7 @@ const { toasts, dismissToast } = useToast();
     <div
       v-for="toast in toasts"
       :key="toast.id"
-      class="pointer-events-auto flex items-start gap-3 rounded border border-zinc-700 bg-zinc-900 px-4 py-3 text-sm text-zinc-100 shadow-lg shadow-accent/5"
+      class="pointer-events-auto flex items-start gap-3 rounded border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-100 shadow-lg shadow-accent/5"
       role="status"
     >
       <p class="min-w-0 flex-1">{{ toast.message }}</p>

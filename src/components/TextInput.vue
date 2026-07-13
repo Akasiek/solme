@@ -28,7 +28,7 @@ const inputAttrs = computed(() => {
       v-bind="inputAttrs"
       :type="type ?? 'text'"
       :placeholder="placeholder"
-      class="w-full rounded border border-zinc-700 bg-zinc-900 p-2 text-zinc-100 focus:border-zinc-500 focus:outline-none"
+      class="w-full rounded border border-zinc-700 bg-zinc-950 p-2 text-zinc-100 focus:border-zinc-500 focus:outline-none"
     />
   </label>
 </template>
