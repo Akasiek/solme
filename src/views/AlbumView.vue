@@ -5,6 +5,7 @@ import { watch } from "vue";
 import { CachedAlbumDetails } from "@/types.ts";
 import AsyncViewState from "@/components/AsyncViewState.vue";
 import AlbumHero from "@/components/Album/AlbumHero/AlbumHero.vue";
+import AlbumTracklist from "@/components/Album/AlbumTracklist/AlbumTracklist.vue";
 
 const props = defineProps<{ albumId: string }>();
 
@@ -31,6 +32,9 @@ watch(
 
 <template>
   <AsyncViewState :is-loading="isLoading" :error="loadError">
-    <AlbumHero v-if="albumDetails" :album-details="albumDetails" />
+    <template v-if="albumDetails">
+      <AlbumHero :album-details="albumDetails" />
+      <AlbumTracklist :album-details="albumDetails" />
+    </template>
   </AsyncViewState>
 </template>
