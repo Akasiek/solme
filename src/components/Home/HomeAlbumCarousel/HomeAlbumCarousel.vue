@@ -111,15 +111,15 @@ onBeforeUnmount(() => {
 
 <template>
   <section class="space-y-3">
-    <h2 class="font-serif text-2xl font-bold">{{ title }}</h2>
+    <div class="flex items-center justify-between gap-4">
+      <h2 class="font-serif text-2xl font-bold">{{ title }}</h2>
+      <div v-if="hasMeasuredViewport && hasControls" class="flex shrink-0 items-center gap-2">
+        <CarouselControlButton :is-disabled="!canGoPrevious" :handle-click="goPrevious" variant="previous" />
+        <CarouselControlButton :is-disabled="!canGoNext" :handle-click="goNext" variant="next" />
+      </div>
+    </div>
     <p v-if="albums.length === 0" class="text-zinc-400">No albums to show.</p>
     <div v-else ref="viewport" class="relative overflow-hidden">
-      <CarouselControlButton
-        v-if="hasMeasuredViewport && hasControls"
-        :is-disabled="!canGoPrevious"
-        :handle-click="goPrevious"
-        variant="previous"
-      />
       <div class="relative overflow-hidden">
         <Transition v-if="hasMeasuredViewport" :name="carouselTransitionName">
           <div :key="carouselPageKey" class="grid gap-4" :style="carouselGridStyle">
@@ -129,12 +129,6 @@ onBeforeUnmount(() => {
           </div>
         </Transition>
       </div>
-      <CarouselControlButton
-        v-if="hasMeasuredViewport && hasControls"
-        :is-disabled="!canGoNext"
-        :handle-click="goNext"
-        variant="next"
-      />
     </div>
   </section>
 </template>
