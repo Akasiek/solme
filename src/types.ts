@@ -51,6 +51,7 @@ export interface CachedAlbumDetails {
   genres: string[];
   discCount: number;
   audioFormats: string[];
+  songs: CachedSong[];
 }
 
 export interface HomeAlbumSections {

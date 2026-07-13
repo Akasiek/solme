@@ -139,6 +139,7 @@ pub struct CachedAlbumDetails {
     pub genres: Vec<String>,
     pub disc_count: i64,
     pub audio_formats: Vec<String>,
+    pub songs: Vec<CachedSong>,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, sqlx::FromRow, Serialize)]

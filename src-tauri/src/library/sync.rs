@@ -157,11 +157,13 @@ impl LibrarySyncService {
             .repository
             .album_audio_formats(&profile_id, album_id)
             .await?;
+        let songs = self.repository.songs(&profile_id, album_id).await?;
         Ok(Some(CachedAlbumDetails {
             album,
             genres,
             disc_count,
             audio_formats,
+            songs,
         }))
     }
 
