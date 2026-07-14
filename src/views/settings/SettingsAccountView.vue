@@ -73,8 +73,8 @@ const addServer = () => {
       v-if="!isProfilesLoading && hasProfiles && !serverInfo"
       class="rounded border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-100"
     >
-      No connection to the configured music server. Check the server URL, network connection, or add a secondary URL
-      for fallback access.
+      No connection to the configured music server. Check the server URL, network connection, or add a secondary URL for
+      fallback access.
     </div>
 
     <ServerAuthorizationForm

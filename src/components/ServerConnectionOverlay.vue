@@ -59,7 +59,7 @@ const description = computed(() => {
 
         <div class="space-y-2">
           <h1 class="font-serif text-2xl font-bold">{{ title }}</h1>
-          <p class="break-words text-sm text-zinc-400">{{ description }}</p>
+          <p class="text-sm wrap-break-word text-zinc-400">{{ description }}</p>
         </div>
 
         <div v-if="serverConnectionStatus.secondaryUrl" class="space-y-2 text-left text-xs text-zinc-500">
