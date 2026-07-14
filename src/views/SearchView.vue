@@ -72,18 +72,23 @@ async function search() {
     <p v-if="isLoading">Searching...</p>
     <p v-else-if="error">{{ error }}</p>
 
-    <div v-if="hasSearched && !isLoading && !error">
-      <section>
-        <h2>Albums</h2>
-        <p v-if="albums.length === 0">No albums found.</p>
-        <div v-else class="grid grid-cols-2 gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 2xl:grid-cols-8">
-          <AlbumCard v-for="album in albums" :key="album.remoteId" :album="album" />
+    <div v-if="hasSearched && !isLoading && !error" class="space-y-8">
+      <section class="space-y-3">
+        <h2 class="font-serif text-2xl font-bold">Albums</h2>
+        <p v-if="albums.length === 0" class="text-zinc-400">No albums found.</p>
+        <div
+          v-else
+          class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4 md:grid-cols-[repeat(auto-fill,minmax(200px,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(220px,1fr))]"
+        >
+          <div v-for="album in albums" :key="album.remoteId" class="min-w-0">
+            <AlbumCard :album="album" />
+          </div>
         </div>
       </section>
 
-      <section>
-        <h2>Songs</h2>
-        <p v-if="songs.length === 0">No songs found.</p>
+      <section class="space-y-3">
+        <h2 class="font-serif text-2xl font-bold">Songs</h2>
+        <p v-if="songs.length === 0" class="text-zinc-400">No songs found.</p>
         <ul v-else>
           <li v-for="song in songs" :key="song.remoteId">
             <RouterLink :to="{ name: 'album', params: { albumId: song.albumId } }">
