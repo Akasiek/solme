@@ -314,7 +314,8 @@ mod tests {
         library::{
             models::{
                 Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate,
-                BinaryArtwork, CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
+                BinaryArtwork, CachedAlbum, CachedArtist, CachedSong, Genre, LibrarySnapshot,
+                LibrarySummary,
             },
             LibraryRepository,
         },
@@ -887,6 +888,22 @@ mod tests {
         }
 
         async fn summary(&self, _profile_id: &str) -> Result<LibrarySummary, String> {
+            unimplemented!()
+        }
+
+        async fn artist(
+            &self,
+            _profile_id: &str,
+            _artist_id: &str,
+        ) -> Result<Option<CachedArtist>, String> {
+            unimplemented!()
+        }
+
+        async fn artist_albums(
+            &self,
+            _profile_id: &str,
+            _artist_id: &str,
+        ) -> Result<Vec<CachedAlbum>, String> {
             unimplemented!()
         }
 

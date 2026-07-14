@@ -1,0 +1,62 @@
+{
+  "db_name": "SQLite",
+  "query": "\n        SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path\n        FROM artists a\n        JOIN library_sync_state s\n          ON s.profile_id = a.profile_id\n         AND s.active_generation = a.generation\n        LEFT JOIN artwork_cache artwork\n          ON artwork.profile_id = a.profile_id\n         AND artwork.kind = 'artist'\n         AND artwork.remote_id = a.remote_id\n        WHERE a.profile_id = ?\n          AND a.remote_id = ?\n        ",
+  "describe": {
+    "columns": [
+      {
+        "name": "remote_id",
+        "ordinal": 0,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "remote_id"
+          }
+        }
+      },
+      {
+        "name": "name",
+        "ordinal": 1,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "name": "album_count",
+        "ordinal": 2,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "artists",
+            "name": "album_count"
+          }
+        }
+      },
+      {
+        "name": "artwork_path",
+        "ordinal": 3,
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "artwork_cache",
+            "name": "local_path"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Right": 2
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true
+    ]
+  },
+  "hash": "505baef6b1acb664ca12c8defb95a8a273d6f0aef56dbb3642af954c7c4cbc70"
+}

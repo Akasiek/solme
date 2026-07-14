@@ -33,6 +33,18 @@ export interface LibrarySummary {
   lastSuccessAt?: number;
 }
 
+export interface CachedArtist {
+  remoteId: string;
+  name: string;
+  albumCount: number;
+  artworkPath?: string;
+}
+
+export interface CachedArtistDetails {
+  artist: CachedArtist;
+  albums: CachedAlbum[];
+}
+
 export interface CachedAlbum {
   remoteId: string;
   name: string;

@@ -2,8 +2,6 @@ use std::{collections::BTreeSet, path::Path};
 
 use async_trait::async_trait;
 
-use crate::database::SqliteRepository;
-
 use super::{
     models::{
         AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
@@ -11,6 +9,8 @@ use super::{
     },
     query,
 };
+use crate::database::SqliteRepository;
+use crate::library::models::CachedArtist;
 
 #[async_trait]
 pub trait LibraryRepository: Send + Sync {
@@ -24,6 +24,16 @@ pub trait LibraryRepository: Send + Sync {
         completed_at: i64,
     ) -> Result<(), String>;
     async fn summary(&self, profile_id: &str) -> Result<LibrarySummary, String>;
+    async fn artist(
+        &self,
+        profile_id: &str,
+        artist_id: &str,
+    ) -> Result<Option<CachedArtist>, String>;
+    async fn artist_albums(
+        &self,
+        profile_id: &str,
+        artist_id: &str,
+    ) -> Result<Vec<CachedAlbum>, String>;
     async fn albums(
         &self,
         profile_id: &str,
@@ -176,6 +186,22 @@ impl LibraryRepository for SqliteRepository {
             genre_count: 0,
             last_success_at: None,
         }))
+    }
+
+    async fn artist(
+        &self,
+        profile_id: &str,
+        artist_id: &str,
+    ) -> Result<Option<CachedArtist>, String> {
+        query::artist(self, profile_id, artist_id).await
+    }
+
+    async fn artist_albums(
+        &self,
+        profile_id: &str,
+        artist_id: &str,
+    ) -> Result<Vec<CachedAlbum>, String> {
+        query::artist_albums(self, profile_id, artist_id).await
     }
 
     async fn albums(
@@ -438,7 +464,7 @@ mod tests {
     use super::{audio_format_label, LibraryRepository};
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
-        Album, AlbumSort, AlbumWithSongs, Artist, Genre, LibrarySnapshot, Song,
+        Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, Genre, LibrarySnapshot, Song,
     };
 
     #[test]
@@ -486,6 +512,164 @@ mod tests {
                 repository.album_genres("profile", "album-1").await.unwrap(),
                 vec!["Jazz".to_string()]
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn returns_cached_artist_from_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot(false), 123)
+                .await
+                .unwrap();
+
+            let artist = repository
+                .artist("profile", "artist-1")
+                .await
+                .unwrap()
+                .expect("artist should be cached");
+            assert_eq!(artist.remote_id, "artist-1");
+            assert_eq!(artist.name, "Artist");
+            assert_eq!(artist.album_count, 1);
+            assert_eq!(artist.artwork_path, None);
+
+            assert!(repository
+                .artist("profile", "missing-artist")
+                .await
+                .unwrap()
+                .is_none());
+            assert!(repository
+                .artist("other-profile", "artist-1")
+                .await
+                .unwrap()
+                .is_none());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn returns_cached_artist_with_artwork_path() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot(false), 123)
+                .await
+                .unwrap();
+            repository
+                .save_artwork(
+                    "profile",
+                    ArtworkCacheRecord {
+                        kind: "artist",
+                        remote_id: "artist-1".to_string(),
+                        source_key: "artist-1".to_string(),
+                        local_path: "/tmp/artist-1.webp".to_string(),
+                        content_type: "image/webp".to_string(),
+                        etag: None,
+                        last_modified: None,
+                        downloaded_at: 123,
+                    },
+                )
+                .await
+                .unwrap();
+
+            let artist = repository
+                .artist("profile", "artist-1")
+                .await
+                .unwrap()
+                .expect("artist should be cached");
+            assert_eq!(artist.artwork_path.as_deref(), Some("/tmp/artist-1.webp"));
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn returns_cached_artist_albums_from_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.artists.push(Artist {
+                remote_id: "artist-2".to_string(),
+                name: "Other Artist".to_string(),
+                album_count: 1,
+            });
+            snapshot.albums.push(AlbumWithSongs {
+                album: Album {
+                    remote_id: "album-2".to_string(),
+                    name: "Other Album".to_string(),
+                    artist_id: Some("artist-2".to_string()),
+                    artist_name: "Other Artist".to_string(),
+                    year: Some(2025),
+                    release_date: Some("2025-01-01".to_string()),
+                    original_release_date: None,
+                    server_added_at: Some("2026-01-03T00:00:00Z".to_string()),
+                    song_count: 0,
+                    duration_seconds: 0,
+                    cover_art_id: Some("cover-2".to_string()),
+                    genres: vec!["Rock".to_string()],
+                },
+                songs: Vec::new(),
+            });
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let albums = repository
+                .artist_albums("profile", "artist-1")
+                .await
+                .unwrap();
+            assert_eq!(albums.len(), 1);
+            assert_eq!(albums[0].remote_id, "album-1");
+
+            let missing = repository
+                .artist_albums("profile", "missing-artist")
+                .await
+                .unwrap();
+            assert!(missing.is_empty());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn cached_artist_uses_latest_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot(false), 123)
+                .await
+                .unwrap();
+
+            let mut next_snapshot = snapshot(false);
+            next_snapshot.artists[0].name = "Updated Artist".to_string();
+            next_snapshot.artists[0].album_count = 2;
+            next_snapshot.albums[0].album.artist_name = "Updated Artist".to_string();
+            next_snapshot.albums[0].songs[0].artist_name = "Updated Artist".to_string();
+            repository
+                .activate_snapshot("profile", "generation-2", None, &next_snapshot, 456)
+                .await
+                .unwrap();
+
+            let artist = repository
+                .artist("profile", "artist-1")
+                .await
+                .unwrap()
+                .expect("artist should be cached");
+            assert_eq!(artist.name, "Updated Artist");
+            assert_eq!(artist.album_count, 2);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

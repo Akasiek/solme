@@ -119,6 +119,22 @@ pub struct HomeAlbumSections {
 
 #[derive(Clone, Debug, sqlx::FromRow, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct CachedArtist {
+    pub remote_id: String,
+    pub name: String,
+    pub album_count: i64,
+    pub artwork_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CachedArtistDetails {
+    pub artist: CachedArtist,
+    pub albums: Vec<CachedAlbum>,
+}
+
+#[derive(Clone, Debug, sqlx::FromRow, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct CachedAlbum {
     pub remote_id: String,
     pub name: String,

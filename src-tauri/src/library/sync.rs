@@ -14,8 +14,9 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedSong,
-        HomeAlbumSections, LibrarySnapshot, LibrarySummary, LibrarySyncPhase, LibrarySyncStatus,
+        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedArtistDetails,
+        CachedSong, HomeAlbumSections, LibrarySnapshot, LibrarySummary, LibrarySyncPhase,
+        LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -140,6 +141,20 @@ impl LibrarySyncService {
             newly_added_albums,
             newly_released_albums,
         })
+    }
+
+    pub async fn artist(&self, artist_id: &str) -> Result<Option<CachedArtistDetails>, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(None);
+        };
+        let Some(artist) = self.repository.artist(&profile_id, artist_id).await? else {
+            return Ok(None);
+        };
+        let albums = self
+            .repository
+            .artist_albums(&profile_id, artist_id)
+            .await?;
+        Ok(Some(CachedArtistDetails { artist, albums }))
     }
 
     pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbumDetails>, String> {
@@ -429,8 +444,8 @@ mod tests {
         library::{
             models::{
                 Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
-                CachedAlbum, CachedSong, Genre, LibrarySnapshot, LibrarySummary, LibrarySyncPhase,
-                Song,
+                CachedAlbum, CachedArtist, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
+                LibrarySyncPhase, Song,
             },
             repository::LibraryRepository,
         },
@@ -651,6 +666,32 @@ mod tests {
         });
     }
 
+    #[test]
+    fn artist_returns_none_without_active_profile() {
+        tauri::async_runtime::block_on(async {
+            let directory = std::env::temp_dir().join(format!("solme-sync-{}", Uuid::new_v4()));
+            let database_repository = crate::database::SqliteRepository::open(
+                &directory.join(crate::database::DATABASE_FILE_NAME),
+            )
+            .await
+            .unwrap();
+            let server_service = Arc::new(MusicServerService::new(
+                database_repository.pool.clone(),
+                Box::new(MemoryCredentialStore),
+            ));
+            let repository = Arc::new(MockRepository::new(Some("revision-1")));
+            let service = Arc::new(LibrarySyncService::new(
+                server_service,
+                repository,
+                std::env::temp_dir().join(format!("solme-sync-{}", Uuid::new_v4())),
+            ));
+
+            assert!(service.artist("artist-1").await.unwrap().is_none());
+            database_repository.close().await;
+            std::fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
     fn service(
         server: Arc<MockMusicServer>,
         repository: Arc<MockRepository>,
@@ -843,6 +884,27 @@ mod tests {
                 genre_count: 7,
                 last_success_at: Some(100),
             })
+        }
+
+        async fn artist(
+            &self,
+            _profile_id: &str,
+            artist_id: &str,
+        ) -> Result<Option<CachedArtist>, String> {
+            Ok(Some(CachedArtist {
+                remote_id: artist_id.to_string(),
+                name: "Artist".to_string(),
+                album_count: 1,
+                artwork_path: None,
+            }))
+        }
+
+        async fn artist_albums(
+            &self,
+            _profile_id: &str,
+            _artist_id: &str,
+        ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(Vec::new())
         }
 
         async fn albums(
