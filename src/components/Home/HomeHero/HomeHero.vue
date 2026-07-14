@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import { useRouter } from "vue-router";
-import { Library, Search } from "@lucide/vue";
+import { Library, Music, Search, Tags, Users } from "@lucide/vue";
 import Button from "@/components/Button.vue";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
+import { useAsyncData } from "@/composables/useAsyncData";
 import { artworkSource } from "@/utils/artwork";
-import type { HomeAlbumSections } from "@/types";
+import type { HomeAlbumSections, LibrarySummary } from "@/types";
 
 const props = defineProps<{
   albumSections: HomeAlbumSections;
@@ -14,7 +16,24 @@ const props = defineProps<{
 const coverAlbums = computed(() => props.albumSections.heroRandomAlbums.slice(0, 5));
 const featuredAlbum = computed(() => coverAlbums.value[0]);
 const hasLibraryAlbums = computed(() => coverAlbums.value.length > 0);
-const librarySections = [{ label: "Albums" }, { label: "Artists" }, { label: "Genres" }];
+const emptySummary: LibrarySummary = {
+  artistCount: 0,
+  albumCount: 0,
+  songCount: 0,
+  genreCount: 0,
+};
+const { data: summary, isLoading: isSummaryLoading } = useAsyncData(
+  () => invoke<LibrarySummary>("get_library_summary"),
+  emptySummary,
+);
+const countFormatter = new Intl.NumberFormat();
+const countLabel = (value: number) => (isSummaryLoading.value ? "..." : countFormatter.format(value));
+const librarySections = computed(() => [
+  { label: "Albums", count: summary.value.albumCount, icon: Library },
+  { label: "Artists", count: summary.value.artistCount, icon: Users },
+  { label: "Songs", count: summary.value.songCount, icon: Music },
+  { label: "Genres", count: summary.value.genreCount, icon: Tags },
+]);
 const heroDescriptions = [
   "Put something on, follow a thread, and let the next record find you.",
   "Start anywhere in the shelf and see where the mood takes you.",
@@ -42,14 +61,29 @@ const router = useRouter();
           </p>
         </div>
 
-        <div class="flex flex-wrap gap-2">
+        <div>
           <Button type="button" @click="router.push({ name: 'search' })">
             <Search class="size-4" aria-hidden="true" />
             Search library
           </Button>
-          <Button v-for="section in librarySections" :key="section.label" type="button" variant="outline" disabled>
-            {{ section.label }}
-          </Button>
+        </div>
+
+        <div class="grid max-w-2xl grid-cols-2 gap-2.5 sm:grid-cols-4">
+          <button
+            v-for="section in librarySections"
+            :key="section.label"
+            type="button"
+            disabled
+            class="min-w-0 rounded-md border border-zinc-800 px-3 py-3 text-left disabled:cursor-not-allowed disabled:opacity-80"
+          >
+            <span class="flex items-center gap-2 text-zinc-400">
+              <component :is="section.icon" class="size-4 shrink-0" aria-hidden="true" />
+              <span class="truncate font-sans text-xs font-semibold uppercase">{{ section.label }}</span>
+            </span>
+            <span class="mt-2 block truncate text-2xl leading-none font-bold text-white">
+              {{ countLabel(section.count) }}
+            </span>
+          </button>
         </div>
       </div>
 

@@ -6,7 +6,6 @@ import HomeHero from "@/components/Home/HomeHero";
 import HomeAlbumCarousel from "@/components/Home/HomeAlbumCarousel";
 import { useAsyncData } from "@/composables/useAsyncData";
 import WindowFocusTest from "@/components/WindowFocusTest.vue";
-import HomeLibraryStats from "@/components/Home/HomeLibraryStats/HomeLibraryStats.vue";
 
 const {
   data: albumSections,
@@ -33,7 +32,6 @@ const {
     <AsyncViewState :is-loading="isLoading" :error="loadError">
       <div class="space-y-8">
         <HomeHero :album-sections="albumSections" />
-        <HomeLibraryStats />
         <div id="explore-library" class="scroll-mt-6">
           <HomeAlbumCarousel title="Explore library" :albums="albumSections.randomAlbums" />
         </div>
