@@ -365,10 +365,16 @@ impl MusicServer for NavidromeBackend {
         else {
             return Ok(None);
         };
-        let url =
-            Url::parse(&source).map_err(|error| format!("Artist image URL is invalid: {error}"))?;
-        if !self.same_origin(&url) {
+        let url = self
+            .base_url
+            .join(&source)
+            .map_err(|error| format!("Artist image URL is invalid: {error}"))?;
+        if !self.same_origin(&url) && url.scheme() != "https" {
             return Ok(None);
+        }
+
+        if self.same_origin(&url) {
+            return self.request_binary(url, &[], source).await;
         }
 
         let response = self
@@ -487,6 +493,15 @@ mod tests {
         assert!(backend.same_origin(&"https://example.com/art.jpg".parse().unwrap()));
         assert!(!backend.same_origin(&"https://cdn.example.com/art.jpg".parse().unwrap()));
         assert!(!backend.same_origin(&"http://example.com/art.jpg".parse().unwrap()));
+    }
+
+    #[test]
+    fn resolves_relative_artist_image_urls_against_server() {
+        let backend = backend("https://example.com/music");
+        let url = backend.base_url.join("/image/artist.jpg").unwrap();
+
+        assert_eq!(url.as_str(), "https://example.com/image/artist.jpg");
+        assert!(backend.same_origin(&url));
     }
 
     #[test]
