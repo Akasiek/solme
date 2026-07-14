@@ -29,6 +29,7 @@ export interface LibrarySummary {
   artistCount: number;
   albumCount: number;
   songCount: number;
+  genreCount: number;
   lastSuccessAt?: number;
 }
 

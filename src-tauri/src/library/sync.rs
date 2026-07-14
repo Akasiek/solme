@@ -91,6 +91,7 @@ impl LibrarySyncService {
                 artist_count: 0,
                 album_count: 0,
                 song_count: 0,
+                genre_count: 0,
                 last_success_at: None,
             });
         };
@@ -839,6 +840,7 @@ mod tests {
                 artist_count: 4,
                 album_count: 5,
                 song_count: 6,
+                genre_count: 7,
                 last_success_at: Some(100),
             })
         }

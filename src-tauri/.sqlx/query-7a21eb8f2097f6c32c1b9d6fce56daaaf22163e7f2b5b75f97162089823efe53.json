@@ -1,6 +1,6 @@
 {
   "db_name": "SQLite",
-  "query": "SELECT artist_count, album_count, song_count, last_success_at\n             FROM library_sync_state WHERE profile_id = ?",
+  "query": "SELECT artist_count, album_count, song_count, genre_count, last_success_at\n             FROM library_sync_state WHERE profile_id = ?",
   "describe": {
     "columns": [
       {
@@ -37,8 +37,19 @@
         }
       },
       {
-        "name": "last_success_at",
+        "name": "genre_count",
         "ordinal": 3,
+        "type_info": "Integer",
+        "origin": {
+          "Table": {
+            "table": "library_sync_state",
+            "name": "genre_count"
+          }
+        }
+      },
+      {
+        "name": "last_success_at",
+        "ordinal": 4,
         "type_info": "Integer",
         "origin": {
           "Table": {
@@ -55,8 +66,9 @@
       false,
       false,
       false,
+      false,
       true
     ]
   },
-  "hash": "3b7ce44c7d8436057f0775ed6084803a4b2866a7374926d66e2fef5e33f24b6d"
+  "hash": "7a21eb8f2097f6c32c1b9d6fce56daaaf22163e7f2b5b75f97162089823efe53"
 }

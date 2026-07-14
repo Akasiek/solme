@@ -96,6 +96,7 @@ pub struct LibrarySummary {
     pub artist_count: i64,
     pub album_count: i64,
     pub song_count: i64,
+    pub genre_count: i64,
     pub last_success_at: Option<i64>,
 }
 

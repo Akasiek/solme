@@ -125,15 +125,16 @@ impl LibraryRepository for SqliteRepository {
         sqlx::query!(
             "INSERT INTO library_sync_state
              (profile_id, active_generation, server_revision, last_success_at,
-              artist_count, album_count, song_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?)
+              artist_count, album_count, song_count, genre_count)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT(profile_id) DO UPDATE SET
                active_generation = excluded.active_generation,
                server_revision = excluded.server_revision,
                last_success_at = excluded.last_success_at,
                artist_count = excluded.artist_count,
                album_count = excluded.album_count,
-               song_count = excluded.song_count",
+               song_count = excluded.song_count,
+               genre_count = excluded.genre_count",
             profile_id,
             generation,
             revision,
@@ -141,6 +142,7 @@ impl LibraryRepository for SqliteRepository {
             snapshot.artists.len() as i64,
             snapshot.albums.len() as i64,
             song_count,
+            snapshot.genres.len() as i64,
         )
         .execute(&mut *transaction)
         .await
@@ -159,7 +161,7 @@ impl LibraryRepository for SqliteRepository {
     async fn summary(&self, profile_id: &str) -> Result<LibrarySummary, String> {
         let summary = sqlx::query_as!(
             LibrarySummary,
-            "SELECT artist_count, album_count, song_count, last_success_at
+            "SELECT artist_count, album_count, song_count, genre_count, last_success_at
              FROM library_sync_state WHERE profile_id = ?",
             profile_id,
         )
@@ -171,6 +173,7 @@ impl LibraryRepository for SqliteRepository {
             artist_count: 0,
             album_count: 0,
             song_count: 0,
+            genre_count: 0,
             last_success_at: None,
         }))
     }
