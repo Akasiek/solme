@@ -1,5 +1,5 @@
 [package]
-name = "Solme"
+name = "solme"
 version = "0.1.0"
 description = "Navidrome Client focused on full Album listening"
 authors = ["Kamil Pomykała <kamil@kamilpomykala.dev>"]
