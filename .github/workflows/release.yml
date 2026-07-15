@@ -172,6 +172,14 @@ jobs:
             Get-Content $_.FullName -Raw | sqlite3 solme-ci.sqlite
           }
 
+      - name: Verify Windows bundled libraries
+        shell: pwsh
+        run: |
+          if (!(Test-Path "src-tauri\mpv\libmpv-2.dll")) {
+            throw "Expected src-tauri\mpv\libmpv-2.dll before Tauri build"
+          }
+          Get-Item "src-tauri\mpv\libmpv-2.dll"
+
       - name: Build and publish Tauri bundles
         uses: tauri-apps/tauri-action@v1
         env:
@@ -184,5 +192,5 @@ jobs:
           prerelease: true
           args: >-
             --bundles nsis,msi
-            --config '{"bundle":{"resources":{"src-tauri/mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
+            --config '{"bundle":{"resources":{"mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
           releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
