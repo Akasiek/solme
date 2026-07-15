@@ -104,7 +104,7 @@ jobs:
       RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || format('Solmë {0}', github.ref_name) }}
       RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
       DATABASE_URL: "sqlite://solme-ci.sqlite"
-      MPV_DEV_URL: "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20260607-git-71ebd08.7z/download"
+      MPV_DEV_URL: "https://downloads.sourceforge.net/project/mpv-player-windows/libmpv/mpv-dev-x86_64-20260607-git-71ebd08.7z"
 
     steps:
       - name: Checkout
@@ -138,7 +138,10 @@ jobs:
           $mpvDir = Join-Path $env:GITHUB_WORKSPACE "src-tauri\mpv"
           $archive = Join-Path $env:RUNNER_TEMP "mpv-dev.7z"
           New-Item -ItemType Directory -Force -Path $mpvDir | Out-Null
-          Invoke-WebRequest -Uri $env:MPV_DEV_URL -OutFile $archive
+          curl.exe --location --fail --retry 3 --output $archive $env:MPV_DEV_URL
+          if ((Get-Item $archive).Length -lt 10000000) {
+            throw "Downloaded mpv archive is unexpectedly small; SourceForge likely returned an HTML page"
+          }
           7z x $archive "-o$mpvDir" -y
           Get-ChildItem $mpvDir
 
