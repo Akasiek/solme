@@ -5,7 +5,6 @@ import AsyncViewState from "@/components/AsyncViewState.vue";
 import HomeHero from "@/components/Home/HomeHero";
 import HomeAlbumCarousel from "@/components/Home/HomeAlbumCarousel";
 import { useAsyncData } from "@/composables/useAsyncData";
-import WindowFocusTest from "@/components/WindowFocusTest.vue";
 
 const {
   data: albumSections,
@@ -27,7 +26,7 @@ const {
 
 <template>
   <section class="space-y-8 p-6">
-    <WindowFocusTest />
+    <!--    <WindowFocusTest />-->
 
     <AsyncViewState :is-loading="isLoading" :error="loadError">
       <div class="space-y-8">
