@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Git tag to create or update"
+        required: true
+        default: "v0.1.0-prealpha.1"
+      release_name:
+        description: "GitHub release title"
+        required: true
+        default: "Solmë prealpha 0.1"
+      draft:
+        description: "Create the release as a draft"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+jobs:
+  publish-linux:
+    name: Linux bundles
+    runs-on: ubuntu-22.04
+
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag_name || github.ref_name }}
+      RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || format('Solmë {0}', github.ref_name) }}
+      RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
+      APPIMAGE_EXTRACT_AND_RUN: "1"
+      NO_STRIP: "1"
+      ARCH: "x86_64"
+      DATABASE_URL: "sqlite:///tmp/solme-ci.sqlite"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "lts/*"
+          cache: pnpm
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            file \
+            libayatana-appindicator3-dev \
+            libmpv-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev \
+            patchelf \
+            sqlite3 \
+            xdg-utils
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Prepare SQLx compile-time database
+        run: |
+          rm -f /tmp/solme-ci.sqlite
+          sqlite3 /tmp/solme-ci.sqlite "PRAGMA journal_mode=WAL;"
+          for migration in src-tauri/migrations/*.sql; do
+            sqlite3 /tmp/solme-ci.sqlite < "$migration"
+          done
+
+      - name: Build and publish Tauri bundles
+        uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: ${{ env.RELEASE_NAME }}
+          releaseBody: "Pre-alpha Linux build. Download one of the attached Tauri bundles."
+          releaseDraft: ${{ env.RELEASE_DRAFT }}
+          prerelease: true
+          args: "--bundles deb,appimage,rpm"
+          releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
