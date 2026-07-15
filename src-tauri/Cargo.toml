@@ -1,8 +1,8 @@
 [package]
-name = "solme"
+name = "Solme"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Navidrome Client focused on full Album listening"
+authors = ["Kamil Pomykała <kamil@kamilpomykala.dev>"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
