@@ -166,10 +166,14 @@ jobs:
       - name: Prepare SQLx compile-time database
         shell: pwsh
         run: |
-          Remove-Item solme-ci.sqlite -ErrorAction SilentlyContinue
-          sqlite3 solme-ci.sqlite "PRAGMA journal_mode=WAL;"
+          $dbPath = "src-tauri\solme-ci.sqlite"
+          Remove-Item $dbPath -ErrorAction SilentlyContinue
+          sqlite3 $dbPath "PRAGMA journal_mode=WAL;"
           Get-ChildItem src-tauri/migrations/*.sql | Sort-Object Name | ForEach-Object {
-            Get-Content $_.FullName -Raw | sqlite3 solme-ci.sqlite
+            Get-Content $_.FullName -Raw | sqlite3 $dbPath
+          }
+          if (!(Test-Path $dbPath)) {
+            throw "Expected SQLx database at $dbPath before Tauri build"
           }
 
       - name: Verify Windows bundled libraries
