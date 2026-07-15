@@ -8,6 +8,7 @@ mod preference;
 mod scrobble;
 mod session;
 
+#[cfg(target_os = "linux")]
 pub use integrations::start_mpris_service;
 pub use models::{PlaybackState, PlayerStatus};
 pub use mpv::MpvBackend;
