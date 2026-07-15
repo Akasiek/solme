@@ -104,7 +104,7 @@ jobs:
       RELEASE_NAME: ${{ github.event_name == 'workflow_dispatch' && inputs.release_name || format('Solmë {0}', github.ref_name) }}
       RELEASE_DRAFT: ${{ github.event_name == 'workflow_dispatch' && inputs.draft || false }}
       DATABASE_URL: "sqlite://solme-ci.sqlite"
-      VCPKGRS_DYNAMIC: "1"
+      MPV_DEV_URL: "https://sourceforge.net/projects/mpv-player-windows/files/libmpv/mpv-dev-x86_64-20260607-git-71ebd08.7z/download"
 
     steps:
       - name: Checkout
@@ -124,13 +124,34 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup MSVC developer tools
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Install Windows build dependencies
         shell: pwsh
         run: |
-          choco install sqlite -y
-          Add-Content -Path $env:GITHUB_PATH -Value $env:VCPKG_INSTALLATION_ROOT
-          Add-Content -Path $env:GITHUB_ENV -Value "VCPKG_ROOT=$env:VCPKG_INSTALLATION_ROOT"
-          & "$env:VCPKG_INSTALLATION_ROOT\vcpkg.exe" install mpv:x64-windows
+          choco install 7zip sqlite -y
+
+      - name: Prepare libmpv for Windows
+        shell: pwsh
+        run: |
+          $mpvDir = Join-Path $env:GITHUB_WORKSPACE "src-tauri\mpv"
+          $archive = Join-Path $env:RUNNER_TEMP "mpv-dev.7z"
+          New-Item -ItemType Directory -Force -Path $mpvDir | Out-Null
+          Invoke-WebRequest -Uri $env:MPV_DEV_URL -OutFile $archive
+          7z x $archive "-o$mpvDir" -y
+
+          $exports = & dumpbin /nologo /exports "$mpvDir\libmpv-2.dll"
+          $names = $exports | ForEach-Object {
+            if ($_ -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)$') {
+              $matches[1]
+            }
+          }
+          @("LIBRARY libmpv-2.dll", "EXPORTS") + $names | Set-Content "$mpvDir\mpv.def" -Encoding ASCII
+          & lib /nologo /def:"$mpvDir\mpv.def" /machine:x64 /out:"$mpvDir\mpv.lib"
+
+          Add-Content -Path $env:GITHUB_PATH -Value $mpvDir
+          Add-Content -Path $env:GITHUB_ENV -Value "LIB=$mpvDir;$env:LIB"
 
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
@@ -154,5 +175,7 @@ jobs:
           releaseBody: "Pre-alpha build. Download one of the attached Tauri bundles."
           releaseDraft: ${{ env.RELEASE_DRAFT }}
           prerelease: true
-          args: "--bundles nsis,msi"
+          args: >-
+            --bundles nsis,msi
+            --config '{"bundle":{"resources":{"mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
           releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
