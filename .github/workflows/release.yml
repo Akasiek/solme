@@ -140,7 +140,11 @@ jobs:
           New-Item -ItemType Directory -Force -Path $mpvDir | Out-Null
           Invoke-WebRequest -Uri $env:MPV_DEV_URL -OutFile $archive
           7z x $archive "-o$mpvDir" -y
+          Get-ChildItem $mpvDir
 
+          if (!(Test-Path "$mpvDir\libmpv-2.dll")) {
+            throw "libmpv-2.dll was not extracted to $mpvDir"
+          }
           $exports = & dumpbin /nologo /exports "$mpvDir\libmpv-2.dll"
           $names = $exports | ForEach-Object {
             if ($_ -match '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\S+)$') {
@@ -177,5 +181,5 @@ jobs:
           prerelease: true
           args: >-
             --bundles nsis,msi
-            --config '{"bundle":{"resources":{"mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
+            --config '{"bundle":{"resources":{"src-tauri/mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
           releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
