@@ -327,13 +327,25 @@ fn album_type(
     secondary_types: Vec<String>,
     release_types: Vec<String>,
 ) -> Option<String> {
-    secondary_types
+    let album_types = secondary_types
         .into_iter()
         .chain(release_types.into_iter())
-        .find(|album_type| !album_type.trim().is_empty() && !album_type.eq_ignore_ascii_case("album"))
-        .or(primary_type)
-        .map(|album_type| album_type.trim().to_string())
-        .filter(|album_type| !album_type.is_empty())
+        .chain(primary_type)
+        .flat_map(|album_type| {
+            album_type
+                .split([';', ',', '/'])
+                .map(str::trim)
+                .filter(|album_type| !album_type.is_empty())
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        })
+        .collect::<Vec<_>>();
+
+    album_types
+        .iter()
+        .find(|album_type| !album_type.eq_ignore_ascii_case("album"))
+        .or_else(|| album_types.first())
+        .cloned()
 }
 
 #[derive(Deserialize)]

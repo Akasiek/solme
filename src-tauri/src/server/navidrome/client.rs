@@ -621,6 +621,7 @@ mod tests {
                     "songCount": 4,
                     "duration": 900,
                     "coverArt": "cover-1",
+                    "musicBrainzReleaseGroupType": "album;live",
                     "releaseDate": {"year": 2026, "month": 7, "day": 4},
                     "originalReleaseDate": {"year": 2025, "month": 12, "day": 31}
                   }, {
@@ -655,6 +656,9 @@ mod tests {
         assert_eq!(albums[1].id, "album-2");
         assert_eq!(albums[1].release_date, None);
         assert_eq!(albums[1].original_release_date, None);
+
+        let typed_album = albums.into_iter().next().unwrap().into_album();
+        assert_eq!(typed_album.album_type.as_deref(), Some("live"));
     }
 
     fn backend(url: &str) -> NavidromeBackend {
