@@ -301,6 +301,7 @@ mod tests {
         CachedAlbum {
             remote_id: remote_id.to_string(),
             name: name.to_string(),
+            album_type: None,
             artist_name: artist_name.to_string(),
             artist_id: Some("artist-1".to_string()),
             year: Some(2026),

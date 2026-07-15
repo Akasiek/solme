@@ -216,7 +216,7 @@ impl LibraryRepository for SqliteRepository {
 
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
         sqlx::query_as::<_, CachedAlbum>(
-            "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+            "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                     a.release_date, a.original_release_date, a.server_added_at, a.song_count,
                     a.duration_seconds, artwork.local_path AS artwork_path
              FROM albums a
@@ -597,6 +597,7 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let (repository, directory) = repository().await;
             let mut snapshot = snapshot(false);
+            snapshot.albums[0].album.album_type = Some("Live".to_string());
             snapshot.artists.push(Artist {
                 remote_id: "artist-2".to_string(),
                 name: "Other Artist".to_string(),
@@ -606,6 +607,7 @@ mod tests {
                 album: Album {
                     remote_id: "album-2".to_string(),
                     name: "Other Album".to_string(),
+                    album_type: None,
                     artist_id: Some("artist-2".to_string()),
                     artist_name: "Other Artist".to_string(),
                     year: Some(2025),
@@ -631,6 +633,7 @@ mod tests {
                 .unwrap();
             assert_eq!(albums.len(), 1);
             assert_eq!(albums[0].remote_id, "album-1");
+            assert_eq!(albums[0].album_type.as_deref(), Some("Live"));
 
             let missing = repository
                 .artist_albums("profile", "missing-artist")
@@ -1127,6 +1130,7 @@ mod tests {
                 album: Album {
                     remote_id: "album-1".to_string(),
                     name: "Album".to_string(),
+                    album_type: None,
                     artist_id: Some("artist-1".to_string()),
                     artist_name: "Artist".to_string(),
                     year: Some(2026),
@@ -1158,6 +1162,7 @@ mod tests {
             album: Album {
                 remote_id: remote_id.to_string(),
                 name: name.to_string(),
+                album_type: None,
                 artist_id: Some("artist-1".to_string()),
                 artist_name: "Artist".to_string(),
                 year: Some(2026),
@@ -1229,6 +1234,7 @@ mod tests {
                     album: Album {
                         remote_id: album_id.clone(),
                         name: format!("Album {index}"),
+                        album_type: None,
                         artist_id: Some(artist_id.clone()),
                         artist_name: format!("Artist {index}"),
                         year: Some(2026),

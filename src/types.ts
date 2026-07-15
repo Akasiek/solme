@@ -48,6 +48,7 @@ export interface CachedArtistDetails {
 export interface CachedAlbum {
   remoteId: string;
   name: string;
+  albumType?: string;
   artistName: string;
   artistId?: string;
   year?: number;

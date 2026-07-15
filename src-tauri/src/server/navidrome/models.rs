@@ -94,6 +94,11 @@ pub(super) struct AlbumListDto {
 pub(super) struct AlbumDto {
     pub id: String,
     pub name: String,
+    pub music_brainz_release_group_type: Option<String>,
+    #[serde(default)]
+    pub music_brainz_release_group_secondary_types: Vec<String>,
+    #[serde(default)]
+    pub release_types: Vec<String>,
     pub artist_id: Option<String>,
     #[serde(default)]
     pub artist: String,
@@ -120,6 +125,9 @@ impl AlbumDto {
         let AlbumDto {
             id,
             name,
+            music_brainz_release_group_type,
+            music_brainz_release_group_secondary_types,
+            release_types,
             artist_id,
             artist,
             year,
@@ -137,6 +145,11 @@ impl AlbumDto {
         Album {
             remote_id: id,
             name,
+            album_type: album_type(
+                music_brainz_release_group_type,
+                music_brainz_release_group_secondary_types,
+                release_types,
+            ),
             artist_id,
             artist_name: artist,
             year,
@@ -154,6 +167,9 @@ impl AlbumDto {
         let AlbumDto {
             id,
             name,
+            music_brainz_release_group_type,
+            music_brainz_release_group_secondary_types,
+            release_types,
             artist_id,
             artist,
             year,
@@ -176,6 +192,11 @@ impl AlbumDto {
             album: Album {
                 remote_id: id,
                 name,
+                album_type: album_type(
+                    music_brainz_release_group_type,
+                    music_brainz_release_group_secondary_types,
+                    release_types,
+                ),
                 artist_id,
                 artist_name: artist,
                 year,
@@ -299,6 +320,20 @@ fn collect_genres(primary: Option<String>, genres: Vec<NamedGenreDto>) -> Vec<St
         }
     }
     values
+}
+
+fn album_type(
+    primary_type: Option<String>,
+    secondary_types: Vec<String>,
+    release_types: Vec<String>,
+) -> Option<String> {
+    secondary_types
+        .into_iter()
+        .chain(release_types.into_iter())
+        .find(|album_type| !album_type.trim().is_empty() && !album_type.eq_ignore_ascii_case("album"))
+        .or(primary_type)
+        .map(|album_type| album_type.trim().to_string())
+        .filter(|album_type| !album_type.is_empty())
 }
 
 #[derive(Deserialize)]

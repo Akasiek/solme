@@ -11,6 +11,7 @@ pub struct Artist {
 pub struct Album {
     pub remote_id: String,
     pub name: String,
+    pub album_type: Option<String>,
     pub artist_id: Option<String>,
     pub artist_name: String,
     pub year: Option<i64>,
@@ -138,6 +139,7 @@ pub struct CachedArtistDetails {
 pub struct CachedAlbum {
     pub remote_id: String,
     pub name: String,
+    pub album_type: Option<String>,
     pub artist_name: String,
     pub artist_id: Option<String>,
     pub year: Option<i64>,

@@ -8,7 +8,7 @@ use crate::database::SqliteRepository;
 
 const SQLITE_BIND_LIMIT: usize = 999;
 const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
-    SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+    SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
            a.release_date, a.original_release_date, a.server_added_at, a.song_count,
            a.duration_seconds, art.local_path AS artwork_path
     FROM albums a
@@ -27,10 +27,10 @@ pub(crate) async fn insert_albums(
     generation: &str,
     albums: &[AlbumWithSongs],
 ) -> Result<(), String> {
-    for albums in albums.chunks(SQLITE_BIND_LIMIT / 13) {
+    for albums in albums.chunks(SQLITE_BIND_LIMIT / 14) {
         let mut query = QueryBuilder::new(
             "INSERT INTO albums
-             (profile_id, generation, remote_id, name, artist_id, artist_name,
+             (profile_id, generation, remote_id, name, album_type, artist_id, artist_name,
               year, release_date, original_release_date, server_added_at, song_count, duration_seconds, cover_art_id) ",
         );
         query.push_values(albums, |mut row, details| {
@@ -39,6 +39,7 @@ pub(crate) async fn insert_albums(
                 .push_bind(generation)
                 .push_bind(&album.remote_id)
                 .push_bind(&album.name)
+                .push_bind(&album.album_type)
                 .push_bind(&album.artist_id)
                 .push_bind(&album.artist_name)
                 .push_bind(album.year)
@@ -181,7 +182,7 @@ pub(crate) async fn fuzzy_album_candidates(
     profile_id: &str,
 ) -> Result<Vec<CachedAlbum>, String> {
     sqlx::query_as::<_, CachedAlbum>(
-        "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+        "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
                 a.duration_seconds, artwork.local_path AS artwork_path
          FROM albums a
@@ -211,7 +212,7 @@ pub(crate) async fn search_albums(
     };
     let limit = limit.clamp(1, 500);
     let results = sqlx::query_as::<_, CachedAlbum>(
-        "SELECT a.remote_id, a.name, a.artist_name, a.artist_id, a.year,
+        "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
                 a.duration_seconds, artwork.local_path AS artwork_path
          FROM album_search

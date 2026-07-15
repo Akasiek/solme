@@ -414,6 +414,9 @@ impl LibrarySyncService {
 }
 
 fn merge_album_index_metadata(index: Album, mut details: AlbumWithSongs) -> AlbumWithSongs {
+    if details.album.album_type.is_none() {
+        details.album.album_type = index.album_type;
+    }
     if details.album.release_date.is_none() {
         details.album.release_date = index.release_date;
     }
@@ -595,10 +598,12 @@ mod tests {
     #[test]
     fn album_detail_keeps_index_dates_when_detail_omits_them() {
         let mut index = album();
+        index.album_type = Some("Live".to_string());
         index.release_date = Some("2026-01-01".to_string());
         index.original_release_date = Some("2025-12-31".to_string());
 
         let mut detail_album = album();
+        detail_album.album_type = None;
         detail_album.release_date = None;
         detail_album.original_release_date = None;
         let details = AlbumWithSongs {
@@ -609,6 +614,7 @@ mod tests {
         let merged = super::merge_album_index_metadata(index, details);
 
         assert_eq!(merged.album.release_date.as_deref(), Some("2026-01-01"));
+        assert_eq!(merged.album.album_type.as_deref(), Some("Live"));
         assert_eq!(
             merged.album.original_release_date.as_deref(),
             Some("2025-12-31")
@@ -1029,6 +1035,7 @@ mod tests {
         Album {
             remote_id: "album-1".to_string(),
             name: "Album".to_string(),
+            album_type: None,
             artist_id: Some("artist-1".to_string()),
             artist_name: "Artist".to_string(),
             year: Some(2026),
@@ -1046,6 +1053,7 @@ mod tests {
         CachedAlbum {
             remote_id: remote_id.to_string(),
             name: remote_id.to_string(),
+            album_type: None,
             artist_name: "Artist".to_string(),
             artist_id: Some("artist-1".to_string()),
             year: Some(2026),
