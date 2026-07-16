@@ -20,12 +20,13 @@ const handleArtworkLoad = (event: Event) => {
 </script>
 
 <template>
-  <div class="relative z-10 size-60 shrink-0 md:size-72 lg:size-80 xl:size-88">
+  <div class="relative z-10 size-60 shrink-0 overflow-visible md:size-72 lg:size-80 xl:size-88">
     <img
       v-if="artist.artworkPath"
+      :key="`glow-${artist.artworkPath}`"
       :src="artworkSource(artist.artworkPath)"
-      :alt="`${artist.name} artwork`"
-      class="absolute inset-0 h-full w-full scale-110 rounded-full object-cover object-center opacity-40 blur-2xl"
+      alt=""
+      class="pointer-events-none absolute -inset-6 h-[calc(100%+3rem)] w-[calc(100%+3rem)] rounded-full object-cover object-center opacity-40 blur-2xl"
       aria-hidden="true"
     />
     <div
@@ -33,6 +34,7 @@ const handleArtworkLoad = (event: Event) => {
     >
       <img
         v-if="artist.artworkPath"
+        :key="`artwork-${artist.artworkPath}`"
         :src="artworkSource(artist.artworkPath)"
         :alt="`${artist.name} artwork`"
         class="h-full w-full object-cover object-center"
