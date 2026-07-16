@@ -19,7 +19,7 @@ defineEmits<{
 <template>
   <button
     type="button"
-    class="group relative grid min-h-14 w-full grid-cols-[3rem_minmax(0,1fr)_4rem] items-center gap-4 rounded-md px-4 py-2 text-left font-sans hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70"
+    class="group relative grid w-full grid-cols-[3rem_minmax(0,1fr)_4rem] items-center gap-4 rounded-md px-4 py-2.5 text-left font-sans hover:bg-zinc-800 focus-visible:bg-zinc-800 focus-visible:outline-none disabled:cursor-wait disabled:opacity-70"
     :class="
       isCurrent
         ? 'bg-zinc-800/50 shadow-inner shadow-black/20 before:absolute before:top-2 before:bottom-2 before:left-0 before:w-1 before:rounded-r before:bg-accent'
