@@ -6,7 +6,7 @@ defineOptions({
 });
 
 defineProps<{
-  fieldLabel: string;
+  fieldLabel?: string;
   type?: string;
   placeholder?: string;
 }>();
@@ -22,7 +22,7 @@ const inputAttrs = computed(() => {
 
 <template>
   <label class="space-y-2" :class="$attrs.class">
-    <span class="block font-sans text-sm font-medium text-zinc-300">{{ fieldLabel }}</span>
+    <span v-if="fieldLabel" class="block font-sans text-sm font-medium text-zinc-300">{{ fieldLabel }}</span>
     <input
       v-model="model"
       v-bind="inputAttrs"
