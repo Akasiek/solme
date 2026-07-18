@@ -1,9 +1,23 @@
 import { useMagicKeys } from "@vueuse/core";
 
 export const overrideKeyAction = (key: string, callback: () => void) => {
+  let shouldPreventKeyUp = false;
+
   useMagicKeys({
+    passive: false,
     onEventFired(e) {
-      if (e.type === "keydown" && e.key === key && !e.repeat && !isUserInputActive()) {
+      if (e.key !== key) {
+        return;
+      }
+
+      if (e.type === "keyup" && shouldPreventKeyUp) {
+        shouldPreventKeyUp = false;
+        preventDefaultAndStopPropagation(e);
+        return;
+      }
+
+      if (e.type === "keydown" && !e.repeat && !isUserInputActive()) {
+        shouldPreventKeyUp = true;
         preventDefaultAndStopPropagation(e);
         callback();
       }
@@ -15,11 +29,16 @@ export const overrideKeyAction = (key: string, callback: () => void) => {
 export const preventDefaultAndStopPropagation = (e: KeyboardEvent): void => {
   e.preventDefault();
   e.stopPropagation();
+  e.stopImmediatePropagation();
 };
 
-// Check if the user is currently focused on an input, textarea, or contenteditable element
+// Check if the user is currently focused on an input, textarea
 export const isUserInputActive = (): boolean => {
   const activeElement = document.activeElement;
-  const tags = ["INPUT", "TEXTAREA"];
-  return !!activeElement && (tags.includes(activeElement.tagName) || (activeElement as HTMLElement).isContentEditable);
+
+  return activeElement
+    ? activeElement.tagName === "TEXTAREA" ||
+        (activeElement.tagName === "INPUT" && activeElement.getAttribute("type") !== "range") ||
+        (activeElement as HTMLElement).isContentEditable
+    : false;
 };
