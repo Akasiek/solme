@@ -54,10 +54,10 @@ const playTrack = async () => {
       </div>
 
       <span class="min-w-0">
-        <span class="block truncate font-serif text-sm font-semibold text-zinc-100 group-hover:underline">
+        <span class="block truncate font-serif font-semibold text-zinc-100 group-hover:underline">
           {{ song.title }}
         </span>
-        <span class="mt-1 block truncate font-sans text-xs text-zinc-400">
+        <span class="mt-1 block truncate font-sans text-sm text-zinc-400">
           {{ song.artistName }} · {{ song.albumName }}
         </span>
       </span>
