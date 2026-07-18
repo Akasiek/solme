@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { invoke } from "@tauri-apps/api/core";
-import { useRouter } from "vue-router";
 import { Library, Music, Search, Tags, Users } from "@lucide/vue";
 import Button from "@/components/Button.vue";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
+import { useSearchModal } from "@/composables/useSearchModal";
 import { artworkSource } from "@/utils/artwork";
 import type { HomeAlbumSections, LibrarySummary } from "@/types";
 
@@ -42,7 +42,7 @@ const heroDescriptions = [
   "Old favorites, recent finds, and the next album you forgot you loved.",
 ];
 const heroDescription = heroDescriptions[Math.floor(Math.random() * heroDescriptions.length)];
-const router = useRouter();
+const { openSearchModal } = useSearchModal();
 </script>
 
 <template>
@@ -62,7 +62,7 @@ const router = useRouter();
         </div>
 
         <div>
-          <Button type="button" @click="router.push({ name: 'search' })">
+          <Button type="button" @click="openSearchModal">
             <Search class="size-4" aria-hidden="true" />
             Search library
           </Button>

@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { House, Search, Settings } from "@lucide/vue";
-import { useRouter } from "vue-router";
+import { RouterLink, useRouter } from "vue-router";
+
+import { useSearchModal } from "@/composables/useSearchModal";
 
 defineProps<{
   isCollapsed: boolean;
 }>();
 
 const router = useRouter();
+const { openSearchModal } = useSearchModal();
 
 const items = [
   {
@@ -18,7 +21,7 @@ const items = [
   {
     name: "Search",
     icon: Search,
-    route: "/search",
+    onClick: openSearchModal,
     animation: "group-hover:rotate-12 group-hover:scale-110",
   },
   {
@@ -40,17 +43,19 @@ const isActiveRoute = (route: string) => {
 
 <template>
   <nav class="flex flex-col gap-1">
-    <RouterLink
+    <component
       v-for="item in items"
       :key="item.name"
-      :to="item.route"
+      :is="item.route ? RouterLink : 'button'"
+      v-bind="item.route ? { to: item.route } : { type: 'button' }"
       :title="item.name"
       class="group flex items-center rounded px-4 py-2 font-medium text-zinc-100 hover:bg-zinc-800"
       :class="{
-        'bg-zinc-800': isActiveRoute(item.route),
+        'bg-zinc-800': item.route && isActiveRoute(item.route),
         'justify-center': isCollapsed,
         'gap-3': !isCollapsed,
       }"
+      @click="item.onClick?.()"
     >
       <component
         :is="item.icon"
@@ -63,6 +68,6 @@ const isActiveRoute = (route: string) => {
       >
         {{ item.name }}
       </span>
-    </RouterLink>
+    </component>
   </nav>
 </template>

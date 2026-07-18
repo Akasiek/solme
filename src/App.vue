@@ -2,12 +2,17 @@
 import AppTitleBar from "@/components/AppTitleBar.vue";
 import AsideMenu from "@/components/AsideMenu";
 import PlayerBar from "@/components/PlayerBar";
+import SearchModal from "@/components/Search/SearchModal";
 import ServerConnectionOverlay from "@/components/ServerConnectionOverlay.vue";
 import ToastHost from "@/components/ToastHost.vue";
+import { useSearchModal } from "@/composables/useSearchModal";
+
+const { isSearchModalOpen } = useSearchModal();
 </script>
 
 <template>
   <div class="flex h-dvh flex-col bg-zinc-950 font-serif text-zinc-100">
+    <SearchModal v-model:show="isSearchModalOpen" />
     <AppTitleBar />
     <div class="flex min-h-0 flex-1">
       <AsideMenu />
