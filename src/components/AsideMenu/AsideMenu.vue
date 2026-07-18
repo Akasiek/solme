@@ -180,7 +180,7 @@ onUnmounted(() => {
           </div>
           <button
             type="button"
-            class="grid size-8 shrink-0 cursor-pointer place-items-center rounded text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+            class="flex cursor-pointer items-center rounded px-2.5 py-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
             :title="isCollapsed ? 'Expand menu' : 'Collapse menu'"
             @click="toggleCollapsed"
           >
@@ -194,11 +194,11 @@ onUnmounted(() => {
             :key="item.name"
             :to="item.route"
             :title="item.name"
-            class="group flex items-center rounded py-2 font-medium text-zinc-100 hover:bg-zinc-800"
+            class="group flex items-center rounded px-4 py-2 font-medium text-zinc-100 hover:bg-zinc-800"
             :class="{
               'bg-zinc-800': isActiveRoute(item.route),
-              'justify-center px-4': isCollapsed,
-              'gap-3 px-4': !isCollapsed,
+              'justify-center': isCollapsed,
+              'gap-3': !isCollapsed,
             }"
           >
             <component
