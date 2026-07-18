@@ -14,9 +14,9 @@ use crate::server::{backend::MusicServer, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{
-        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedArtistDetails,
-        CachedSong, HomeAlbumSections, LibrarySnapshot, LibrarySummary, LibrarySyncPhase,
-        LibrarySyncStatus,
+        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedArtist,
+        CachedArtistDetails, CachedSong, HomeAlbumSections, LibrarySnapshot, LibrarySummary,
+        LibrarySyncPhase, LibrarySyncStatus,
     },
     repository::LibraryRepository,
     time::now_epoch_seconds,
@@ -155,6 +155,22 @@ impl LibrarySyncService {
             .artist_albums(&profile_id, artist_id)
             .await?;
         Ok(Some(CachedArtistDetails { artist, albums }))
+    }
+
+    pub async fn search_artists(
+        &self,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedArtist>, String> {
+        if query.trim().is_empty() {
+            return Ok(Vec::new());
+        }
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository
+            .search_artists(&profile_id, query, limit)
+            .await
     }
 
     pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbumDetails>, String> {
@@ -903,6 +919,15 @@ mod tests {
                 album_count: 1,
                 artwork_path: None,
             }))
+        }
+
+        async fn search_artists(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedArtist>, String> {
+            Ok(Vec::new())
         }
 
         async fn artist_albums(

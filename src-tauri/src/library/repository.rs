@@ -29,6 +29,12 @@ pub trait LibraryRepository: Send + Sync {
         profile_id: &str,
         artist_id: &str,
     ) -> Result<Option<CachedArtist>, String>;
+    async fn search_artists(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedArtist>, String>;
     async fn artist_albums(
         &self,
         profile_id: &str,
@@ -115,6 +121,8 @@ impl LibraryRepository for SqliteRepository {
             .map_err(|error| format!("Failed to begin library transaction: {error}"))?;
 
         query::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
+        query::insert_artist_search(&mut transaction, profile_id, generation, &snapshot.artists)
+            .await?;
         query::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
         query::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
         query::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
@@ -194,6 +202,15 @@ impl LibraryRepository for SqliteRepository {
         artist_id: &str,
     ) -> Result<Option<CachedArtist>, String> {
         query::artist(self, profile_id, artist_id).await
+    }
+
+    async fn search_artists(
+        &self,
+        profile_id: &str,
+        query: &str,
+        limit: i64,
+    ) -> Result<Vec<CachedArtist>, String> {
+        query::search_artists(self, profile_id, query, limit).await
     }
 
     async fn artist_albums(
@@ -548,6 +565,74 @@ mod tests {
                 .await
                 .unwrap()
                 .is_none());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn searches_artists_by_name_with_prefix_and_fuzzy_fallback() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.artists[0].name = "Nirvana".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let by_prefix = repository
+                .search_artists("profile", "nir", 20)
+                .await
+                .unwrap();
+            let by_typo = repository
+                .search_artists("profile", "nibana", 20)
+                .await
+                .unwrap();
+
+            assert_eq!(by_prefix.len(), 1);
+            assert_eq!(by_prefix[0].remote_id, "artist-1");
+            assert_eq!(by_typo.len(), 1);
+            assert_eq!(by_typo[0].remote_id, "artist-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn artist_search_uses_only_the_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut old_snapshot = snapshot(false);
+            old_snapshot.artists[0].name = "Old Artist".to_string();
+            repository
+                .activate_snapshot("profile", "generation-1", None, &old_snapshot, 123)
+                .await
+                .unwrap();
+
+            let mut new_snapshot = snapshot(false);
+            new_snapshot.artists[0].name = "New Artist".to_string();
+            repository
+                .activate_snapshot("profile", "generation-2", None, &new_snapshot, 124)
+                .await
+                .unwrap();
+
+            assert!(repository
+                .search_artists("profile", "old", 20)
+                .await
+                .unwrap()
+                .is_empty());
+            assert_eq!(
+                repository
+                    .search_artists("profile", "new", 20)
+                    .await
+                    .unwrap()
+                    .len(),
+                1
+            );
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

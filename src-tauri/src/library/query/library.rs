@@ -5,6 +5,11 @@ pub(crate) async fn delete_stale_generations(
     profile_id: &str,
     generation: &str,
 ) {
+    let _ = sqlx::query("DELETE FROM artist_search WHERE profile_id = ? AND generation <> ?")
+        .bind(profile_id)
+        .bind(generation)
+        .execute(&repo.pool)
+        .await;
     let _ = sqlx::query!(
         "DELETE FROM album_search WHERE profile_id = ? AND generation <> ?",
         profile_id,

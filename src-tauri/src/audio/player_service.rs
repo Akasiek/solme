@@ -899,6 +899,15 @@ mod tests {
             unimplemented!()
         }
 
+        async fn search_artists(
+            &self,
+            _profile_id: &str,
+            _query: &str,
+            _limit: i64,
+        ) -> Result<Vec<CachedArtist>, String> {
+            Ok(Vec::new())
+        }
+
         async fn artist_albums(
             &self,
             _profile_id: &str,

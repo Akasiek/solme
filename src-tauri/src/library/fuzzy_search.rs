@@ -1,6 +1,6 @@
 use std::{cmp::Ordering, collections::HashSet};
 
-use super::models::{CachedAlbum, CachedSong};
+use super::models::{CachedAlbum, CachedArtist, CachedSong};
 
 const FUZZY_MIN_RESULTS: usize = 1;
 
@@ -16,6 +16,10 @@ pub fn should_use_fuzzy(query: &str, result_count: usize, limit: i64) -> Option<
 
 pub fn rank_albums(query: &str, candidates: Vec<CachedAlbum>, limit: i64) -> Vec<CachedAlbum> {
     rank_candidates(query, candidates, limit, album_score)
+}
+
+pub fn rank_artists(query: &str, candidates: Vec<CachedArtist>, limit: i64) -> Vec<CachedArtist> {
+    rank_candidates(query, candidates, limit, artist_score)
 }
 
 pub fn rank_songs(query: &str, candidates: Vec<CachedSong>, limit: i64) -> Vec<CachedSong> {
@@ -36,6 +40,25 @@ pub fn merge_albums(
         fuzzy_results
             .into_iter()
             .filter_map(|album| seen.insert(album.remote_id.clone()).then_some(album)),
+    );
+    results.truncate(limit as usize);
+    results
+}
+
+pub fn merge_artists(
+    mut results: Vec<CachedArtist>,
+    fuzzy_results: Vec<CachedArtist>,
+    limit: i64,
+) -> Vec<CachedArtist> {
+    let mut seen = results
+        .iter()
+        .map(|artist| artist.remote_id.clone())
+        .collect::<HashSet<_>>();
+
+    results.extend(
+        fuzzy_results
+            .into_iter()
+            .filter_map(|artist| seen.insert(artist.remote_id.clone()).then_some(artist)),
     );
     results.truncate(limit as usize);
     results
@@ -121,6 +144,10 @@ fn threshold(query: &str) -> f64 {
 
 fn album_score(query: &str, album: &CachedAlbum) -> f64 {
     text_similarity(query, &album.name).max(text_similarity(query, &album.artist_name) * 1.05)
+}
+
+fn artist_score(query: &str, artist: &CachedArtist) -> f64 {
+    text_similarity(query, &artist.name)
 }
 
 fn song_score(query: &str, song: &CachedSong) -> f64 {
@@ -262,6 +289,19 @@ mod tests {
     }
 
     #[test]
+    fn ranks_artist_typos_against_artist_names() {
+        let artists = vec![
+            artist("artist-1", "Nirvana"),
+            artist("artist-2", "Miles Davis"),
+        ];
+
+        let results = rank_artists("nibana", artists, 20);
+
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].remote_id, "artist-1");
+    }
+
+    #[test]
     fn ranks_song_typos_against_title_artist_and_album_names() {
         let songs = vec![
             song("song-1", "Smells Like Teen Spirit", "Nirvana", "Nevermind"),
@@ -310,6 +350,15 @@ mod tests {
             server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
             song_count: 1,
             duration_seconds: 180,
+            artwork_path: None,
+        }
+    }
+
+    fn artist(remote_id: &str, name: &str) -> CachedArtist {
+        CachedArtist {
+            remote_id: remote_id.to_string(),
+            name: name.to_string(),
+            album_count: 1,
             artwork_path: None,
         }
     }
