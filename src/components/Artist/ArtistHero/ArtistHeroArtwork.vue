@@ -25,7 +25,7 @@ const handleArtworkLoad = (event: Event) => {
       v-if="artist.artworkPath"
       :src="artworkSource(artist.artworkPath)"
       :alt="`${artist.name} artwork`"
-      class="absolute inset-0 h-full w-full scale-110 rounded-full object-cover object-center opacity-40 blur-2xl"
+      class="absolute inset-0 h-full w-full rounded-full object-cover object-center opacity-30 blur-2xl"
       aria-hidden="true"
     />
     <div
