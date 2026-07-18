@@ -6,7 +6,7 @@ import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
-import { overrideKeyAction } from "@/utils/hotkeys";
+import { useHotkey } from "@/composables/useHotkey";
 
 const playerStatusStore = usePlayerStatusStore();
 const playerStatus = computed(() => playerStatusStore.status);
@@ -24,7 +24,7 @@ const togglePlayback = () => {
   });
 };
 
-overrideKeyAction(" ", togglePlayback);
+useHotkey(" ", togglePlayback);
 
 onMounted(async () => {
   await playerStatusStore.startListening();
