@@ -8,7 +8,7 @@ defineProps<{
 
 <template>
   <div
-    class="z-0 -mt-8 rounded-lg border border-zinc-800 bg-zinc-950/70 p-7 pt-12 shadow-2xl shadow-black/25 backdrop-blur md:mt-0 md:-ml-16 md:w-104 md:p-9 md:pl-20 lg:-ml-20 lg:w-lg lg:p-12 lg:pl-24 xl:w-xl"
+    class="z-0 -mt-8 rounded-lg border border-zinc-800 bg-zinc-950/70 p-7 pt-12 shadow-2xl shadow-black/25 backdrop-blur md:mt-0 md:-ml-16 md:w-104 md:p-9 md:pl-20 lg:-ml-20 lg:w-lg lg:p-12 lg:pl-24 xl:w-auto xl:max-w-3xl"
   >
     <div class="min-w-0 space-y-3">
       <p class="font-sans text-sm font-semibold tracking-wide text-accent uppercase">Artist</p>
