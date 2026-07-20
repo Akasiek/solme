@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import AppTitleBar from "@/components/AppTitleBar.vue";
-import AsideMenu from "@/components/AsideMenu";
+import LeftAsideMenu from "@/components/LeftAsideMenu";
 import PlayerBar from "@/components/PlayerBar";
 import SearchModal from "@/components/Search/SearchModal";
 import ServerConnectionOverlay from "@/components/ServerConnectionOverlay.vue";
@@ -15,7 +15,7 @@ const { isSearchModalOpen } = useSearchModal();
     <SearchModal v-model:show="isSearchModalOpen" />
     <AppTitleBar />
     <div class="flex min-h-0 flex-1">
-      <AsideMenu />
+      <LeftAsideMenu />
       <main class="min-w-0 flex-1 overflow-y-auto">
         <RouterView />
       </main>

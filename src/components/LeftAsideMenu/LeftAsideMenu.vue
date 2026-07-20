@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { useAsideMenuSize } from "@/composables/useAsideMenuSize";
 
-import AsideMenuHeader from "./AsideMenuHeader.vue";
-import AsideMenuNavigation from "./AsideMenuNavigation.vue";
+import LeftAsideMenuHeader from "./LeftAsideMenuHeader.vue";
+import LeftAsideMenuNavigation from "./LeftAsideMenuNavigation.vue";
 
 const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } = useAsideMenuSize();
 </script>
@@ -14,8 +14,8 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleColl
     :style="{ width: `${asideWidth}px` }"
   >
     <div class="flex h-full flex-col px-4 py-6">
-      <AsideMenuHeader :is-collapsed="isCollapsed" @toggle="toggleCollapsed" />
-      <AsideMenuNavigation :is-collapsed="isCollapsed" />
+      <LeftAsideMenuHeader :is-collapsed="isCollapsed" @toggle="toggleCollapsed" />
+      <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
     </div>
     <div
       v-if="!isCollapsed"
