@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
+import { useElementSize } from "@vueuse/core";
+import { computed, ref, useTemplateRef, watch } from "vue";
 import type { CachedAlbum } from "@/types.js";
 import AlbumCard from "@/components/Album/AlbumCard/AlbumCard.vue";
 import CarouselControlButton from "@/components/Album/AlbumCarousel/CarouselControlButton.vue";
+
+const GAP_WIDTH = 16;
 
 const props = defineProps<{
   title: string;
@@ -10,120 +13,76 @@ const props = defineProps<{
 }>();
 
 const viewportRef = useTemplateRef<HTMLElement>("viewport");
+const { width: viewportWidth } = useElementSize(viewportRef);
 const pageIndex = ref(0);
-const visibleCount = ref(1);
 const navigationDirection = ref<"next" | "previous">("next");
 const shouldAnimatePage = ref(false);
-const hasMeasuredViewport = ref(false);
-let resizeObserver: ResizeObserver | undefined;
 
-const maxPageIndex = computed(() => Math.max(0, Math.ceil(props.albums.length / visibleCount.value) - 1));
-const startIndex = computed(() => Math.min(pageIndex.value * visibleCount.value, maxStartIndex.value));
-const maxStartIndex = computed(() => Math.max(0, props.albums.length - visibleCount.value));
-const visibleAlbums = computed(() => props.albums.slice(startIndex.value, startIndex.value + visibleCount.value));
-const visibleColumnCount = computed(() => Math.max(1, visibleAlbums.value.length));
-const carouselGridStyle = computed(() => ({
-  gridTemplateColumns: `repeat(${visibleColumnCount.value}, minmax(0, 1fr))`,
-}));
-const carouselPageKey = computed(() => visibleAlbums.value.map((album) => album.remoteId).join(":"));
+const page = computed(() => {
+  const minCardWidth = viewportWidth.value >= 1024 ? 220 : viewportWidth.value >= 768 ? 200 : 180;
+  const size = Math.max(1, Math.floor((viewportWidth.value + GAP_WIDTH) / (minCardWidth + GAP_WIDTH)));
+  const maxIndex = Math.max(0, Math.ceil(props.albums.length / size) - 1);
+  const start = Math.min(pageIndex.value * size, Math.max(0, props.albums.length - size));
+  const albums = props.albums.slice(start, start + size);
+
+  return {
+    albums,
+    gridStyle: {
+      gridTemplateColumns: `repeat(${Math.max(1, albums.length)}, minmax(0, 1fr))`,
+    },
+    key: albums.map((album) => album.remoteId).join(":"),
+    maxIndex,
+    size,
+  };
+});
 const carouselTransitionName = computed(() =>
   shouldAnimatePage.value ? `album-carousel-${navigationDirection.value}` : "album-carousel-none",
 );
-const hasControls = computed(() => props.albums.length > visibleCount.value);
-const canGoPrevious = computed(() => startIndex.value > 0);
-const canGoNext = computed(() => startIndex.value < maxStartIndex.value);
 
-function updateVisibleCount() {
-  const viewportWidth = viewportRef.value?.clientWidth ?? 0;
-
-  if (viewportWidth === 0) {
-    return false;
-  }
-
-  const gapWidth = 16;
-  const minCardWidth = viewportWidth >= 1024 ? 220 : viewportWidth >= 768 ? 200 : 180;
-  visibleCount.value = Math.max(1, Math.floor((viewportWidth + gapWidth) / (minCardWidth + gapWidth)));
-  return true;
-}
-
-async function measureViewport() {
-  await nextTick();
-
-  if (!viewportRef.value) {
-    return;
-  }
-
-  if (updateVisibleCount()) {
-    hasMeasuredViewport.value = true;
-  }
-
-  if (!resizeObserver) {
-    resizeObserver = new ResizeObserver(() => {
-      shouldAnimatePage.value = false;
-      if (updateVisibleCount()) {
-        hasMeasuredViewport.value = true;
-      }
-    });
-    resizeObserver.observe(viewportRef.value);
-  }
-}
-
-function goPrevious() {
-  navigationDirection.value = "previous";
+function changePage(direction: "next" | "previous") {
+  navigationDirection.value = direction;
   shouldAnimatePage.value = true;
-  pageIndex.value = Math.max(0, pageIndex.value - 1);
+  const offset = direction === "next" ? 1 : -1;
+  pageIndex.value = Math.min(page.value.maxIndex, Math.max(0, pageIndex.value + offset));
 }
 
-function goNext() {
-  navigationDirection.value = "next";
-  shouldAnimatePage.value = true;
-  pageIndex.value = Math.min(maxPageIndex.value, pageIndex.value + 1);
-}
+watch(viewportWidth, () => {
+  shouldAnimatePage.value = false;
+  pageIndex.value = Math.min(pageIndex.value, page.value.maxIndex);
+});
 
 watch(
   () => props.albums.length,
-  async (albumCount) => {
+  () => {
     shouldAnimatePage.value = false;
-    hasMeasuredViewport.value = false;
     pageIndex.value = 0;
-
-    if (albumCount > 0) {
-      await measureViewport();
-    }
   },
 );
-
-watch([visibleCount, maxPageIndex], () => {
-  shouldAnimatePage.value = false;
-  pageIndex.value = Math.min(pageIndex.value, maxPageIndex.value);
-});
-
-onMounted(() => {
-  if (props.albums.length > 0) {
-    void measureViewport();
-  }
-});
-
-onBeforeUnmount(() => {
-  resizeObserver?.disconnect();
-});
 </script>
 
 <template>
   <section class="space-y-3">
     <div class="flex items-center justify-between gap-4">
       <h2 class="font-serif text-2xl font-bold">{{ title }}</h2>
-      <div v-if="hasMeasuredViewport && hasControls" class="flex shrink-0 items-center gap-2">
-        <CarouselControlButton :is-disabled="!canGoPrevious" :handle-click="goPrevious" variant="previous" />
-        <CarouselControlButton :is-disabled="!canGoNext" :handle-click="goNext" variant="next" />
+      <div v-if="viewportWidth > 0 && albums.length > page.size" class="flex shrink-0 items-center gap-2">
+        <CarouselControlButton
+          :is-disabled="pageIndex === 0"
+          :handle-click="() => changePage('previous')"
+          variant="previous"
+        />
+        <CarouselControlButton
+          :is-disabled="pageIndex === page.maxIndex"
+          :handle-click="() => changePage('next')"
+          variant="next"
+        />
       </div>
     </div>
     <p v-if="albums.length === 0" class="text-zinc-400">No albums to show.</p>
     <div v-else ref="viewport" class="relative overflow-hidden">
       <div class="relative overflow-hidden">
-        <Transition v-if="hasMeasuredViewport" :name="carouselTransitionName">
-          <div :key="carouselPageKey" class="grid gap-4" :style="carouselGridStyle">
-            <div v-for="album in visibleAlbums" :key="album.remoteId" class="min-w-0">
+        <Transition v-if="viewportWidth > 0" :name="carouselTransitionName">
+          <div :key="page.key" class="grid gap-4" :style="page.gridStyle">
+            <div v-for="album in page.albums" :key="album.remoteId" class="min-w-0">
               <AlbumCard :album="album" />
             </div>
           </div>
