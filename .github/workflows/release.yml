@@ -157,6 +157,8 @@ jobs:
           @("LIBRARY libmpv-2.dll", "EXPORTS") + $names | Set-Content "$mpvDir\mpv.def" -Encoding ASCII
           & lib /nologo /def:"$mpvDir\mpv.def" /machine:x64 /out:"$mpvDir\mpv.lib"
 
+          dumpbin /nologo /dependents "$mpvDir\libmpv-2.dll"
+
           Add-Content -Path $env:GITHUB_PATH -Value $mpvDir
           Add-Content -Path $env:GITHUB_ENV -Value "LIB=$mpvDir;$env:LIB"
 
@@ -196,5 +198,65 @@ jobs:
           prerelease: true
           args: >-
             --bundles nsis,msi
-            --config '{"bundle":{"resources":{"mpv/libmpv-2.dll":"libmpv-2.dll"}}}'
           releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
+
+      - name: Verify Windows bundles and libmpv startup
+        shell: pwsh
+        run: |
+          $nsisInstaller = Get-ChildItem "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
+          if (!$nsisInstaller) {
+            throw "Expected an NSIS installer"
+          }
+
+          $nsisContents = & 7z l $nsisInstaller.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to inspect the NSIS installer"
+          }
+          if ($nsisContents -notmatch "libmpv-2\.dll") {
+            throw "NSIS installer does not contain libmpv-2.dll"
+          }
+
+          $msiInstaller = Get-ChildItem "src-tauri\target\release\bundle\msi\*.msi" | Select-Object -First 1
+          if (!$msiInstaller) {
+            throw "Expected an MSI installer"
+          }
+
+          $msiContents = & 7z l $msiInstaller.FullName
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to inspect the MSI installer"
+          }
+          if ($msiContents -notmatch "libmpv-2\.dll") {
+            throw "MSI installer does not contain libmpv-2.dll"
+          }
+
+          $installDir = Join-Path $env:RUNNER_TEMP "solme-smoke-install"
+          if (Test-Path $installDir) {
+            Remove-Item $installDir -Recurse -Force
+          }
+
+          $installerProcess = Start-Process `
+            -FilePath $nsisInstaller.FullName `
+            -ArgumentList "/S", "/D=$installDir" `
+            -Wait `
+            -PassThru
+          if ($installerProcess.ExitCode -ne 0) {
+            throw "NSIS installer failed with exit code $($installerProcess.ExitCode)"
+          }
+
+          $appExecutable = Get-ChildItem $installDir -Filter "solme.exe" -Recurse | Select-Object -First 1
+          if (!$appExecutable) {
+            throw "Installed solme.exe was not found"
+          }
+
+          $bundledMpv = Join-Path $appExecutable.DirectoryName "libmpv-2.dll"
+          if (!(Test-Path $bundledMpv)) {
+            throw "libmpv-2.dll is not installed next to solme.exe"
+          }
+
+          $appProcess = Start-Process -FilePath $appExecutable.FullName -PassThru
+          Start-Sleep -Seconds 10
+          if ($appProcess.HasExited) {
+            throw "Solmë exited during the Windows startup smoke test with code $($appProcess.ExitCode)"
+          }
+
+          Stop-Process -Id $appProcess.Id -Force

@@ -1,0 +1,9 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "resources": {
+      "mpv/libmpv-2.dll": "libmpv-2.dll"
+    }
+  },
+  "identifier": "com.akasiek.solme"
+}
