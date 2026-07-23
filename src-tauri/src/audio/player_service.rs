@@ -1,9 +1,8 @@
-use std::sync::{Arc, Mutex, MutexGuard};
-
 use crate::{
     library::{CachedSong, LibraryRepository},
     server::MusicServerService,
 };
+use std::sync::{Arc, Mutex, MutexGuard};
 
 use super::{
     backend::AudioBackend,
@@ -62,22 +61,23 @@ impl PlayerService {
     fn replace_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
         let mut queue = self.lock_queue()?;
         *queue = songs;
-        Ok(())
+        drop(queue);
+        self.event_bus.publish_player_queue_changed()
     }
 
     fn append_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
         self.lock_queue()?.extend(songs);
-        Ok(())
+        self.event_bus.publish_player_queue_changed()
     }
 
     fn prepend_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
         self.lock_queue()?.splice(0..0, songs);
-        Ok(())
+        self.event_bus.publish_player_queue_changed()
     }
 
     fn clear_queue(&self) -> Result<(), String> {
         self.lock_queue()?.clear();
-        Ok(())
+        self.event_bus.publish_player_queue_changed()
     }
 
     fn notify_status_changed(&self) -> Result<(), String> {
@@ -177,6 +177,11 @@ impl PlayerService {
         }
     }
 
+    pub fn skip_to_queue_position(&self, queue_position: usize) -> Result<(), String> {
+        self.audio.skip_to_queue_position(queue_position)?;
+        self.notify_status_changed()
+    }
+
     pub fn seek(&self, position_seconds: f64) -> Result<(), String> {
         self.audio.seek(position_seconds)?;
         self.notify_status_changed_with_position(position_seconds)
@@ -190,7 +195,11 @@ impl PlayerService {
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
-        Self::player_status(&self.audio, &self.queue)
+        Self::build_status(&self.audio, &self.queue)
+    }
+
+    pub fn queue(&self) -> Result<Vec<CachedSong>, String> {
+        Ok(self.lock_queue()?.clone())
     }
 
     pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
@@ -252,7 +261,7 @@ impl PlayerService {
         queue: Arc<Mutex<Vec<CachedSong>>>,
         event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
-        Arc::new(move || match Self::player_status(&audio, &queue) {
+        Arc::new(move || match Self::build_status(&audio, &queue) {
             Ok(status) => {
                 if let Err(error) = event_bus.publish_player_status(status) {
                     log::error!("Failed to emit player status change: {error}");
@@ -262,7 +271,7 @@ impl PlayerService {
         })
     }
 
-    fn player_status(
+    fn build_status(
         audio: &Arc<dyn AudioBackend>,
         queue: &Arc<Mutex<Vec<CachedSong>>>,
     ) -> Result<PlayerStatus, String> {
@@ -364,6 +373,15 @@ mod tests {
             );
             assert_eq!(status.queue_position, Some(2));
             assert_eq!(status.queue_length, 3);
+
+            let queue = player.queue().unwrap();
+            assert_eq!(
+                queue
+                    .iter()
+                    .map(|song| song.remote_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["song-1", "song-2", "song-3"]
+            );
         });
     }
 
@@ -759,6 +777,13 @@ mod tests {
 
         fn previous(&self) -> Result<(), String> {
             self.state.lock().unwrap().previous_calls += 1;
+            Ok(())
+        }
+
+        fn skip_to_queue_position(&self, index: usize) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.start_index = index;
+            state.position_seconds = 0.0;
             Ok(())
         }
 

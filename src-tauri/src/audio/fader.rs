@@ -190,6 +190,11 @@ impl AudioBackend for FadingAudioBackend {
         self.inner.previous()
     }
 
+    fn skip_to_queue_position(&self, index: usize) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.skip_to_queue_position(index)
+    }
+
     fn seek(&self, position_seconds: f64) -> Result<(), String> {
         self.inner.seek(position_seconds)
     }
@@ -483,6 +488,10 @@ mod tests {
         }
 
         fn previous(&self) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn skip_to_queue_position(&self, _index: usize) -> Result<(), String> {
             Ok(())
         }
 

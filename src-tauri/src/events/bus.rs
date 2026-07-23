@@ -31,6 +31,10 @@ impl EventBus {
         self.emitter.player_status_changed(status)
     }
 
+    pub fn publish_player_queue_changed(&self) -> Result<(), String> {
+        self.emitter.player_queue_changed()
+    }
+
     pub fn subscribe_player_status(&self) -> broadcast::Receiver<PlayerStatus> {
         self.player_status.subscribe()
     }

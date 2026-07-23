@@ -23,6 +23,10 @@ impl EventEmitter {
         self.emit(Event::PlayerStatusChanged, status)
     }
 
+    pub fn player_queue_changed(&self) -> Result<(), String> {
+        self.emit(Event::PlayerQueueChanged, ())
+    }
+
     fn emit<S: Serialize + Clone>(&self, event: Event, payload: S) -> Result<(), String> {
         let Some(app) = &self.app else {
             return Ok(());

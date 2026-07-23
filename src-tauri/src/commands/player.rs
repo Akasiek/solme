@@ -2,7 +2,10 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::audio::{PlayerService, PlayerStatus};
+use crate::{
+    audio::{PlayerService, PlayerStatus},
+    library::CachedSong,
+};
 
 #[tauri::command]
 pub async fn player_play_album(
@@ -55,6 +58,11 @@ pub fn player_previous(player: State<'_, Arc<PlayerService>>) -> Result<(), Stri
 }
 
 #[tauri::command]
+pub fn player_skip_to_queue_position(position: usize, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+    player.skip_to_queue_position(position)
+}
+
+#[tauri::command]
 pub fn player_seek(
     position_seconds: f64,
     player: State<'_, Arc<PlayerService>>,
@@ -70,4 +78,9 @@ pub fn player_set_volume(volume: f64, player: State<'_, Arc<PlayerService>>) -> 
 #[tauri::command]
 pub fn get_player_status(player: State<'_, Arc<PlayerService>>) -> Result<PlayerStatus, String> {
     player.status()
+}
+
+#[tauri::command]
+pub fn get_player_queue(player: State<'_, Arc<PlayerService>>) -> Result<Vec<CachedSong>, String> {
+    player.queue()
 }

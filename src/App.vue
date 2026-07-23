@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import AppTitleBar from "@/components/AppTitleBar.vue";
 import LeftAsideMenu from "@/components/LeftAsideMenu";
+import RightAsideMenu from "@/components/RightAsideMenu";
 import PlayerBar from "@/components/PlayerBar";
 import SearchModal from "@/components/Search/SearchModal";
 import ServerConnectionOverlay from "@/components/ServerConnectionOverlay.vue";
@@ -19,6 +20,7 @@ const { isSearchModalOpen } = useSearchModal();
       <main class="min-w-0 flex-1 overflow-y-auto">
         <RouterView />
       </main>
+      <RightAsideMenu />
     </div>
     <PlayerBar />
     <ServerConnectionOverlay />

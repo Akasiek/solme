@@ -268,6 +268,10 @@ impl AudioBackend for MpvBackend {
         self.execute_command("playlist-prev", &["force"], "play previous track")
     }
 
+    fn skip_to_queue_position(&self, index: usize) -> Result<(), String> {
+        self.set_property("playlist-pos", index as i64, "skip to track")
+    }
+
     fn seek(&self, position_seconds: f64) -> Result<(), String> {
         self.execute_command(
             "seek",

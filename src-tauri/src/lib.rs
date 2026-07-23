@@ -3,11 +3,7 @@ use crate::commands::library::{
     get_home_album_sections, get_library_summary, get_library_sync_status, search_cached_albums,
     search_cached_artists, search_cached_songs, sync_library,
 };
-use crate::commands::player::{
-    get_player_status, player_next, player_pause, player_play_album, player_previous,
-    player_queue_album_at_end, player_queue_album_at_start, player_resume, player_seek,
-    player_set_volume, player_stop,
-};
+use crate::commands::player::{get_player_queue, get_player_status, player_next, player_pause, player_play_album, player_previous, player_queue_album_at_end, player_queue_album_at_start, player_resume, player_seek, player_set_volume, player_skip_to_queue_position, player_stop};
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, connect_saved_music_server_endpoint,
     forget_saved_server_profile, get_saved_server_profile, get_saved_server_profiles,
@@ -52,9 +48,11 @@ pub fn run() {
             player_stop,
             player_next,
             player_previous,
+            player_skip_to_queue_position,
             player_seek,
             player_set_volume,
             get_player_status,
+            get_player_queue,
             connect_music_server,
             ping_music_server,
             get_saved_server_profile,

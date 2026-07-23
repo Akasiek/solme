@@ -17,6 +17,7 @@ pub trait AudioBackend: Send + Sync {
     fn stop(&self) -> Result<(), String>;
     fn next(&self) -> Result<(), String>;
     fn previous(&self) -> Result<(), String>;
+    fn skip_to_queue_position(&self, queue_position: usize) -> Result<(), String>;
     fn seek(&self, position_seconds: f64) -> Result<(), String>;
     fn set_volume(&self, volume: f64) -> Result<(), String>;
     fn status(&self) -> AudioBackendStatus;
