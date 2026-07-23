@@ -200,7 +200,7 @@ jobs:
             --bundles nsis,msi
           releaseAssetNamePattern: "[name]-[version]-[platform]-[arch][ext]"
 
-      - name: Verify Windows bundles and libmpv startup
+      - name: Verify Windows bundles and libmpv runtime
         shell: pwsh
         run: |
           $nsisInstaller = Get-ChildItem "src-tauri\target\release\bundle\nsis\*.exe" | Select-Object -First 1
@@ -261,10 +261,61 @@ jobs:
             throw "libmpv-2.dll is not included in the MSI installer"
           }
 
-          $appProcess = Start-Process -FilePath $appExecutable.FullName -PassThru
-          Start-Sleep -Seconds 10
-          if ($appProcess.HasExited) {
-            throw "Solmë exited during the Windows startup smoke test with code $($appProcess.ExitCode)"
-          }
+          Add-Type -TypeDefinition @"
+          using System;
+          using System.Runtime.InteropServices;
 
-          Stop-Process -Id $appProcess.Id -Force
+          public static class MpvRuntimeSmokeTest
+          {
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate IntPtr MpvCreate();
+
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate int MpvInitialize(IntPtr context);
+
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate void MpvTerminateDestroy(IntPtr context);
+
+              public static void Run(string libraryPath)
+              {
+                  IntPtr library = NativeLibrary.Load(libraryPath);
+                  try
+                  {
+                      var create = Marshal.GetDelegateForFunctionPointer<MpvCreate>(
+                          NativeLibrary.GetExport(library, "mpv_create"));
+                      var initialize = Marshal.GetDelegateForFunctionPointer<MpvInitialize>(
+                          NativeLibrary.GetExport(library, "mpv_initialize"));
+                      var terminateDestroy = Marshal.GetDelegateForFunctionPointer<MpvTerminateDestroy>(
+                          NativeLibrary.GetExport(library, "mpv_terminate_destroy"));
+
+                      IntPtr context = create();
+                      if (context == IntPtr.Zero)
+                      {
+                          throw new InvalidOperationException("mpv_create returned a null context");
+                      }
+
+                      try
+                      {
+                          int result = initialize(context);
+                          if (result < 0)
+                          {
+                              throw new InvalidOperationException($"mpv_initialize failed with code {result}");
+                          }
+                      }
+                      finally
+                      {
+                          terminateDestroy(context);
+                      }
+                  }
+                  finally
+                  {
+                      NativeLibrary.Free(library);
+                  }
+              }
+          }
+          "@
+
+          [MpvRuntimeSmokeTest]::Run($bundledMpv)
+          Write-Host "NSIS libmpv runtime initialized successfully"
+          [MpvRuntimeSmokeTest]::Run($msiMpv.FullName)
+          Write-Host "MSI libmpv runtime initialized successfully"
