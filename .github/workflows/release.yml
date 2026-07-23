@@ -242,9 +242,18 @@ jobs:
             Remove-Item $msiExtractDir -Recurse -Force
           }
 
-          & msiexec.exe /a $msiInstaller.FullName /qn "TARGETDIR=$msiExtractDir"
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to extract the MSI installer (exit code $LASTEXITCODE)"
+          $msiLog = Join-Path $env:RUNNER_TEMP "solme-msi-extract.log"
+          $msiArguments = "/a `"$($msiInstaller.FullName)`" /qn TARGETDIR=`"$msiExtractDir`" /l*v `"$msiLog`""
+          $msiProcess = Start-Process `
+            -FilePath "msiexec.exe" `
+            -ArgumentList $msiArguments `
+            -Wait `
+            -PassThru
+          if ($msiProcess.ExitCode -notin @(0, 3010)) {
+            if (Test-Path $msiLog) {
+              Get-Content $msiLog -Tail 100
+            }
+            throw "Failed to extract the MSI installer (exit code $($msiProcess.ExitCode))"
           }
 
           $msiMpv = Get-ChildItem $msiExtractDir -Filter "libmpv-2.dll" -Recurse | Select-Object -First 1
