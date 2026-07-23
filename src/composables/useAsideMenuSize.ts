@@ -1,15 +1,34 @@
-import { computed, onMounted, onUnmounted, ref } from "vue";
+import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import type { Ref } from "vue";
 
-const defaultWidth = 224;
-const minWidth = 208;
-const maxWidth = 360;
-const collapsedWidth = 72;
-const collapseThreshold = 136;
-const storageKey = "solme-aside-menu";
+interface Options {
+  defaultWidth?: number;
+  minWidth?: number;
+  maxWidth?: number;
+  collapsedWidth?: number;
+  collapseThreshold?: number;
+  isLeft?: boolean;
+  isCollapsed?: Ref<boolean>;
+}
 
-export function useAsideMenuSize() {
+const defaultOptions: Required<Omit<Options, "isCollapsed">> = {
+  defaultWidth: 224,
+  minWidth: 208,
+  maxWidth: 360,
+  collapsedWidth: 72,
+  collapseThreshold: 136,
+  isLeft: true,
+};
+
+export function useAsideMenuSize(storageKey: string, providedOptions: Options = {}) {
+  const options = {
+    ...defaultOptions,
+    ...providedOptions,
+  };
+  const { defaultWidth, minWidth, maxWidth, collapsedWidth, collapseThreshold, isLeft } = options;
+
   const width = ref(defaultWidth);
-  const isCollapsed = ref(false);
+  const isCollapsed = providedOptions.isCollapsed ?? ref(false);
   const isResizing = ref(false);
   const asideWidth = computed(() => (isCollapsed.value ? collapsedWidth : width.value));
 
@@ -33,7 +52,6 @@ export function useAsideMenuSize() {
 
   const toggleCollapsed = () => {
     isCollapsed.value = !isCollapsed.value;
-    saveState();
   };
 
   const resize = (event: PointerEvent) => {
@@ -41,7 +59,11 @@ export function useAsideMenuSize() {
       return;
     }
 
-    width.value = clampResizeWidth(startWidth + event.clientX - startX);
+    if (isLeft) {
+      width.value = clampResizeWidth(startWidth + event.clientX - startX);
+    } else {
+      width.value = clampResizeWidth(startWidth - event.clientX + startX);
+    }
   };
 
   const stopResize = () => {
@@ -112,6 +134,8 @@ export function useAsideMenuSize() {
       localStorage.removeItem(storageKey);
     }
   });
+
+  watch(isCollapsed, saveState);
 
   onUnmounted(stopResize);
 

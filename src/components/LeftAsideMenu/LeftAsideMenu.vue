@@ -4,7 +4,8 @@ import { useAsideMenuSize } from "@/composables/useAsideMenuSize";
 import LeftAsideMenuHeader from "./LeftAsideMenuHeader.vue";
 import LeftAsideMenuNavigation from "./LeftAsideMenuNavigation.vue";
 
-const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } = useAsideMenuSize();
+const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } =
+  useAsideMenuSize("left-aside-menu-width");
 </script>
 
 <template>
