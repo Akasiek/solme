@@ -274,6 +274,12 @@ jobs:
               private delegate int MpvInitialize(IntPtr context);
 
               [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate IntPtr MpvCreateClient(IntPtr context, string name);
+
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
+              private delegate void MpvDestroy(IntPtr context);
+
+              [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
               private delegate void MpvTerminateDestroy(IntPtr context);
 
               public static void Run(string libraryPath)
@@ -285,6 +291,10 @@ jobs:
                           NativeLibrary.GetExport(library, "mpv_create"));
                       var initialize = Marshal.GetDelegateForFunctionPointer<MpvInitialize>(
                           NativeLibrary.GetExport(library, "mpv_initialize"));
+                      var createClient = Marshal.GetDelegateForFunctionPointer<MpvCreateClient>(
+                          NativeLibrary.GetExport(library, "mpv_create_client"));
+                      var destroy = Marshal.GetDelegateForFunctionPointer<MpvDestroy>(
+                          NativeLibrary.GetExport(library, "mpv_destroy"));
                       var terminateDestroy = Marshal.GetDelegateForFunctionPointer<MpvTerminateDestroy>(
                           NativeLibrary.GetExport(library, "mpv_terminate_destroy"));
 
@@ -301,6 +311,13 @@ jobs:
                           {
                               throw new InvalidOperationException($"mpv_initialize failed with code {result}");
                           }
+
+                          IntPtr client = createClient(context, "release_smoke_test");
+                          if (client == IntPtr.Zero)
+                          {
+                              throw new InvalidOperationException("mpv_create_client returned a null context");
+                          }
+                          destroy(client);
                       }
                       finally
                       {
@@ -319,3 +336,25 @@ jobs:
           Write-Host "NSIS libmpv runtime initialized successfully"
           [MpvRuntimeSmokeTest]::Run($msiMpv.FullName)
           Write-Host "MSI libmpv runtime initialized successfully"
+
+          $stdoutLog = Join-Path $env:RUNNER_TEMP "solme-smoke.stdout.log"
+          $stderrLog = Join-Path $env:RUNNER_TEMP "solme-smoke.stderr.log"
+          $appProcess = Start-Process `
+            -FilePath $appExecutable.FullName `
+            -WorkingDirectory $appExecutable.DirectoryName `
+            -RedirectStandardOutput $stdoutLog `
+            -RedirectStandardError $stderrLog `
+            -PassThru
+          Start-Sleep -Seconds 10
+          if ($appProcess.HasExited) {
+            if (Test-Path $stdoutLog) {
+              Get-Content $stdoutLog
+            }
+            if (Test-Path $stderrLog) {
+              Get-Content $stderrLog
+            }
+            throw "Installed Solme exited during the startup smoke test with code $($appProcess.ExitCode)"
+          }
+
+          Stop-Process -Id $appProcess.Id -Force
+          Write-Host "Installed Solme remained running during the startup smoke test"
