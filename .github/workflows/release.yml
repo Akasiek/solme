@@ -208,25 +208,9 @@ jobs:
             throw "Expected an NSIS installer"
           }
 
-          $nsisContents = & 7z l $nsisInstaller.FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to inspect the NSIS installer"
-          }
-          if ($nsisContents -notmatch "libmpv-2\.dll") {
-            throw "NSIS installer does not contain libmpv-2.dll"
-          }
-
           $msiInstaller = Get-ChildItem "src-tauri\target\release\bundle\msi\*.msi" | Select-Object -First 1
           if (!$msiInstaller) {
             throw "Expected an MSI installer"
-          }
-
-          $msiContents = & 7z l $msiInstaller.FullName
-          if ($LASTEXITCODE -ne 0) {
-            throw "Failed to inspect the MSI installer"
-          }
-          if ($msiContents -notmatch "libmpv-2\.dll") {
-            throw "MSI installer does not contain libmpv-2.dll"
           }
 
           $installDir = Join-Path $env:RUNNER_TEMP "solme-smoke-install"
@@ -251,6 +235,21 @@ jobs:
           $bundledMpv = Join-Path $appExecutable.DirectoryName "libmpv-2.dll"
           if (!(Test-Path $bundledMpv)) {
             throw "libmpv-2.dll is not installed next to solme.exe"
+          }
+
+          $msiExtractDir = Join-Path $env:RUNNER_TEMP "solme-msi-contents"
+          if (Test-Path $msiExtractDir) {
+            Remove-Item $msiExtractDir -Recurse -Force
+          }
+
+          & msiexec.exe /a $msiInstaller.FullName /qn "TARGETDIR=$msiExtractDir"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Failed to extract the MSI installer (exit code $LASTEXITCODE)"
+          }
+
+          $msiMpv = Get-ChildItem $msiExtractDir -Filter "libmpv-2.dll" -Recurse | Select-Object -First 1
+          if (!$msiMpv) {
+            throw "libmpv-2.dll is not included in the MSI installer"
           }
 
           $appProcess = Start-Process -FilePath $appExecutable.FullName -PassThru
