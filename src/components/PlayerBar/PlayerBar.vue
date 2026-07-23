@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { computed, onMounted } from "vue";
-import { usePlayerStatusStore } from "@/stores/playerStatus.ts";
+import { usePlayerStore } from "@/stores/player.ts";
 import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
 import { useHotkey } from "@/composables/useHotkey";
 
-const playerStatusStore = usePlayerStatusStore();
-const playerStatus = computed(() => playerStatusStore.status);
-const currentSong = computed(() => playerStatusStore.currentSong);
+const playerStore = usePlayerStore();
+const playerStatus = computed(() => playerStore.status);
+const currentSong = computed(() => playerStore.currentSong);
 
 const togglePlayback = () => {
   const status = playerStatus.value;
@@ -27,7 +27,7 @@ const togglePlayback = () => {
 useHotkey(" ", togglePlayback);
 
 onMounted(async () => {
-  await playerStatusStore.startListening();
+  await playerStore.startListening();
 });
 </script>
 

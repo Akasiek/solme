@@ -2,7 +2,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { computed, onMounted, ref } from "vue";
 import { CachedAlbumDetails, CachedSong } from "@/types.ts";
-import { usePlayerStatusStore } from "@/stores/playerStatus.ts";
+import { usePlayerStore } from "@/stores/player.ts";
 import AlbumTracklistDiscHeader from "./AlbumTracklistDiscHeader.vue";
 import AlbumTracklistEmptyState from "./AlbumTracklistEmptyState.vue";
 import AlbumTracklistHeader from "./AlbumTracklistHeader.vue";
@@ -30,10 +30,10 @@ const shouldShowArtist = (song: CachedSong) => song.artistName !== albumDetails.
 const discNumber = (song: CachedSong) => song.discNumber ?? 1;
 
 const playingSongId = ref<string>();
-const playerStatusStore = usePlayerStatusStore();
+const playerStore = usePlayerStore();
 
 const currentAlbumSongId = computed(() => {
-  const currentSong = playerStatusStore.currentSong;
+  const currentSong = playerStore.currentSong;
   if (currentSong?.albumId !== albumDetails.album.remoteId) {
     return undefined;
   }
@@ -58,7 +58,7 @@ const playTrack = async (song: CachedSong) => {
 };
 
 onMounted(async () => {
-  await playerStatusStore.startListening();
+  await playerStore.startListening();
 });
 </script>
 
