@@ -12,8 +12,8 @@ const playAlbum = () => {
   invoke("player_play_album", { albumId: album.remoteId });
 };
 
-const queueAlbumAtStart = () => {
-  invoke("player_queue_album_at_start", { albumId: album.remoteId });
+const queueAlbumNext = () => {
+  invoke("player_queue_album_next", { albumId: album.remoteId });
 };
 
 const queueAlbumAtEnd = () => {
@@ -27,9 +27,9 @@ const queueAlbumAtEnd = () => {
       <Play class="size-4" aria-hidden="true" />
       Play
     </Button>
-    <Button type="button" variant="outline" @click="queueAlbumAtStart">
+    <Button type="button" variant="outline" @click="queueAlbumNext">
       <ListStart class="size-4" aria-hidden="true" />
-      Queue first
+      Queue next
     </Button>
     <Button type="button" variant="outline" @click="queueAlbumAtEnd">
       <ListEnd class="size-4" aria-hidden="true" />

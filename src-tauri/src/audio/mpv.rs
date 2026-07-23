@@ -194,9 +194,9 @@ impl AudioBackend for MpvBackend {
         self.load_sources_with_state(sources, start_index, true, position_seconds)
     }
 
-    fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
+    fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String> {
         if sources.is_empty() {
-            return Err("Cannot prepend an empty queue".to_string());
+            return Err("Cannot insert an empty queue".to_string());
         }
 
         let queue_length = self
@@ -205,6 +205,10 @@ impl AudioBackend for MpvBackend {
             .map_err(|error| format!("Failed to read playlist length: {error}"))?;
         if queue_length < 0 {
             return Err("Playlist length is invalid".to_string());
+        }
+        let queue_length = queue_length as usize;
+        if position > queue_length {
+            return Err("Queue insertion position is out of bounds".to_string());
         }
         let active_index = self
             .mpv
@@ -216,21 +220,22 @@ impl AudioBackend for MpvBackend {
         for source in sources {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
         }
-        for (target_index, _) in sources.iter().enumerate() {
-            self.execute_command(
-                "playlist-move",
-                &[
-                    &(queue_length as usize + target_index).to_string(),
-                    &target_index.to_string(),
-                ],
-                "prepend queue item",
-            )?;
+        for (offset, _) in sources.iter().enumerate() {
+            let source_index = queue_length + offset;
+            let target_index = position + offset;
+            if source_index != target_index {
+                self.execute_command(
+                    "playlist-move",
+                    &[&source_index.to_string(), &target_index.to_string()],
+                    "insert queue item",
+                )?;
+            }
         }
-        if let Some(active_index) = active_index {
+        if let Some(active_index) = active_index.filter(|active_index| position <= *active_index) {
             self.set_property(
                 "playlist-pos",
                 (active_index + sources.len()) as i64,
-                "restore active queue item after prepend",
+                "restore active queue item after insert",
             )?;
         }
 

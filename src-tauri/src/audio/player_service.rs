@@ -102,11 +102,22 @@ impl PlayerService {
         self.notify_status_changed()
     }
 
-    pub async fn queue_album_at_start(&self, album_id: &str) -> Result<(), String> {
+    pub async fn queue_album_next(&self, album_id: &str) -> Result<(), String> {
         let prepared = self.prepare_album_queue(album_id).await?;
+        let insertion_position = self
+            .audio
+            .status()
+            .playlist_position
+            .map_or(0, |position| position + 1);
 
-        self.audio.prepend_sources(prepared.sources())?;
-        self.queue.prepend(prepared.into_songs())?;
+        if insertion_position > self.queue.len()? {
+            return Err("Active queue position is out of bounds".to_string());
+        }
+
+        self.audio
+            .insert_sources(prepared.sources(), insertion_position)?;
+        self.queue
+            .insert(insertion_position, prepared.into_songs())?;
         self.notify_queue_changed();
         self.notify_status_changed()
     }
@@ -448,7 +459,7 @@ mod tests {
     }
 
     #[test]
-    fn prepends_album_to_current_queue() {
+    fn queues_album_after_current_song() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
 
@@ -467,13 +478,14 @@ mod tests {
                 noop_event_bus(),
             );
 
-            player.play_album("album-1", Some("song-2")).await.unwrap();
-            player.queue_album_at_start("album-2").await.unwrap();
+            player.play_album("album-1", Some("song-1")).await.unwrap();
+            player.queue_album_next("album-2").await.unwrap();
 
             let audio = audio_state.lock().unwrap();
-            assert_eq!(audio.start_index, 3);
+            assert_eq!(audio.start_index, 0);
+            assert_eq!(audio.insertion_position, Some(1));
             assert_eq!(
-                audio.prepended_sources,
+                audio.inserted_sources,
                 [
                     "https://music.example.com/song-1",
                     "https://music.example.com/song-2"
@@ -482,8 +494,8 @@ mod tests {
             drop(audio);
 
             let status = player.status().unwrap();
-            assert_eq!(status.current_song.unwrap().remote_id, "song-2");
-            assert_eq!(status.queue_position, Some(4));
+            assert_eq!(status.current_song.unwrap().remote_id, "song-1");
+            assert_eq!(status.queue_position, Some(1));
             assert_eq!(status.queue_length, 4);
         });
     }
@@ -686,7 +698,8 @@ mod tests {
     #[derive(Default)]
     struct MockAudioState {
         sources: Vec<String>,
-        prepended_sources: Vec<String>,
+        inserted_sources: Vec<String>,
+        insertion_position: Option<usize>,
         appended_sources: Vec<String>,
         start_index: usize,
         playing: bool,
@@ -743,10 +756,10 @@ mod tests {
             Ok(())
         }
 
-        fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
+        fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
-            state.prepended_sources.extend_from_slice(sources);
-            state.start_index += sources.len();
+            state.inserted_sources.extend_from_slice(sources);
+            state.insertion_position = Some(position);
             Ok(())
         }
 

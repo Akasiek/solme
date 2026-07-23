@@ -159,8 +159,8 @@ impl AudioBackend for FadingAudioBackend {
             .load_sources_paused(sources, start_index, position_seconds)
     }
 
-    fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
-        self.inner.prepend_sources(sources)
+    fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String> {
+        self.inner.insert_sources(sources, position)
     }
 
     fn append_sources(&self, sources: &[String]) -> Result<(), String> {
@@ -464,7 +464,7 @@ mod tests {
             Ok(())
         }
 
-        fn prepend_sources(&self, _sources: &[String]) -> Result<(), String> {
+        fn insert_sources(&self, _sources: &[String], _position: usize) -> Result<(), String> {
             Ok(())
         }
 

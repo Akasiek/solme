@@ -41,8 +41,12 @@ impl PlayerQueue {
         Ok(())
     }
 
-    pub fn prepend(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        self.lock()?.splice(0..0, songs);
+    pub fn insert(&self, position: usize, songs: Vec<CachedSong>) -> Result<(), String> {
+        let mut queue = self.lock()?;
+        if position > queue.len() {
+            return Err("Queue insertion position is out of bounds".to_string());
+        }
+        queue.splice(position..position, songs);
         Ok(())
     }
 
@@ -108,6 +112,26 @@ mod tests {
 
         assert_eq!(current_song.unwrap().remote_id, "song-2");
         assert_eq!(length, 2);
+    }
+
+    #[test]
+    fn inserts_songs_at_requested_position() {
+        let queue = PlayerQueue::default();
+        queue.replace(vec![song("song-1"), song("song-4")]).unwrap();
+
+        queue
+            .insert(1, vec![song("song-2"), song("song-3")])
+            .unwrap();
+
+        assert_eq!(
+            queue
+                .snapshot()
+                .unwrap()
+                .iter()
+                .map(|song| song.remote_id.as_str())
+                .collect::<Vec<_>>(),
+            ["song-1", "song-2", "song-3", "song-4"]
+        );
     }
 
     fn song(id: &str) -> CachedSong {

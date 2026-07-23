@@ -19,9 +19,9 @@ const playAlbum = (event: MouseEvent) => {
   invoke("player_play_album", { albumId: album.remoteId });
 };
 
-const queueAlbumAtStart = (event: MouseEvent) => {
+const queueAlbumNext = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
-  invoke("player_queue_album_at_start", { albumId: album.remoteId });
+  invoke("player_queue_album_next", { albumId: album.remoteId });
 };
 
 const queueAlbumAtEnd = (event: MouseEvent) => {
@@ -45,7 +45,7 @@ const queueAlbumAtEnd = (event: MouseEvent) => {
     <div
       class="absolute inset-0 flex items-center justify-center gap-4 bg-zinc-800/80 text-white opacity-0 transition-opacity duration-300 *:cursor-pointer *:rounded-full *:bg-accent *:p-2 group-hover/image:opacity-100"
     >
-      <button type="button" @click="queueAlbumAtStart">
+      <button type="button" title="Queue next" @click="queueAlbumNext">
         <ListStart />
       </button>
       <button type="button" @click="playAlbum">

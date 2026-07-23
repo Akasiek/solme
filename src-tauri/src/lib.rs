@@ -5,7 +5,7 @@ use crate::commands::library::{
 };
 use crate::commands::player::{
     get_player_queue, get_player_status, player_next, player_pause, player_play_album,
-    player_previous, player_queue_album_at_end, player_queue_album_at_start, player_resume,
+    player_previous, player_queue_album_at_end, player_queue_album_next, player_resume,
     player_seek, player_set_volume, player_skip_to_queue_position, player_stop,
 };
 use crate::commands::server::{
@@ -45,7 +45,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
             player_play_album,
-            player_queue_album_at_start,
+            player_queue_album_next,
             player_queue_album_at_end,
             player_pause,
             player_resume,
