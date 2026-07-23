@@ -121,7 +121,7 @@ impl MpvBackend {
             .map_err(|error| format!("Failed to {action}: {error}"))
     }
 
-    fn load_queue_with_state(
+    fn load_sources_with_state(
         &self,
         sources: &[String],
         start_index: usize,
@@ -181,20 +181,20 @@ impl MpvBackend {
 }
 
 impl AudioBackend for MpvBackend {
-    fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
-        self.load_queue_with_state(sources, start_index, false, None)
+    fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+        self.load_sources_with_state(sources, start_index, false, None)
     }
 
-    fn load_queue_paused(
+    fn load_sources_paused(
         &self,
         sources: &[String],
         start_index: usize,
         position_seconds: Option<f64>,
     ) -> Result<(), String> {
-        self.load_queue_with_state(sources, start_index, true, position_seconds)
+        self.load_sources_with_state(sources, start_index, true, position_seconds)
     }
 
-    fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+    fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
         if sources.is_empty() {
             return Err("Cannot prepend an empty queue".to_string());
         }
@@ -237,7 +237,7 @@ impl AudioBackend for MpvBackend {
         Ok(())
     }
 
-    fn append_queue(&self, sources: &[String]) -> Result<(), String> {
+    fn append_sources(&self, sources: &[String]) -> Result<(), String> {
         if sources.is_empty() {
             return Err("Cannot append an empty queue".to_string());
         }

@@ -143,12 +143,12 @@ impl FadingAudioBackend {
 }
 
 impl AudioBackend for FadingAudioBackend {
-    fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+    fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String> {
         self.cancel()?;
-        self.inner.load_queue(sources, start_index)
+        self.inner.load_sources(sources, start_index)
     }
 
-    fn load_queue_paused(
+    fn load_sources_paused(
         &self,
         sources: &[String],
         start_index: usize,
@@ -156,15 +156,15 @@ impl AudioBackend for FadingAudioBackend {
     ) -> Result<(), String> {
         self.cancel()?;
         self.inner
-            .load_queue_paused(sources, start_index, position_seconds)
+            .load_sources_paused(sources, start_index, position_seconds)
     }
 
-    fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
-        self.inner.prepend_queue(sources)
+    fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
+        self.inner.prepend_sources(sources)
     }
 
-    fn append_queue(&self, sources: &[String]) -> Result<(), String> {
-        self.inner.append_queue(sources)
+    fn append_sources(&self, sources: &[String]) -> Result<(), String> {
+        self.inner.append_sources(sources)
     }
 
     fn pause(&self) -> Result<(), String> {
@@ -441,14 +441,14 @@ mod tests {
     }
 
     impl AudioBackend for MockBackend {
-        fn load_queue(&self, _sources: &[String], _start_index: usize) -> Result<(), String> {
+        fn load_sources(&self, _sources: &[String], _start_index: usize) -> Result<(), String> {
             self.state.lock().unwrap().playing = true;
             Ok(())
         }
 
         fn set_status_change_callback(&self, _callback: AudioStatusChangeCallback) {}
 
-        fn load_queue_paused(
+        fn load_sources_paused(
             &self,
             _sources: &[String],
             _start_index: usize,
@@ -460,11 +460,11 @@ mod tests {
             Ok(())
         }
 
-        fn append_queue(&self, _sources: &[String]) -> Result<(), String> {
+        fn append_sources(&self, _sources: &[String]) -> Result<(), String> {
             Ok(())
         }
 
-        fn prepend_queue(&self, _sources: &[String]) -> Result<(), String> {
+        fn prepend_sources(&self, _sources: &[String]) -> Result<(), String> {
             Ok(())
         }
 

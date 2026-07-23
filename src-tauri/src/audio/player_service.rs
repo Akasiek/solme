@@ -2,13 +2,14 @@ use crate::{
     library::{CachedSong, LibraryRepository},
     server::MusicServerService,
 };
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::sync::Arc;
 
 use super::{
     backend::AudioBackend,
     fader::FadingAudioBackend,
     models::{PlaybackState, PlayerStatus},
     preference::{PreferenceRepository, PreferenceService},
+    queue::{PlayerQueue, PreparedQueue},
     session::PlaybackSession,
 };
 use crate::events::EventBus;
@@ -21,7 +22,7 @@ pub struct PlayerService {
     repository: Arc<dyn LibraryRepository>,
     preference: PreferenceService,
     event_bus: Arc<EventBus>,
-    queue: Arc<Mutex<Vec<CachedSong>>>,
+    queue: PlayerQueue,
 }
 
 impl PlayerService {
@@ -34,11 +35,11 @@ impl PlayerService {
     ) -> Self {
         let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
-        let queue = Arc::new(Mutex::new(Vec::new()));
+        let queue = PlayerQueue::default();
 
         audio.set_status_change_callback(Self::status_change_callback(
             Arc::clone(&audio),
-            Arc::clone(&queue),
+            queue.clone(),
             Arc::clone(&event_bus),
         ));
 
@@ -52,43 +53,27 @@ impl PlayerService {
         }
     }
 
-    fn lock_queue(&self) -> Result<MutexGuard<'_, Vec<CachedSong>>, String> {
-        self.queue
-            .lock()
-            .map_err(|_| "Player queue lock was poisoned".to_string())
-    }
-
-    fn replace_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        let mut queue = self.lock_queue()?;
-        *queue = songs;
-        drop(queue);
-        self.event_bus.publish_player_queue_changed()
-    }
-
-    fn append_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        self.lock_queue()?.extend(songs);
-        self.event_bus.publish_player_queue_changed()
-    }
-
-    fn prepend_queue(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        self.lock_queue()?.splice(0..0, songs);
-        self.event_bus.publish_player_queue_changed()
-    }
-
-    fn clear_queue(&self) -> Result<(), String> {
-        self.lock_queue()?.clear();
-        self.event_bus.publish_player_queue_changed()
+    fn notify_queue_changed(&self) {
+        if let Err(error) = self.event_bus.publish_player_queue_changed() {
+            log::error!("Failed to emit player queue change: {error}");
+        }
     }
 
     fn notify_status_changed(&self) -> Result<(), String> {
         let status = self.status()?;
-        self.event_bus.publish_player_status(status)
+        if let Err(error) = self.event_bus.publish_player_status(status) {
+            log::error!("Failed to emit player status change: {error}");
+        }
+        Ok(())
     }
 
     fn notify_status_changed_with_position(&self, position_seconds: f64) -> Result<(), String> {
         let mut status = self.status()?;
         status.position_seconds = position_seconds.max(0.0);
-        self.event_bus.publish_player_status(status)
+        if let Err(error) = self.event_bus.publish_player_status(status) {
+            log::error!("Failed to emit player status change: {error}");
+        }
+        Ok(())
     }
 
     pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<PlayerStatus> {
@@ -100,41 +85,42 @@ impl PlayerService {
         album_id: &str,
         start_song_id: Option<&str>,
     ) -> Result<(), String> {
-        let (songs, sources) = self.album_queue_sources(album_id).await?;
+        let prepared = self.prepare_album_queue(album_id).await?;
 
         let start_index = match start_song_id {
-            Some(song_id) => songs
+            Some(song_id) => prepared
+                .songs()
                 .iter()
                 .position(|song| song.remote_id == song_id)
                 .ok_or_else(|| "Selected song does not belong to this album".to_string())?,
             None => 0,
         };
 
-        self.audio.load_queue(&sources, start_index)?;
-        self.replace_queue(songs)?;
+        self.audio.load_sources(prepared.sources(), start_index)?;
+        self.queue.replace(prepared.into_songs())?;
+        self.notify_queue_changed();
         self.notify_status_changed()
     }
 
     pub async fn queue_album_at_start(&self, album_id: &str) -> Result<(), String> {
-        let (songs, sources) = self.album_queue_sources(album_id).await?;
+        let prepared = self.prepare_album_queue(album_id).await?;
 
-        self.audio.prepend_queue(&sources)?;
-        self.prepend_queue(songs)?;
+        self.audio.prepend_sources(prepared.sources())?;
+        self.queue.prepend(prepared.into_songs())?;
+        self.notify_queue_changed();
         self.notify_status_changed()
     }
 
     pub async fn queue_album_at_end(&self, album_id: &str) -> Result<(), String> {
-        let (songs, sources) = self.album_queue_sources(album_id).await?;
+        let prepared = self.prepare_album_queue(album_id).await?;
 
-        self.audio.append_queue(&sources)?;
-        self.append_queue(songs)?;
+        self.audio.append_sources(prepared.sources())?;
+        self.queue.append(prepared.into_songs())?;
+        self.notify_queue_changed();
         self.notify_status_changed()
     }
 
-    async fn album_queue_sources(
-        &self,
-        album_id: &str,
-    ) -> Result<(Vec<CachedSong>, Vec<String>), String> {
+    async fn prepare_album_queue(&self, album_id: &str) -> Result<PreparedQueue, String> {
         let (profile_id, server) = self.server.current_server()?;
         let songs = self.repository.songs(&profile_id, album_id).await?;
         if songs.is_empty() {
@@ -142,8 +128,7 @@ impl PlayerService {
         }
 
         let sources = Self::playback_sources(&server, &songs).await?;
-
-        Ok((songs, sources))
+        PreparedQueue::new(songs, sources)
     }
 
     pub fn pause(&self) -> Result<(), String> {
@@ -158,7 +143,8 @@ impl PlayerService {
 
     pub fn stop(&self) -> Result<(), String> {
         self.audio.stop()?;
-        self.clear_queue()?;
+        self.queue.clear()?;
+        self.notify_queue_changed();
         self.notify_status_changed()
     }
 
@@ -178,6 +164,9 @@ impl PlayerService {
     }
 
     pub fn skip_to_queue_position(&self, queue_position: usize) -> Result<(), String> {
+        if queue_position >= self.queue.len()? {
+            return Err("Queue position is out of bounds".to_string());
+        }
         self.audio.skip_to_queue_position(queue_position)?;
         self.notify_status_changed()
     }
@@ -199,12 +188,12 @@ impl PlayerService {
     }
 
     pub fn queue(&self) -> Result<Vec<CachedSong>, String> {
-        Ok(self.lock_queue()?.clone())
+        self.queue.snapshot()
     }
 
     pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
         let audio_status = self.audio.status();
-        let queue = self.lock_queue()?.clone();
+        let queue = self.queue.snapshot()?;
         let Some(active_index) = audio_status.playlist_position else {
             return Ok(None);
         };
@@ -226,13 +215,15 @@ impl PlayerService {
 
         let (_, server) = self.server.current_server()?;
         let sources = Self::playback_sources(&server, &session.queue).await?;
+        let prepared = PreparedQueue::new(session.queue, sources)?;
 
-        self.replace_queue(session.queue)?;
-        self.audio.load_queue_paused(
-            &sources,
+        self.audio.load_sources_paused(
+            prepared.sources(),
             session.active_index,
             Some(session.position_seconds),
         )?;
+        self.queue.replace(prepared.into_songs())?;
+        self.notify_queue_changed();
         self.notify_status_changed()
     }
 
@@ -258,7 +249,7 @@ impl PlayerService {
 
     fn status_change_callback(
         audio: Arc<dyn AudioBackend>,
-        queue: Arc<Mutex<Vec<CachedSong>>>,
+        queue: PlayerQueue,
         event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
         Arc::new(move || match Self::build_status(&audio, &queue) {
@@ -273,16 +264,10 @@ impl PlayerService {
 
     fn build_status(
         audio: &Arc<dyn AudioBackend>,
-        queue: &Arc<Mutex<Vec<CachedSong>>>,
+        queue: &PlayerQueue,
     ) -> Result<PlayerStatus, String> {
         let audio_status = audio.status();
-        let queue = queue
-            .lock()
-            .map_err(|_| "Player queue lock was poisoned".to_string())?;
-        let current_song = audio_status
-            .playlist_position
-            .and_then(|position| queue.get(position))
-            .cloned();
+        let (current_song, queue_length) = queue.current_and_len(audio_status.playlist_position)?;
         let state = if !audio_status.playing {
             PlaybackState::Stopped
         } else if audio_status.paused {
@@ -297,7 +282,7 @@ impl PlayerService {
             position_seconds: audio_status.position_seconds,
             duration_seconds: audio_status.duration_seconds,
             queue_position: audio_status.playlist_position.map(|position| position + 1),
-            queue_length: queue.len(),
+            queue_length,
             volume: audio_status.volume,
         })
     }
@@ -382,6 +367,15 @@ mod tests {
                     .collect::<Vec<_>>(),
                 ["song-1", "song-2", "song-3"]
             );
+
+            assert_eq!(
+                player.skip_to_queue_position(3).unwrap_err(),
+                "Queue position is out of bounds"
+            );
+            player.skip_to_queue_position(2).unwrap();
+            let status = player.status().unwrap();
+            assert_eq!(status.current_song.unwrap().remote_id, "song-3");
+            assert_eq!(status.queue_position, Some(3));
         });
     }
 
@@ -714,7 +708,7 @@ mod tests {
         ) {
         }
 
-        fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+        fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.sources = sources.to_vec();
             state.start_index = start_index;
@@ -723,7 +717,7 @@ mod tests {
             Ok(())
         }
 
-        fn load_queue_paused(
+        fn load_sources_paused(
             &self,
             sources: &[String],
             start_index: usize,
@@ -740,7 +734,7 @@ mod tests {
             Ok(())
         }
 
-        fn append_queue(&self, sources: &[String]) -> Result<(), String> {
+        fn append_sources(&self, sources: &[String]) -> Result<(), String> {
             self.state
                 .lock()
                 .unwrap()
@@ -749,7 +743,7 @@ mod tests {
             Ok(())
         }
 
-        fn prepend_queue(&self, sources: &[String]) -> Result<(), String> {
+        fn prepend_sources(&self, sources: &[String]) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.prepended_sources.extend_from_slice(sources);
             state.start_index += sources.len();

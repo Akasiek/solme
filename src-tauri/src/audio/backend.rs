@@ -3,15 +3,15 @@ use std::sync::Arc;
 pub type AudioStatusChangeCallback = Arc<dyn Fn() + Send + Sync>;
 
 pub trait AudioBackend: Send + Sync {
-    fn load_queue(&self, sources: &[String], start_index: usize) -> Result<(), String>;
-    fn load_queue_paused(
+    fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String>;
+    fn load_sources_paused(
         &self,
         sources: &[String],
         start_index: usize,
         position_seconds: Option<f64>,
     ) -> Result<(), String>;
-    fn prepend_queue(&self, sources: &[String]) -> Result<(), String>;
-    fn append_queue(&self, sources: &[String]) -> Result<(), String>;
+    fn prepend_sources(&self, sources: &[String]) -> Result<(), String>;
+    fn append_sources(&self, sources: &[String]) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn resume(&self) -> Result<(), String>;
     fn stop(&self) -> Result<(), String>;

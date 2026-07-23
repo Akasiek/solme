@@ -58,7 +58,10 @@ pub fn player_previous(player: State<'_, Arc<PlayerService>>) -> Result<(), Stri
 }
 
 #[tauri::command]
-pub fn player_skip_to_queue_position(position: usize, player: State<'_, Arc<PlayerService>>) -> Result<(), String> {
+pub fn player_skip_to_queue_position(
+    position: usize,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
     player.skip_to_queue_position(position)
 }
 
