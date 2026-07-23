@@ -45,14 +45,24 @@ const queueAlbumLast = (event: MouseEvent) => {
     <div
       class="absolute inset-0 flex items-center justify-center gap-4 bg-zinc-800/80 text-white opacity-0 transition-opacity duration-300 *:cursor-pointer *:rounded-full *:bg-accent *:p-2 group-hover/image:opacity-100"
     >
-      <button type="button" title="Queue next" @click="queueAlbumNext">
-        <ListStart />
+      <button
+        type="button"
+        :title="`Play ${album.name} next`"
+        :aria-label="`Play ${album.name} next`"
+        @click="queueAlbumNext"
+      >
+        <ListStart aria-hidden="true" />
       </button>
-      <button type="button" @click="playAlbum">
-        <Play />
+      <button type="button" :title="`Add ${album.name} to queue next`" :aria-label="`Play ${album.name} now`" @click="playAlbum">
+        <Play aria-hidden="true" />
       </button>
-      <button type="button" title="Queue last" @click="queueAlbumLast">
-        <ListEnd />
+      <button
+        type="button"
+        :title="`Add ${album.name} to the end of the queue`"
+        :aria-label="`Add ${album.name} to the end of the queue`"
+        @click="queueAlbumLast"
+      >
+        <ListEnd aria-hidden="true" />
       </button>
     </div>
   </div>

@@ -23,15 +23,20 @@ const queueAlbumLast = () => {
 
 <template>
   <div class="ml-0.5 flex flex-wrap gap-2">
-    <Button type="button" @click="playAlbum">
+    <Button type="button" :title="`Play ${album.name} now`" @click="playAlbum">
       <Play class="size-4" aria-hidden="true" />
-      Play
+      Play now
     </Button>
-    <Button type="button" variant="outline" @click="queueAlbumNext">
+    <Button type="button" variant="outline" :title="`Add ${album.name} to queue next`" @click="queueAlbumNext">
       <ListStart class="size-4" aria-hidden="true" />
       Queue next
     </Button>
-    <Button type="button" variant="outline" @click="queueAlbumLast">
+    <Button
+      type="button"
+      variant="outline"
+      :title="`Add ${album.name} to the end of the queue`"
+      @click="queueAlbumLast"
+    >
       <ListEnd class="size-4" aria-hidden="true" />
       Queue last
     </Button>
