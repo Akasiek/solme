@@ -2,7 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, useTemplateRef, watch } from "vue";
 import type { CachedAlbum } from "@/types.js";
 import AlbumCard from "@/components/Album/AlbumCard/AlbumCard.vue";
-import CarouselControlButton from "@/components/Home/HomeAlbumCarousel/CarouselControlButton.vue";
+import CarouselControlButton from "@/components/Album/AlbumCarousel/CarouselControlButton.vue";
 
 const props = defineProps<{
   title: string;
