@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import { nextTick, onUnmounted, ref, watch } from "vue";
-
-import { preventDefaultAndStopPropagation } from "@/composables/useHotkey";
+import { nextTick, onBeforeUnmount, useTemplateRef, watch } from "vue";
 
 const props = withDefaults(
   defineProps<{
@@ -17,94 +15,66 @@ const emit = defineEmits<{
   close: [];
 }>();
 
-const dialog = ref<HTMLElement | null>(null);
-let previouslyFocusedElement: HTMLElement | null = null;
+const dialog = useTemplateRef<HTMLDialogElement>("dialog");
 
-const focusableSelector =
-  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-
-const getFocusableElements = () => {
-  return dialog.value ? Array.from(dialog.value.querySelectorAll<HTMLElement>(focusableSelector)) : [];
-};
-
-const focusDialog = () => {
-  const [firstFocusableElement] = getFocusableElements();
-  (firstFocusableElement ?? dialog.value)?.focus();
-};
-
-const close = () => {
-  emit("close");
-};
-
-const handleKeydown = (event: KeyboardEvent) => {
-  if (event.key === "Escape") {
-    preventDefaultAndStopPropagation(event);
-    close();
-    return;
-  }
-
-  if (event.key !== "Tab") {
-    return;
-  }
-
-  const focusableElements = getFocusableElements();
-  const firstFocusableElement = focusableElements[0];
-  const lastFocusableElement = focusableElements[focusableElements.length - 1];
-
-  if (!firstFocusableElement || !lastFocusableElement) {
-    event.preventDefault();
-    dialog.value?.focus();
-    return;
-  }
-
-  if (event.shiftKey && document.activeElement === firstFocusableElement) {
-    event.preventDefault();
-    lastFocusableElement.focus();
-  } else if (!event.shiftKey && document.activeElement === lastFocusableElement) {
-    event.preventDefault();
-    firstFocusableElement.focus();
-  }
-};
-
-const handleBackdropClick = (event: MouseEvent) => {
-  if (event.target === event.currentTarget) {
-    close();
+const closeDialog = () => {
+  if (!props.show && dialog.value?.open) {
+    dialog.value.close();
   }
 };
 
 watch(
   () => props.show,
   async (isOpen) => {
-    if (isOpen) {
-      previouslyFocusedElement = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-      window.addEventListener("keydown", handleKeydown);
-      await nextTick();
-      focusDialog();
+    if (!isOpen) {
       return;
     }
 
-    window.removeEventListener("keydown", handleKeydown);
-    previouslyFocusedElement?.focus();
-    previouslyFocusedElement = null;
+    await nextTick();
+
+    if (dialog.value && !dialog.value.open) {
+      dialog.value.showModal();
+    }
   },
   { immediate: true },
 );
 
-onUnmounted(() => {
-  window.removeEventListener("keydown", handleKeydown);
+onBeforeUnmount(() => {
+  if (dialog.value?.open) {
+    dialog.value.close();
+  }
 });
 </script>
 
 <template>
   <Teleport to="body">
-    <div
-      v-if="props.show"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
-      @click="handleBackdropClick"
+    <dialog
+      ref="dialog"
+      class="fixed inset-0 m-0 h-full max-h-none w-full max-w-none border-0 bg-transparent p-0 backdrop:bg-transparent"
+      :aria-label="props.label"
+      @cancel.prevent="emit('close')"
+      @keydown.esc.prevent.stop="emit('close')"
     >
-      <div ref="dialog" role="dialog" aria-modal="true" :aria-label="props.label" tabindex="-1">
-        <slot />
-      </div>
-    </div>
+      <Transition name="fade" appear @after-leave="closeDialog">
+        <div
+          v-if="props.show"
+          class="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          @click.self="emit('close')"
+        >
+          <slot />
+        </div>
+      </Transition>
+    </dialog>
   </Teleport>
 </template>
+
+<style scoped>
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.2s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}
+</style>
