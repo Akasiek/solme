@@ -2,11 +2,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import { computed, onMounted } from "vue";
 import { usePlayerStore } from "@/stores/player.ts";
+import { useHotkey } from "@/composables/useHotkey";
 import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
-import { useHotkey } from "@/composables/useHotkey";
+import PlayerBarRightAsideMenuToggleButton from "@/components/PlayerBar/PlayerBarRightAsideMenuToggleButton.vue";
 
 const playerStore = usePlayerStore();
 const playerStatus = computed(() => playerStore.status);
@@ -51,7 +52,8 @@ onMounted(async () => {
         <PlayerBarPlaybackControl :playerStatus="playerStatus" />
         <PlayerBarSeekBar :playerStatus="playerStatus" />
       </div>
-      <div class="flex w-96 max-w-full justify-end justify-self-end">
+      <div class="flex w-96 max-w-full items-center justify-end gap-4 justify-self-end">
+        <PlayerBarRightAsideMenuToggleButton />
         <PlayerBarVolumeControl :volume="playerStatus.volume" />
       </div>
     </nav>
