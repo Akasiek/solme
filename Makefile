@@ -6,10 +6,13 @@ DEB_PACKAGE = src-tauri/target/release/bundle/deb/solme_0.1.0_amd64.deb
 
 APPIMAGE_ENV = APPIMAGE_EXTRACT_AND_RUN=1 NO_STRIP=1 ARCH=$(ARCH)
 
-.PHONY: build deb appimage arch-pkg arch-install install
+.PHONY: build windows deb appimage arch-pkg arch-install install
 
 build:
 	$(APPIMAGE_ENV) $(PNPM) tauri build
+
+windows:
+	pwsh -NoProfile -ExecutionPolicy Bypass -File scripts/build-windows.ps1
 
 deb:
 	$(APPIMAGE_ENV) $(PNPM) tauri build --bundles deb

@@ -12,6 +12,7 @@ dist
 dist-ssr
 *.local
 *.AppImage
+src-tauri/mpv/
 
 # Editor directories and files
 .vscode/*
