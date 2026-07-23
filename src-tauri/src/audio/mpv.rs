@@ -57,7 +57,10 @@ impl MpvBackend {
         callback: Arc<Mutex<Option<AudioStatusChangeCallback>>>,
     ) -> Result<(), String> {
         let mpv = mpv
-            .create_client(Some("status_watcher"))
+            // libmpv2 6.0.0 creates a pointer from a temporary CString for
+            // named clients. The pointer can become invalid in release builds.
+            // An automatically generated client name avoids that unsafe path.
+            .create_client(None)
             .map_err(|error| format!("Failed to create mpv status watcher: {error}"))?;
 
         mpv.observe_property("playlist-pos", Format::Int64, 1)
