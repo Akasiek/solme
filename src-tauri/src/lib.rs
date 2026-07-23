@@ -5,8 +5,8 @@ use crate::commands::library::{
 };
 use crate::commands::player::{
     get_player_queue, get_player_status, player_next, player_pause, player_play_album,
-    player_previous, player_queue_album_at_end, player_queue_album_next, player_resume,
-    player_seek, player_set_volume, player_skip_to_queue_position, player_stop,
+    player_previous, player_queue_album_last, player_queue_album_next, player_resume, player_seek,
+    player_set_volume, player_skip_to_queue_position, player_stop,
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, connect_saved_music_server_endpoint,
@@ -46,7 +46,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             player_play_album,
             player_queue_album_next,
-            player_queue_album_at_end,
+            player_queue_album_last,
             player_pause,
             player_resume,
             player_stop,

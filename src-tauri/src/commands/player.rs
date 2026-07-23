@@ -25,11 +25,11 @@ pub async fn player_queue_album_next(
 }
 
 #[tauri::command]
-pub async fn player_queue_album_at_end(
+pub async fn player_queue_album_last(
     album_id: String,
     player: State<'_, Arc<PlayerService>>,
 ) -> Result<(), String> {
-    player.queue_album_at_end(&album_id).await
+    player.queue_album_last(&album_id).await
 }
 
 #[tauri::command]

@@ -24,9 +24,9 @@ const queueAlbumNext = (event: MouseEvent) => {
   invoke("player_queue_album_next", { albumId: album.remoteId });
 };
 
-const queueAlbumAtEnd = (event: MouseEvent) => {
+const queueAlbumLast = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
-  invoke("player_queue_album_at_end", { albumId: album.remoteId });
+  invoke("player_queue_album_last", { albumId: album.remoteId });
 };
 </script>
 
@@ -51,7 +51,7 @@ const queueAlbumAtEnd = (event: MouseEvent) => {
       <button type="button" @click="playAlbum">
         <Play />
       </button>
-      <button type="button" @click="queueAlbumAtEnd">
+      <button type="button" title="Queue last" @click="queueAlbumLast">
         <ListEnd />
       </button>
     </div>

@@ -16,8 +16,8 @@ const queueAlbumNext = () => {
   invoke("player_queue_album_next", { albumId: album.remoteId });
 };
 
-const queueAlbumAtEnd = () => {
-  invoke("player_queue_album_at_end", { albumId: album.remoteId });
+const queueAlbumLast = () => {
+  invoke("player_queue_album_last", { albumId: album.remoteId });
 };
 </script>
 
@@ -31,7 +31,7 @@ const queueAlbumAtEnd = () => {
       <ListStart class="size-4" aria-hidden="true" />
       Queue next
     </Button>
-    <Button type="button" variant="outline" @click="queueAlbumAtEnd">
+    <Button type="button" variant="outline" @click="queueAlbumLast">
       <ListEnd class="size-4" aria-hidden="true" />
       Queue last
     </Button>

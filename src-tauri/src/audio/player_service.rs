@@ -122,7 +122,7 @@ impl PlayerService {
         self.notify_status_changed()
     }
 
-    pub async fn queue_album_at_end(&self, album_id: &str) -> Result<(), String> {
+    pub async fn queue_album_last(&self, album_id: &str) -> Result<(), String> {
         let prepared = self.prepare_album_queue(album_id).await?;
 
         self.audio.append_sources(prepared.sources())?;
@@ -438,7 +438,7 @@ mod tests {
             );
 
             player.play_album("album-1", Some("song-2")).await.unwrap();
-            player.queue_album_at_end("album-2").await.unwrap();
+            player.queue_album_last("album-2").await.unwrap();
 
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.start_index, 1);
