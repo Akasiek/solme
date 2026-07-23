@@ -28,7 +28,7 @@ export function useAsideMenuSize(storageKey: string, providedOptions: Options = 
   const { defaultWidth, minWidth, maxWidth, collapsedWidth, collapseThreshold, isLeft } = options;
 
   const width = ref(defaultWidth);
-  const isCollapsed = providedOptions.isCollapsed ?? ref(false);
+  const isCollapsed = options.isCollapsed ?? ref(false);
   const isResizing = ref(false);
   const asideWidth = computed(() => (isCollapsed.value ? collapsedWidth : width.value));
 
