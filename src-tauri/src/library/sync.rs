@@ -4,9 +4,9 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, RwLock,
     },
+    time::Duration,
 };
-
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::{future::join, stream, StreamExt, TryStreamExt};
 use uuid::Uuid;
 
 use crate::server::{backend::MusicServer, MusicServerService};
@@ -25,12 +25,14 @@ use super::{
 const ALBUM_CONCURRENCY: usize = 6;
 const ARTWORK_CONCURRENCY: usize = 4;
 const ARTWORK_MAX_AGE_SECONDS: i64 = 7 * 24 * 60 * 60;
+const LIBRARY_SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 pub struct LibrarySyncService {
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryRepository>,
     artwork_root: PathBuf,
     running: AtomicBool,
+    periodic_running: AtomicBool,
     status: RwLock<LibrarySyncStatus>,
 }
 
@@ -45,8 +47,29 @@ impl LibrarySyncService {
             repository,
             artwork_root,
             running: AtomicBool::new(false),
+            periodic_running: AtomicBool::new(false),
             status: RwLock::new(LibrarySyncStatus::default()),
         }
+    }
+
+    pub fn start_periodic(self: &Arc<Self>) {
+        if self.periodic_running.swap(true, Ordering::SeqCst) {
+            return;
+        }
+
+        let service = Arc::clone(self);
+        tauri::async_runtime::spawn(async move {
+            loop {
+                tokio::time::sleep(LIBRARY_SYNC_INTERVAL).await;
+
+                if service.running.load(Ordering::SeqCst) {
+                    continue;
+                }
+                if let Err(error) = service.start(false) {
+                    log::debug!("Periodic library synchronization was skipped: {error}");
+                }
+            }
+        });
     }
 
     pub fn start(self: &Arc<Self>, force: bool) -> Result<(), String> {
