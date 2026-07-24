@@ -17,6 +17,8 @@ const {
     }),
   {
     heroRandomAlbums: [],
+    recentlyPlayedAlbums: [],
+    mostPlayedAlbums: [],
     randomAlbums: [],
     newlyAddedAlbums: [],
     newlyReleasedAlbums: [],
@@ -33,6 +35,12 @@ const {
         <HomeHero :album-sections="albumSections" />
         <div id="explore-library" class="scroll-mt-6">
           <AlbumCarousel title="Explore library" :albums="albumSections.randomAlbums" />
+        </div>
+        <div id="recently-played" class="scroll-mt-6">
+          <AlbumCarousel title="Recently played" :albums="albumSections.recentlyPlayedAlbums" />
+        </div>
+        <div id="most-played" class="scroll-mt-6">
+          <AlbumCarousel title="Most played" :albums="albumSections.mostPlayedAlbums" />
         </div>
         <div id="recently-added" class="scroll-mt-6">
           <AlbumCarousel title="Recently added albums" :albums="albumSections.newlyAddedAlbums" />

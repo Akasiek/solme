@@ -1,4 +1,5 @@
 mod artwork;
+mod catalog;
 mod fuzzy_search;
 pub(crate) mod models;
 mod query;
@@ -6,6 +7,7 @@ mod repository;
 mod sync;
 mod time;
 
+pub use catalog::LibraryCatalogService;
 pub use models::{
     CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong,
     HomeAlbumSections, LibrarySummary, LibrarySyncStatus,

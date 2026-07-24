@@ -1,3 +1,4 @@
+use futures_util::{stream, StreamExt, TryStreamExt};
 use std::{
     path::PathBuf,
     sync::{
@@ -6,18 +7,13 @@ use std::{
     },
     time::Duration,
 };
-use futures_util::{future::join, stream, StreamExt, TryStreamExt};
 use uuid::Uuid;
 
-use crate::server::{backend::MusicServer, MusicServerService};
+use crate::server::{backend::MusicServer, AlbumQuery, MusicServerService};
 
 use super::{
     artwork::synchronize_artwork_item,
-    models::{
-        Album, AlbumSort, AlbumWithSongs, CachedAlbum, CachedAlbumDetails, CachedArtist,
-        CachedArtistDetails, CachedSong, HomeAlbumSections, LibrarySnapshot, LibrarySummary,
-        LibrarySyncPhase, LibrarySyncStatus,
-    },
+    models::{Album, AlbumWithSongs, LibrarySnapshot, LibrarySyncPhase, LibrarySyncStatus},
     repository::LibraryRepository,
     time::now_epoch_seconds,
 };
@@ -109,150 +105,6 @@ impl LibrarySyncService {
             .map_err(|_| "Library sync status lock was poisoned".to_string())
     }
 
-    pub async fn summary(&self) -> Result<LibrarySummary, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(LibrarySummary {
-                artist_count: 0,
-                album_count: 0,
-                song_count: 0,
-                genre_count: 0,
-                last_success_at: None,
-            });
-        };
-        self.repository.summary(&profile_id).await
-    }
-
-    pub async fn albums(&self, offset: i64, limit: i64) -> Result<Vec<CachedAlbum>, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Vec::new());
-        };
-        self.repository
-            .albums(&profile_id, offset, limit, AlbumSort::Artist)
-            .await
-    }
-
-    pub async fn home_album_sections(&self, limit: i64) -> Result<HomeAlbumSections, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(HomeAlbumSections {
-                hero_random_albums: Vec::new(),
-                random_albums: Vec::new(),
-                newly_added_albums: Vec::new(),
-                newly_released_albums: Vec::new(),
-            });
-        };
-        let limit = limit.clamp(1, 50);
-        let hero_random_albums = self
-            .repository
-            .albums(&profile_id, 0, 5, AlbumSort::Random)
-            .await?;
-        let random_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::Random)
-            .await?;
-        let newly_added_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::RecentlyAdded)
-            .await?;
-        let newly_released_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::RecentlyReleased)
-            .await?;
-
-        Ok(HomeAlbumSections {
-            hero_random_albums,
-            random_albums,
-            newly_added_albums,
-            newly_released_albums,
-        })
-    }
-
-    pub async fn artist(&self, artist_id: &str) -> Result<Option<CachedArtistDetails>, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(None);
-        };
-        let Some(artist) = self.repository.artist(&profile_id, artist_id).await? else {
-            return Ok(None);
-        };
-        let albums = self
-            .repository
-            .artist_albums(&profile_id, artist_id)
-            .await?;
-        Ok(Some(CachedArtistDetails { artist, albums }))
-    }
-
-    pub async fn search_artists(
-        &self,
-        query: &str,
-        limit: i64,
-    ) -> Result<Vec<CachedArtist>, String> {
-        if query.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Vec::new());
-        };
-        self.repository
-            .search_artists(&profile_id, query, limit)
-            .await
-    }
-
-    pub async fn album(&self, album_id: &str) -> Result<Option<CachedAlbumDetails>, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(None);
-        };
-        let Some(album) = self.repository.album(&profile_id, album_id).await? else {
-            return Ok(None);
-        };
-        let genres = self.repository.album_genres(&profile_id, album_id).await?;
-        let disc_count = self
-            .repository
-            .album_disc_count(&profile_id, album_id)
-            .await?;
-        let audio_formats = self
-            .repository
-            .album_audio_formats(&profile_id, album_id)
-            .await?;
-        let songs = self.repository.songs(&profile_id, album_id).await?;
-        Ok(Some(CachedAlbumDetails {
-            album,
-            genres,
-            disc_count,
-            audio_formats,
-            songs,
-        }))
-    }
-
-    pub async fn search_albums(&self, query: &str, limit: i64) -> Result<Vec<CachedAlbum>, String> {
-        if query.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Vec::new());
-        };
-        self.repository
-            .search_albums(&profile_id, query, limit)
-            .await
-    }
-
-    pub async fn search_songs(&self, query: &str, limit: i64) -> Result<Vec<CachedSong>, String> {
-        if query.trim().is_empty() {
-            return Ok(Vec::new());
-        }
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Vec::new());
-        };
-        self.repository
-            .search_songs(&profile_id, query, limit)
-            .await
-    }
-
-    pub async fn songs(&self, album_id: &str) -> Result<Vec<CachedSong>, String> {
-        let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Vec::new());
-        };
-        self.repository.songs(&profile_id, album_id).await
-    }
-
     async fn synchronize(&self, force: bool) -> Result<(), String> {
         self.reset_status();
         let (profile_id, server) = self.server.current_server()?;
@@ -338,7 +190,7 @@ impl LibrarySyncService {
             status.processed_artists = artists.len() as u64;
         });
 
-        let album_index = server.albums().await?;
+        let album_index = server.albums(AlbumQuery::Library).await?;
         let albums = self.fetch_albums_with_songs(server, album_index).await?;
 
         Ok(LibrarySnapshot {
@@ -490,8 +342,9 @@ mod tests {
                 LibrarySyncPhase, Song,
             },
             repository::LibraryRepository,
+            LibraryCatalogService,
         },
-        server::{backend::MusicServer, MusicServerService, ScrobbleEvent, ServerInfo},
+        server::{backend::MusicServer, AlbumQuery, MusicServerService, ScrobbleEvent, ServerInfo},
     };
 
     #[test]
@@ -688,7 +541,7 @@ mod tests {
         tauri::async_runtime::block_on(async {
             let server = Arc::new(MockMusicServer::new(Some("revision-1")));
             let repository = Arc::new(MockRepository::new(Some("revision-1")));
-            let service = service(server, Arc::clone(&repository));
+            let service = catalog(server, Arc::clone(&repository));
 
             let sections = service.home_album_sections(48).await.unwrap();
 
@@ -707,6 +560,11 @@ mod tests {
                 vec!["hero-1", "hero-2", "hero-3", "hero-4", "hero-5"]
             );
             assert_eq!(explore_ids, vec!["explore-1", "explore-2"]);
+            assert_eq!(
+                sections.recently_played_albums[0].remote_id,
+                "recently-played"
+            );
+            assert_eq!(sections.most_played_albums[0].remote_id, "most-played");
             assert_eq!(*repository.random_album_limits.lock().unwrap(), vec![5, 48]);
         });
     }
@@ -725,11 +583,7 @@ mod tests {
                 Box::new(MemoryCredentialStore),
             ));
             let repository = Arc::new(MockRepository::new(Some("revision-1")));
-            let service = Arc::new(LibrarySyncService::new(
-                server_service,
-                repository,
-                std::env::temp_dir().join(format!("solme-sync-{}", Uuid::new_v4())),
-            ));
+            let service = LibraryCatalogService::new(server_service, repository);
 
             assert!(service.artist("artist-1").await.unwrap().is_none());
             database_repository.close().await;
@@ -743,6 +597,21 @@ mod tests {
     ) -> Arc<LibrarySyncService> {
         let directory = std::env::temp_dir().join(format!("solme-sync-{}", Uuid::new_v4()));
         service_with_artwork_root(server, repository, directory)
+    }
+
+    fn catalog(
+        server: Arc<MockMusicServer>,
+        repository: Arc<MockRepository>,
+    ) -> LibraryCatalogService {
+        let database = sqlx::SqlitePool::connect_lazy("sqlite::memory:").unwrap();
+        let server_service = Arc::new(MusicServerService::new(
+            database,
+            Box::new(MemoryCredentialStore),
+        ));
+        server_service
+            .set_current_server("profile-1".to_string(), server)
+            .unwrap();
+        LibraryCatalogService::new(server_service, repository)
     }
 
     fn service_with_artwork_root(
@@ -826,9 +695,15 @@ mod tests {
             }])
         }
 
-        async fn albums(&self) -> Result<Vec<Album>, String> {
+        async fn albums(&self, query: AlbumQuery) -> Result<Vec<Album>, String> {
             self.album_calls.fetch_add(1, Ordering::SeqCst);
-            Ok(vec![album()])
+            let mut album = album();
+            album.remote_id = match query {
+                AlbumQuery::Library => return Ok(vec![album]),
+                AlbumQuery::RecentlyPlayed { .. } => "recently-played".to_string(),
+                AlbumQuery::MostPlayed { .. } => "most-played".to_string(),
+            };
+            Ok(vec![album])
         }
 
         async fn album(&self, _id: &str) -> Result<AlbumWithSongs, String> {
@@ -988,12 +863,23 @@ mod tests {
             Ok(albums.into_iter().take(limit as usize).collect())
         }
 
+        async fn albums_by_ids(
+            &self,
+            _profile_id: &str,
+            album_ids: &[String],
+        ) -> Result<Vec<CachedAlbum>, String> {
+            Ok(album_ids
+                .iter()
+                .map(|album_id| cached_album(album_id))
+                .collect())
+        }
+
         async fn album(
             &self,
             _profile_id: &str,
-            _album_id: &str,
+            album_id: &str,
         ) -> Result<Option<CachedAlbum>, String> {
-            Ok(None)
+            Ok(Some(cached_album(album_id)))
         }
 
         async fn album_genres(

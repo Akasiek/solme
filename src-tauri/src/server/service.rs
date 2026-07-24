@@ -525,8 +525,11 @@ impl MusicServer for FailoverMusicServer {
             .await
     }
 
-    async fn albums(&self) -> Result<Vec<crate::library::models::Album>, String> {
-        self.with_failover(|server| async move { server.albums().await })
+    async fn albums(
+        &self,
+        query: super::models::AlbumQuery,
+    ) -> Result<Vec<crate::library::models::Album>, String> {
+        self.with_failover(|server| async move { server.albums(query).await })
             .await
     }
 

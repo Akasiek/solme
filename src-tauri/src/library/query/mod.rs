@@ -5,7 +5,7 @@ mod search;
 mod songs;
 
 pub(crate) use albums::{
-    albums, insert_album_genres, insert_album_search, insert_albums, search_albums,
+    albums, albums_by_ids, insert_album_genres, insert_album_search, insert_albums, search_albums,
 };
 pub(crate) use artists::{
     artist, artist_albums, insert_artist_search, insert_artists, insert_genres, search_artists,

@@ -68,6 +68,13 @@ pub enum ScrobbleEvent {
     Submission,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlbumQuery {
+    Library,
+    RecentlyPlayed { limit: usize },
+    MostPlayed { limit: usize },
+}
+
 #[derive(Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct StoredServerProfile {

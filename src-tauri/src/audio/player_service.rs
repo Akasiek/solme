@@ -324,7 +324,7 @@ mod tests {
             },
             LibraryRepository,
         },
-        server::{backend::MusicServer, MusicServerService, ScrobbleEvent, ServerInfo},
+        server::{backend::MusicServer, AlbumQuery, MusicServerService, ScrobbleEvent, ServerInfo},
     };
 
     #[test]
@@ -861,7 +861,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn albums(&self) -> Result<Vec<Album>, String> {
+        async fn albums(&self, _query: AlbumQuery) -> Result<Vec<Album>, String> {
             unimplemented!()
         }
 
@@ -954,6 +954,14 @@ mod tests {
             _offset: i64,
             _limit: i64,
             _sort: AlbumSort,
+        ) -> Result<Vec<CachedAlbum>, String> {
+            unimplemented!()
+        }
+
+        async fn albums_by_ids(
+            &self,
+            _profile_id: &str,
+            _album_ids: &[String],
         ) -> Result<Vec<CachedAlbum>, String> {
             unimplemented!()
         }

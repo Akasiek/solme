@@ -47,6 +47,11 @@ pub trait LibraryRepository: Send + Sync {
         limit: i64,
         sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String>;
+    async fn albums_by_ids(
+        &self,
+        profile_id: &str,
+        album_ids: &[String],
+    ) -> Result<Vec<CachedAlbum>, String>;
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
     async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String>;
     async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String>;
@@ -229,6 +234,14 @@ impl LibraryRepository for SqliteRepository {
         sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String> {
         query::albums(self, profile_id, offset, limit, sort).await
+    }
+
+    async fn albums_by_ids(
+        &self,
+        profile_id: &str,
+        album_ids: &[String],
+    ) -> Result<Vec<CachedAlbum>, String> {
+        query::albums_by_ids(self, profile_id, album_ids).await
     }
 
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
@@ -529,6 +542,36 @@ mod tests {
                 repository.album_genres("profile", "album-1").await.unwrap(),
                 vec!["Jazz".to_string()]
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn returns_cached_albums_in_requested_id_order() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            repository
+                .activate_snapshot("profile", "generation-1", None, &large_snapshot(3), 123)
+                .await
+                .unwrap();
+
+            let requested_ids = vec![
+                "album-2".to_string(),
+                "missing-album".to_string(),
+                "album-0".to_string(),
+            ];
+            let albums = repository
+                .albums_by_ids("profile", &requested_ids)
+                .await
+                .unwrap();
+            let returned_ids = albums
+                .iter()
+                .map(|album| album.remote_id.as_str())
+                .collect::<Vec<_>>();
+
+            assert_eq!(returned_ids, vec!["album-2", "album-0"]);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use super::super::{
@@ -85,6 +87,39 @@ pub(crate) async fn albums(
         .fetch_all(&repo.pool)
         .await
         .map_err(|error| format!("Failed to read cached albums: {error}"))
+}
+
+pub(crate) async fn albums_by_ids(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    album_ids: &[String],
+) -> Result<Vec<CachedAlbum>, String> {
+    if album_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
+    query.push_bind(profile_id).push(" AND a.remote_id IN (");
+    let mut ids = query.separated(", ");
+    for album_id in album_ids {
+        ids.push_bind(album_id);
+    }
+    ids.push_unseparated(")");
+
+    let albums = query
+        .build_query_as::<CachedAlbum>()
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached albums by ID: {error}"))?;
+    let mut albums_by_id = albums
+        .into_iter()
+        .map(|album| (album.remote_id.clone(), album))
+        .collect::<HashMap<_, _>>();
+
+    Ok(album_ids
+        .iter()
+        .filter_map(|album_id| albums_by_id.remove(album_id))
+        .collect())
 }
 
 fn album_list_filter_and_order(sort: AlbumSort) -> (&'static str, &'static str) {

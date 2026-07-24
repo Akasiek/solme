@@ -16,7 +16,7 @@ use super::models::{
 };
 use crate::server::{
     backend::MusicServer,
-    models::{ScrobbleEvent, ServerInfo},
+    models::{AlbumQuery, ScrobbleEvent, ServerInfo},
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -262,29 +262,41 @@ impl MusicServer for NavidromeBackend {
             .collect())
     }
 
-    async fn albums(&self) -> Result<Vec<Album>, String> {
+    async fn albums(&self, query: AlbumQuery) -> Result<Vec<Album>, String> {
+        let (list_type, limit) = match query {
+            AlbumQuery::Library => ("alphabeticalByArtist", None),
+            AlbumQuery::RecentlyPlayed { limit } => ("recent", Some(limit)),
+            AlbumQuery::MostPlayed { limit } => ("frequent", Some(limit)),
+        };
         let mut albums = Vec::new();
-        let mut offset = 0_u32;
+        let mut offset = 0_usize;
 
         loop {
+            let remaining = limit.map(|limit| limit.saturating_sub(albums.len()));
+            if remaining == Some(0) {
+                return Ok(albums);
+            }
+            let page_size = remaining
+                .unwrap_or(ALBUM_PAGE_SIZE as usize)
+                .min(ALBUM_PAGE_SIZE as usize);
             let payload: AlbumListPayload = self
                 .request_payload(
                     "getAlbumList2",
                     &[
-                        ("type", "alphabeticalByArtist".to_string()),
+                        ("type", list_type.to_string()),
                         ("offset", offset.to_string()),
-                        ("size", ALBUM_PAGE_SIZE.to_string()),
+                        ("size", page_size.to_string()),
                     ],
                 )
                 .await?;
             let page = payload.album_list2.album;
-            let is_last_page = page.len() < ALBUM_PAGE_SIZE as usize;
+            let is_last_page = page.len() < page_size;
+            offset += page.len();
             albums.extend(page.into_iter().map(AlbumDto::into_album));
 
             if is_last_page {
                 return Ok(albums);
             }
-            offset += ALBUM_PAGE_SIZE;
         }
     }
 

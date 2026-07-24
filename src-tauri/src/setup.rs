@@ -11,7 +11,7 @@ use crate::{
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
     events::{EventBus, EventEmitter},
-    library::LibrarySyncService,
+    library::{LibraryCatalogService, LibrarySyncService},
     server::{MusicServerService, SavedServerEndpoint},
 };
 
@@ -28,12 +28,14 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let repository = create_repository(&database_path)?;
     let server = create_server(&repository)?;
     let event_bus = create_event_bus(app);
+    let library_catalog = create_library_catalog(&server, &repository);
     let library_sync = create_library_sync(&dirs.cache, &server, &repository);
     let player = create_player(&server, &repository, event_bus)?;
     let scrobble_service = create_scrobble_service(&player, &server, &repository);
     let session_service = create_session_service(&player, &server, &repository);
 
     app.manage(Arc::clone(&server));
+    app.manage(library_catalog);
     app.manage(Arc::clone(&library_sync));
     app.manage(Arc::clone(&player));
     app.manage(Arc::clone(&scrobble_service));
@@ -131,6 +133,14 @@ fn create_library_sync(
         repository,
         cache_dir.join("artwork"),
     ))
+}
+
+fn create_library_catalog(
+    server: &Arc<MusicServerService>,
+    repository: &Arc<SqliteRepository>,
+) -> Arc<LibraryCatalogService> {
+    let repository = Arc::clone(repository);
+    Arc::new(LibraryCatalogService::new(Arc::clone(server), repository))
 }
 
 fn create_player(
