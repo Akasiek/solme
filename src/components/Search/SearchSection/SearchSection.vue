@@ -173,11 +173,10 @@ watch(
 
 <template>
   <div :class="isModal ? 'flex min-h-0 flex-1 flex-col' : 'space-y-8'">
-    <div v-if="isModal" class="shrink-0 space-y-5 border-b border-zinc-800 p-4 lg:p-8">
+    <div v-if="isModal" class="w-auto shrink-0 space-y-5 border-b border-zinc-800 p-4 lg:p-8">
       <h2 class="font-serif text-xl font-semibold text-zinc-100">Search</h2>
       <SearchSectionSearchForm v-model="query" placeholder="Search..." @submit="submitSearch" />
     </div>
-
     <SearchSectionSearchForm
       v-else
       v-model="query"
@@ -185,7 +184,7 @@ watch(
       @submit="submitSearch"
     />
 
-    <div v-if="query.trim()" :class="isModal ? 'min-h-0 flex-1 overflow-y-auto p-4 lg:p-8' : ''">
+    <div v-if="query.trim()" :class="isModal ? 'min-h-0 w-full flex-1 overflow-y-auto p-4 lg:p-8' : ''">
       <p v-if="isLoading" class="font-sans text-sm text-zinc-400">Searching...</p>
       <p v-else-if="error" class="font-sans text-sm text-red-400">{{ error }}</p>
       <SearchSectionResults
