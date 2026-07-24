@@ -4,6 +4,7 @@ import { PanelLeftClose, PanelLeftOpen } from "@lucide/vue";
 import { useAsideMenuSize } from "@/composables/useAsideMenuSize";
 
 import LeftAsideMenuHeader from "./LeftAsideMenuHeader.vue";
+import LeftAsideMenuHistoryNavigation from "./LeftAsideMenuHistoryNavigation.vue";
 import LeftAsideMenuNavigation from "./LeftAsideMenuNavigation.vue";
 
 const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } =
@@ -18,6 +19,7 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleColl
   >
     <div class="flex h-full flex-col px-4 py-6">
       <LeftAsideMenuHeader :is-collapsed="isCollapsed" />
+      <LeftAsideMenuHistoryNavigation :is-collapsed="isCollapsed" />
       <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
       <div class="mt-auto border-t border-zinc-800 pt-4">
         <button
