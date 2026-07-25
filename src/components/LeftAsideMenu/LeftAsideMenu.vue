@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { PanelLeftClose, PanelLeftOpen } from "@lucide/vue";
-
 import { useAsideMenuSize } from "@/composables/useAsideMenuSize";
 
 import LeftAsideMenuHeader from "./LeftAsideMenuHeader.vue";
 import LeftAsideMenuHistoryNavigation from "./LeftAsideMenuHistoryNavigation.vue";
 import LeftAsideMenuNavigation from "./LeftAsideMenuNavigation.vue";
+import LeftAsideMenuToggleButton from "@/components/LeftAsideMenu/LeftAsideMenuToggleButton.vue";
 
 const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } =
   useAsideMenuSize("left-aside-menu-width");
@@ -21,17 +20,8 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleColl
       <LeftAsideMenuHeader :is-collapsed="isCollapsed" />
       <LeftAsideMenuHistoryNavigation :is-collapsed="isCollapsed" />
       <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
-      <div class="mt-auto border-t border-zinc-800 pt-4">
-        <button
-          type="button"
-          class="flex w-full cursor-pointer items-center rounded px-4 py-2 text-zinc-400 transition-colors hover:bg-zinc-800 hover:text-zinc-100"
-          :class="isCollapsed ? 'justify-center' : 'gap-3'"
-          :title="isCollapsed ? 'Expand menu' : 'Collapse menu'"
-          @click="toggleCollapsed"
-        >
-          <component :is="isCollapsed ? PanelLeftOpen : PanelLeftClose" class="size-5 shrink-0" />
-          <span v-if="!isCollapsed" class="text-sm font-medium whitespace-nowrap">Collapse menu</span>
-        </button>
+      <div class="mt-auto border-t border-zinc-800 pt-4 pb-4">
+        <LeftAsideMenuToggleButton :is-collapsed="isCollapsed" @toggle="toggleCollapsed" />
       </div>
     </div>
     <div
