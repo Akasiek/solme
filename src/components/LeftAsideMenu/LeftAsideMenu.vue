@@ -21,7 +21,7 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleColl
       <LeftAsideMenuHeader :is-collapsed="isCollapsed" />
       <LeftAsideMenuHistoryNavigation :is-collapsed="isCollapsed" />
       <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
-      <div class="mt-auto border-t border-zinc-800 pt-4 pb-4">
+      <div class="mt-auto pt-4 pb-4">
         <LeftAsideMenuToggleButton :is-collapsed="isCollapsed" @toggle="toggleCollapsed" />
       </div>
     </div>
