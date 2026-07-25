@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     error::Error,
     path::{Path, PathBuf},
     sync::Arc,
@@ -193,10 +194,33 @@ fn start_saved_server_connection(
     session: Arc<PlaybackSessionService>,
 ) {
     tauri::async_runtime::spawn(async move {
+        cleanup_orphaned_artwork(&server, &library_sync).await;
+
         match connect_saved_server(None, &server, &library_sync, &player, &session).await {
             Ok(_) => {}
             Err(error) if error == "No server profile is saved" => {}
             Err(error) => log::error!("Failed to restore saved music server on startup: {error}"),
         }
     });
+}
+
+async fn cleanup_orphaned_artwork(
+    server: &Arc<MusicServerService>,
+    library: &Arc<LibrarySyncService>,
+) {
+    let profiles = match server.saved_profiles().await {
+        Ok(profiles) => profiles,
+        Err(error) => {
+            log::warn!("Failed to list profiles for artwork cleanup: {error}");
+            return;
+        }
+    };
+    let profile_ids = profiles
+        .into_iter()
+        .map(|profile| profile.id)
+        .collect::<HashSet<_>>();
+
+    if let Err(error) = library.remove_orphaned_artwork(profile_ids).await {
+        log::warn!("Failed to clean orphaned artwork: {error}");
+    }
 }

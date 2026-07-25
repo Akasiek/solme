@@ -206,7 +206,10 @@ impl MusicServerService {
             .collect())
     }
 
-    pub async fn forget_saved_profile(&self, profile_id: Option<String>) -> Result<(), String> {
+    pub async fn forget_saved_profile(
+        &self,
+        profile_id: Option<String>,
+    ) -> Result<Option<String>, String> {
         let credentials = Arc::clone(&self.credentials);
 
         let deleted_profile_id =
@@ -225,7 +228,7 @@ impl MusicServerService {
                 None
             };
 
-        if let Some(deleted_profile_id) = deleted_profile_id {
+        if let Some(deleted_profile_id) = deleted_profile_id.as_deref() {
             let mut current_server = self
                 .server
                 .write()
@@ -238,7 +241,7 @@ impl MusicServerService {
             }
         }
 
-        Ok(())
+        Ok(deleted_profile_id)
     }
 
     pub async fn ping(&self) -> Result<ServerInfo, String> {

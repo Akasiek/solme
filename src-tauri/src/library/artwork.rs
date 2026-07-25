@@ -1,4 +1,6 @@
 use std::{
+    collections::HashSet,
+    io::ErrorKind,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -105,5 +107,91 @@ fn content_type_extension(content_type: &str) -> &'static str {
         "image/gif" => "gif",
         "image/avif" => "avif",
         _ => "img",
+    }
+}
+
+pub(super) fn remove_profile_artwork(root: &Path, profile_id: &str) -> Result<(), String> {
+    remove_artwork_directory(&root.join(profile_id))
+}
+
+fn remove_artwork_directory(directory: &Path) -> Result<(), String> {
+    match std::fs::remove_dir_all(directory) {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(format!(
+            "Failed to remove artwork directory {}: {error}",
+            directory.display()
+        )),
+    }
+}
+
+pub(super) fn remove_orphaned_artwork(
+    root: &Path,
+    valid_profile_ids: &HashSet<String>,
+) -> Result<(), String> {
+    let entries = match std::fs::read_dir(root) {
+        Ok(entries) => entries,
+        Err(error) if error.kind() == ErrorKind::NotFound => return Ok(()),
+        Err(error) => {
+            return Err(format!(
+                "Failed to read artwork cache directory {}: {error}",
+                root.display()
+            ))
+        }
+    };
+
+    for entry in entries {
+        let entry =
+            entry.map_err(|error| format!("Failed to read artwork cache entry: {error}"))?;
+        let file_type = entry
+            .file_type()
+            .map_err(|error| format!("Failed to inspect artwork cache entry: {error}"))?;
+        if !file_type.is_dir() {
+            continue;
+        }
+
+        if !valid_profile_ids.contains(entry.file_name().to_string_lossy().as_ref()) {
+            remove_artwork_directory(&entry.path())?;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::collections::HashSet;
+
+    use uuid::Uuid;
+
+    use super::{remove_orphaned_artwork, remove_profile_artwork};
+
+    #[test]
+    fn removes_only_orphaned_profile_directories() {
+        let root = std::env::temp_dir().join(format!("solme-artwork-cleanup-{}", Uuid::new_v4()));
+        let active_profile_id = "active-profile";
+        let orphaned_profile_id = "orphaned-profile";
+        std::fs::create_dir_all(root.join(active_profile_id).join("album")).unwrap();
+        std::fs::create_dir_all(root.join(orphaned_profile_id).join("artist")).unwrap();
+        std::fs::write(root.join("cache-marker"), []).unwrap();
+
+        remove_orphaned_artwork(&root, &HashSet::from([active_profile_id.to_string()])).unwrap();
+
+        assert!(root.join(active_profile_id).is_dir());
+        assert!(!root.join(orphaned_profile_id).exists());
+        assert!(root.join("cache-marker").is_file());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn removing_profile_artwork_is_idempotent() {
+        let root = std::env::temp_dir().join(format!("solme-artwork-remove-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("profile").join("album")).unwrap();
+
+        remove_profile_artwork(&root, "profile").unwrap();
+        remove_profile_artwork(&root, "profile").unwrap();
+
+        assert!(!root.join("profile").exists());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

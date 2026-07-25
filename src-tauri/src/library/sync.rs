@@ -1,5 +1,6 @@
 use futures_util::{stream, StreamExt, TryStreamExt};
 use std::{
+    collections::HashSet,
     path::PathBuf,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -12,7 +13,7 @@ use uuid::Uuid;
 use crate::server::{backend::MusicServer, AlbumQuery, MusicServerService};
 
 use super::{
-    artwork::synchronize_artwork_item,
+    artwork::{remove_orphaned_artwork, remove_profile_artwork, synchronize_artwork_item},
     models::{Album, AlbumWithSongs, LibrarySnapshot, LibrarySyncPhase, LibrarySyncStatus},
     repository::LibrarySyncRepository,
     time::now_epoch_seconds,
@@ -103,6 +104,28 @@ impl LibrarySyncService {
             .read()
             .map(|status| status.clone())
             .map_err(|_| "Library sync status lock was poisoned".to_string())
+    }
+
+    pub async fn remove_profile_artwork(&self, profile_id: &str) -> Result<(), String> {
+        let artwork_root = self.artwork_root.clone();
+        let profile_id = profile_id.to_string();
+        tauri::async_runtime::spawn_blocking(move || {
+            remove_profile_artwork(&artwork_root, &profile_id)
+        })
+        .await
+        .map_err(|error| format!("Artwork cleanup task failed: {error}"))?
+    }
+
+    pub async fn remove_orphaned_artwork(
+        &self,
+        valid_profile_ids: HashSet<String>,
+    ) -> Result<(), String> {
+        let artwork_root = self.artwork_root.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            remove_orphaned_artwork(&artwork_root, &valid_profile_ids)
+        })
+        .await
+        .map_err(|error| format!("Artwork cleanup task failed: {error}"))?
     }
 
     async fn synchronize(&self, force: bool) -> Result<(), String> {

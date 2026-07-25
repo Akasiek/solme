@@ -2,6 +2,7 @@ pub(crate) mod backend;
 mod models;
 mod navidrome;
 mod profile_store;
+mod query;
 mod service;
 
 pub(crate) use models::{AlbumQuery, ScrobbleEvent};

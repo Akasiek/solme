@@ -99,6 +99,10 @@ pub async fn connect_saved_music_server_endpoint(
 pub async fn forget_saved_server_profile(
     profile_id: Option<String>,
     server: State<'_, Arc<MusicServerService>>,
+    library: State<'_, Arc<LibrarySyncService>>,
 ) -> Result<(), String> {
-    server.forget_saved_profile(profile_id).await
+    if let Some(deleted_profile_id) = server.forget_saved_profile(profile_id).await? {
+        library.remove_profile_artwork(&deleted_profile_id).await?;
+    }
+    Ok(())
 }
