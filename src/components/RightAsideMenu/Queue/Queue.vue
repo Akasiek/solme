@@ -24,7 +24,10 @@ const scrollCurrentSongIntoView = async (index: number) => {
   }
 
   await nextTick();
-  queueList.value?.querySelector<HTMLElement>(`[data-queue-index="${index}"]`)?.scrollIntoView({ block: "nearest" });
+  queueList.value?.querySelector<HTMLElement>(`[data-queue-index="${index}"]`)?.scrollIntoView({
+    block: "center",
+    inline: "nearest",
+  });
 };
 
 watch([currentIndex, queue], ([index]) => scrollCurrentSongIntoView(index), { immediate: true });
