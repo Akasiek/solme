@@ -4,10 +4,10 @@ import { CachedAlbum } from "@/types.js";
 import { artworkSource } from "@/utils/artwork.js";
 import MissingCoverImage from "../MissingCoverImage.vue";
 import { invoke } from "@tauri-apps/api/core";
+import { useSearchModal } from "@/composables/useSearchModal.ts";
 
-const { album } = defineProps<{
-  album: CachedAlbum;
-}>();
+const { album } = defineProps<{ album: CachedAlbum }>();
+const { closeSearchModal } = useSearchModal();
 
 const stopAlbumLinkNavigation = (event: MouseEvent) => {
   event.preventDefault();
@@ -17,6 +17,7 @@ const stopAlbumLinkNavigation = (event: MouseEvent) => {
 const playAlbum = (event: MouseEvent) => {
   stopAlbumLinkNavigation(event);
   invoke("player_play_album", { albumId: album.remoteId });
+  closeSearchModal();
 };
 
 const queueAlbumNext = (event: MouseEvent) => {
