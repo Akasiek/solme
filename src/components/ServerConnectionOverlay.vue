@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed } from "vue";
 
-import { useServerConnectionStatus } from "@/composables/useServerConnectionStatus";
+import { useServerConnectionStore } from "@/stores/serverConnection";
 
-const { serverConnectionStatus } = useServerConnectionStatus();
+const { status: serverConnectionStatus } = useServerConnectionStore();
 
 const isVisible = computed(() => serverConnectionStatus.phase !== "idle");
 

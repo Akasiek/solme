@@ -3,7 +3,7 @@ import { onMounted, ref } from "vue";
 import { invoke } from "@tauri-apps/api/core";
 
 import SavedServerListItem from "@/components/Settings/SavedServerListItem.vue";
-import { showToast } from "@/composables/useToast";
+import { useToastStore } from "@/stores/toast";
 import { SavedServerProfile, ServerInfo } from "@/types";
 
 interface ServerAuthorizationPayload {
@@ -21,6 +21,7 @@ const emit = defineEmits<{
 }>();
 
 const profiles = ref<SavedServerProfile[]>([]);
+const { show: showToast } = useToastStore();
 const isLoading = ref(false);
 const isSubmitting = ref(false);
 const activeActionProfileId = ref<string | null>(null);

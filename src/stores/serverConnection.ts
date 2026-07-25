@@ -1,4 +1,5 @@
-import { reactive, readonly } from "vue";
+import { defineStore } from "pinia";
+import { reactive } from "vue";
 
 type ServerConnectionPhase = "idle" | "primary" | "secondary" | "failed";
 
@@ -9,11 +10,11 @@ interface ServerConnectionStatus {
   error?: string;
 }
 
-const status = reactive<ServerConnectionStatus>({
-  phase: "idle",
-});
+export const useServerConnectionStore = defineStore("serverConnection", () => {
+  const status = reactive<ServerConnectionStatus>({
+    phase: "idle",
+  });
 
-export function useServerConnectionStatus() {
   const connectPrimary = (primaryUrl?: string, secondaryUrl?: string) => {
     status.phase = "primary";
     status.primaryUrl = primaryUrl;
@@ -31,7 +32,7 @@ export function useServerConnectionStatus() {
     status.error = error;
   };
 
-  const clearConnectionStatus = () => {
+  const clear = () => {
     status.phase = "idle";
     status.primaryUrl = undefined;
     status.secondaryUrl = undefined;
@@ -39,10 +40,10 @@ export function useServerConnectionStatus() {
   };
 
   return {
-    serverConnectionStatus: readonly(status),
+    status,
     connectPrimary,
     connectSecondary,
     failConnection,
-    clearConnectionStatus,
+    clear,
   };
-}
+});

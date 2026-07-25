@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import SavedServerList from "@/components/Settings/SavedServerList.vue";
 import ServerAuthorizationForm from "@/components/Settings/ServerAuthorizationForm.vue";
 import SettingsAccountHeader from "@/components/Settings/SettingsAccountHeader.vue";
-import { showToast } from "@/composables/useToast";
+import { useToastStore } from "@/stores/toast";
 import { ServerInfo } from "@/types";
 
 interface ServerAuthorizationPayload {
@@ -17,6 +17,7 @@ interface ServerAuthorizationPayload {
 }
 
 const savedServerList = ref<InstanceType<typeof SavedServerList> | null>(null);
+const { show: showToast } = useToastStore();
 const serverInfo = ref<ServerInfo | null>(null);
 const hasProfiles = ref(false);
 const isProfilesLoading = ref(true);

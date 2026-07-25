@@ -1,8 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Router } from "vue-router";
 
-import { useServerConnectionStatus } from "@/composables/useServerConnectionStatus";
-import { showToast } from "@/composables/useToast";
+import { useServerConnectionStore } from "@/stores/serverConnection";
+import { useToastStore } from "@/stores/toast";
 import type { SavedServerProfile } from "@/types";
 
 const serverAuthorizationRoute = "settings-account";
@@ -20,13 +20,13 @@ export function installServerConnectionGuard(router: Router) {
       return true;
     }
 
-    showToast("No connection to the music server. Check the saved server settings.");
+    useToastStore().show("No connection to the music server. Check the saved server settings.");
     return { name: serverAuthorizationRoute, replace: true };
   });
 }
 
 async function ensureServerConnection() {
-  const { connectPrimary, clearConnectionStatus } = useServerConnectionStatus();
+  const { connectPrimary, clear: clearConnectionStatus } = useServerConnectionStore();
 
   try {
     await invoke("ping_music_server");
@@ -52,7 +52,7 @@ async function ensureServerConnection() {
 }
 
 async function connectSecondaryEndpoint(profile: SavedServerProfile) {
-  const { connectSecondary, clearConnectionStatus } = useServerConnectionStatus();
+  const { connectSecondary, clear: clearConnectionStatus } = useServerConnectionStore();
 
   try {
     connectSecondary();
@@ -81,7 +81,7 @@ async function connectSavedEndpoint(profileId: string | null, endpoint: "primary
 }
 
 async function failConnectionWithDelay(cause: unknown) {
-  const { failConnection, clearConnectionStatus } = useServerConnectionStatus();
+  const { failConnection, clear: clearConnectionStatus } = useServerConnectionStore();
   const message = cause instanceof Error ? cause.message : "Check the saved server settings.";
 
   failConnection(message);

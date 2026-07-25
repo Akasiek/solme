@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { X } from "@lucide/vue";
+import { storeToRefs } from "pinia";
 
-import { useToast } from "@/composables/useToast";
+import { useToastStore } from "@/stores/toast";
 
-const { toasts, dismissToast } = useToast();
+const toastStore = useToastStore();
+const { toasts } = storeToRefs(toastStore);
 </script>
 
 <template>
@@ -19,7 +21,7 @@ const { toasts, dismissToast } = useToast();
         type="button"
         class="grid size-6 shrink-0 place-items-center rounded text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
         title="Dismiss"
-        @click="dismissToast(toast.id)"
+        @click="toastStore.dismiss(toast.id)"
       >
         <X class="size-4" />
       </button>
