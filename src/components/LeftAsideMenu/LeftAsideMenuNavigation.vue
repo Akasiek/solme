@@ -2,14 +2,14 @@
 import { House, Search, Settings } from "@lucide/vue";
 import { RouterLink, useRouter } from "vue-router";
 
-import { useSearchModal } from "@/composables/useSearchModal";
+import { useLayoutStore } from "@/stores/layout";
 
 defineProps<{
   isCollapsed: boolean;
 }>();
 
 const router = useRouter();
-const { openSearchModal } = useSearchModal();
+const { openSearchModal } = useLayoutStore();
 
 const items = [
   {

@@ -5,7 +5,7 @@ import { Library, Music, Search, Tags, Users } from "@lucide/vue";
 import Button from "@/components/Button.vue";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
-import { useSearchModal } from "@/composables/useSearchModal";
+import { useLayoutStore } from "@/stores/layout";
 import { artworkSource } from "@/utils/artwork";
 import type { HomeAlbumSections, LibrarySummary } from "@/types";
 
@@ -42,7 +42,7 @@ const heroDescriptions = [
   "Old favorites, recent finds, and the next album you forgot you loved.",
 ];
 const heroDescription = heroDescriptions[Math.floor(Math.random() * heroDescriptions.length)];
-const { openSearchModal } = useSearchModal();
+const { openSearchModal } = useLayoutStore();
 </script>
 
 <template>
