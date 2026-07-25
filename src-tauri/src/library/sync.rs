@@ -14,7 +14,7 @@ use crate::server::{backend::MusicServer, AlbumQuery, MusicServerService};
 use super::{
     artwork::synchronize_artwork_item,
     models::{Album, AlbumWithSongs, LibrarySnapshot, LibrarySyncPhase, LibrarySyncStatus},
-    repository::LibraryRepository,
+    repository::LibrarySyncRepository,
     time::now_epoch_seconds,
 };
 
@@ -25,7 +25,7 @@ const LIBRARY_SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
 
 pub struct LibrarySyncService {
     server: Arc<MusicServerService>,
-    repository: Arc<dyn LibraryRepository>,
+    repository: Arc<dyn LibrarySyncRepository>,
     artwork_root: PathBuf,
     running: AtomicBool,
     periodic_running: AtomicBool,
@@ -35,7 +35,7 @@ pub struct LibrarySyncService {
 impl LibrarySyncService {
     pub fn new(
         server: Arc<MusicServerService>,
-        repository: Arc<dyn LibraryRepository>,
+        repository: Arc<dyn LibrarySyncRepository>,
         artwork_root: PathBuf,
     ) -> Self {
         Self {
@@ -341,7 +341,10 @@ mod tests {
                 CachedAlbum, CachedArtist, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
                 LibrarySyncPhase, Song,
             },
-            repository::LibraryRepository,
+            repository::{
+                ArtworkRepository, LibraryCatalogRepository, LibrarySnapshotRepository,
+                LibraryStateRepository,
+            },
             LibraryCatalogService,
         },
         server::{backend::MusicServer, AlbumQuery, MusicServerService, ScrobbleEvent, ServerInfo},
@@ -776,7 +779,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl LibraryRepository for MockRepository {
+    impl LibrarySnapshotRepository for MockRepository {
         async fn server_revision(&self, _profile_id: &str) -> Result<Option<String>, String> {
             Ok(self.revision.clone())
         }
@@ -795,7 +798,10 @@ mod tests {
             self.activation_count.fetch_add(1, Ordering::SeqCst);
             Ok(())
         }
+    }
 
+    #[async_trait]
+    impl LibraryStateRepository for MockRepository {
         async fn summary(&self, _profile_id: &str) -> Result<LibrarySummary, String> {
             Ok(LibrarySummary {
                 artist_count: 4,
@@ -805,7 +811,10 @@ mod tests {
                 last_success_at: Some(100),
             })
         }
+    }
 
+    #[async_trait]
+    impl LibraryCatalogRepository for MockRepository {
         async fn artist(
             &self,
             _profile_id: &str,
@@ -931,7 +940,10 @@ mod tests {
         ) -> Result<Vec<CachedSong>, String> {
             Ok(Vec::new())
         }
+    }
 
+    #[async_trait]
+    impl ArtworkRepository for MockRepository {
         async fn artwork_is_fresh(
             &self,
             _profile_id: &str,

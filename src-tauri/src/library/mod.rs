@@ -12,5 +12,7 @@ pub use models::{
     CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong,
     HomeAlbumSections, LibrarySummary, LibrarySyncStatus,
 };
-pub(crate) use repository::LibraryRepository;
+pub(crate) use repository::LibraryCatalogRepository;
+#[cfg(test)]
+pub(crate) use repository::LibraryStateRepository;
 pub use sync::LibrarySyncService;

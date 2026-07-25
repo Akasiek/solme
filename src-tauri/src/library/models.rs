@@ -91,7 +91,7 @@ pub struct ArtworkCacheRecord {
     pub downloaded_at: i64,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct LibrarySummary {
     pub artist_count: i64,

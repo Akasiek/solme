@@ -9,16 +9,19 @@ use super::{
         Album, AlbumSort, CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails,
         CachedSong, HomeAlbumSections, LibrarySummary,
     },
-    repository::LibraryRepository,
+    repository::LibraryCatalogRepository,
 };
 
 pub struct LibraryCatalogService {
     server: Arc<MusicServerService>,
-    repository: Arc<dyn LibraryRepository>,
+    repository: Arc<dyn LibraryCatalogRepository>,
 }
 
 impl LibraryCatalogService {
-    pub fn new(server: Arc<MusicServerService>, repository: Arc<dyn LibraryRepository>) -> Self {
+    pub fn new(
+        server: Arc<MusicServerService>,
+        repository: Arc<dyn LibraryCatalogRepository>,
+    ) -> Self {
         Self { server, repository }
     }
 

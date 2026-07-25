@@ -136,6 +136,35 @@ pub(crate) async fn fuzzy_song_candidates(
     .map_err(|error| format!("Failed to read fuzzy song candidates: {error}"))
 }
 
+pub(crate) async fn songs(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    album_id: &str,
+) -> Result<Vec<CachedSong>, String> {
+    sqlx::query_as::<_, CachedSong>(
+        "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
+                song.album_name, artwork.local_path AS artwork_path,
+                song.track_number, song.disc_number, song.duration_seconds
+         FROM songs song
+         JOIN library_sync_state state
+           ON state.profile_id = song.profile_id
+          AND state.active_generation = song.generation
+         LEFT JOIN artwork_cache artwork
+           ON artwork.profile_id = song.profile_id
+          AND artwork.kind = 'album'
+          AND artwork.remote_id = song.album_id
+         WHERE song.profile_id = ? AND song.album_id = ?
+         ORDER BY COALESCE(song.disc_number, 1),
+                  COALESCE(song.track_number, 2147483647),
+                  song.title COLLATE NOCASE",
+    )
+    .bind(profile_id)
+    .bind(album_id)
+    .fetch_all(&repo.pool)
+    .await
+    .map_err(|error| format!("Failed to read cached songs: {error}"))
+}
+
 pub(crate) async fn search_songs(
     repo: &SqliteRepository,
     profile_id: &str,
@@ -146,8 +175,7 @@ pub(crate) async fn search_songs(
         return Ok(Vec::new());
     };
     let limit = limit.clamp(1, 500);
-    let results = sqlx::query_as!(
-        CachedSong,
+    let results = sqlx::query_as::<_, CachedSong>(
         "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                 song.album_name, artwork.local_path AS artwork_path,
                 song.track_number, song.disc_number, song.duration_seconds
@@ -172,10 +200,10 @@ pub(crate) async fn search_songs(
                   song.track_number,
                   song.title COLLATE NOCASE
          LIMIT ?",
-        profile_id,
-        fts_query,
-        limit,
     )
+    .bind(profile_id)
+    .bind(fts_query)
+    .bind(limit)
     .fetch_all(&repo.pool)
     .await
     .map_err(|error| format!("Failed to search cached songs: {error}"))?;

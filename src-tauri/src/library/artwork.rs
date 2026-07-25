@@ -7,7 +7,7 @@ use crate::server::backend::MusicServer;
 
 use super::{
     models::{ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork},
-    repository::LibraryRepository,
+    repository::LibrarySyncRepository,
     time::now_epoch_seconds,
 };
 
@@ -15,7 +15,7 @@ pub async fn synchronize_artwork_item(
     profile_id: &str,
     candidate: ArtworkCandidate,
     server: Arc<dyn MusicServer>,
-    repository: Arc<dyn LibraryRepository>,
+    repository: Arc<dyn LibrarySyncRepository>,
     artwork_root: &Path,
     fresh_after: i64,
 ) -> Result<(), String> {

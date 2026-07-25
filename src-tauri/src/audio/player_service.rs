@@ -1,5 +1,5 @@
 use crate::{
-    library::{CachedSong, LibraryRepository},
+    library::{CachedSong, LibraryCatalogRepository},
     server::MusicServerService,
 };
 use std::sync::Arc;
@@ -19,7 +19,7 @@ const PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS: f64 = 5.0;
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
     server: Arc<MusicServerService>,
-    repository: Arc<dyn LibraryRepository>,
+    repository: Arc<dyn LibraryCatalogRepository>,
     preference: PreferenceService,
     event_bus: Arc<EventBus>,
     queue: PlayerQueue,
@@ -29,7 +29,7 @@ impl PlayerService {
     pub fn new(
         audio: Box<dyn AudioBackend>,
         server: Arc<MusicServerService>,
-        repository: Arc<dyn LibraryRepository>,
+        repository: Arc<dyn LibraryCatalogRepository>,
         preference: Arc<dyn PreferenceRepository>,
         event_bus: Arc<EventBus>,
     ) -> Self {
@@ -318,11 +318,10 @@ mod tests {
         credentials::CredentialStore,
         library::{
             models::{
-                Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate,
-                BinaryArtwork, CachedAlbum, CachedArtist, CachedSong, Genre, LibrarySnapshot,
-                LibrarySummary,
+                Album, AlbumSort, AlbumWithSongs, Artist, BinaryArtwork, CachedAlbum, CachedArtist,
+                CachedSong, Genre, LibrarySummary,
             },
-            LibraryRepository,
+            LibraryCatalogRepository, LibraryStateRepository,
         },
         server::{backend::MusicServer, AlbumQuery, MusicServerService, ScrobbleEvent, ServerInfo},
     };
@@ -333,7 +332,7 @@ mod tests {
             let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2"), song("song-3")];
-            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
@@ -394,7 +393,7 @@ mod tests {
     fn rejects_song_outside_selected_album() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: vec![song("song-1")],
             });
             let player = PlayerService::new(
@@ -423,7 +422,7 @@ mod tests {
             let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2")];
-            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
@@ -464,7 +463,7 @@ mod tests {
             let server_service = test_server_service().await;
 
             let songs = vec![song("song-1"), song("song-2")];
-            let repository: Arc<dyn LibraryRepository> = Arc::new(MockRepository {
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
@@ -504,7 +503,7 @@ mod tests {
     fn restores_paused_playback_session() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> =
+            let repository: Arc<dyn LibraryCatalogRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
             let player = PlayerService::new(
@@ -552,7 +551,7 @@ mod tests {
     fn restores_saved_volume_preference() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> =
+            let repository: Arc<dyn LibraryCatalogRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let preferences = Arc::new(MockPreferenceRepository {
                 preference: Mutex::new(Some(Preference::volume(37.0))),
@@ -579,7 +578,7 @@ mod tests {
     fn seek_event_reports_requested_position_when_backend_status_is_stale() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> =
+            let repository: Arc<dyn LibraryCatalogRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
@@ -610,7 +609,7 @@ mod tests {
     fn previous_restarts_current_song_after_threshold() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> =
+            let repository: Arc<dyn LibraryCatalogRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
@@ -639,7 +638,7 @@ mod tests {
     fn previous_moves_to_previous_song_before_threshold() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryRepository> =
+            let repository: Arc<dyn LibraryCatalogRepository> =
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
@@ -903,26 +902,14 @@ mod tests {
     }
 
     #[async_trait]
-    impl LibraryRepository for MockRepository {
-        async fn server_revision(&self, _profile_id: &str) -> Result<Option<String>, String> {
-            unimplemented!()
-        }
-
-        async fn activate_snapshot(
-            &self,
-            _profile_id: &str,
-            _generation: &str,
-            _revision: Option<&str>,
-            _snapshot: &LibrarySnapshot,
-            _completed_at: i64,
-        ) -> Result<(), String> {
-            unimplemented!()
-        }
-
+    impl LibraryStateRepository for MockRepository {
         async fn summary(&self, _profile_id: &str) -> Result<LibrarySummary, String> {
             unimplemented!()
         }
+    }
 
+    #[async_trait]
+    impl LibraryCatalogRepository for MockRepository {
         async fn artist(
             &self,
             _profile_id: &str,
@@ -1022,32 +1009,6 @@ mod tests {
             _album_id: &str,
         ) -> Result<Vec<CachedSong>, String> {
             Ok(self.songs.clone())
-        }
-
-        async fn artwork_is_fresh(
-            &self,
-            _profile_id: &str,
-            _kind: &str,
-            _remote_id: &str,
-            _source_key: Option<&str>,
-            _fresh_after: i64,
-        ) -> Result<bool, String> {
-            unimplemented!()
-        }
-
-        async fn artwork_candidates(
-            &self,
-            _profile_id: &str,
-        ) -> Result<Vec<ArtworkCandidate>, String> {
-            unimplemented!()
-        }
-
-        async fn save_artwork(
-            &self,
-            _profile_id: &str,
-            _artwork: ArtworkCacheRecord,
-        ) -> Result<(), String> {
-            unimplemented!()
         }
     }
 

@@ -13,8 +13,7 @@ pub(crate) async fn artist(
     profile_id: &str,
     artist_id: &str,
 ) -> Result<Option<CachedArtist>, String> {
-    let artist = sqlx::query_as!(
-        CachedArtist,
+    let artist = sqlx::query_as::<_, CachedArtist>(
         "
         SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path
         FROM artists a
@@ -28,9 +27,9 @@ pub(crate) async fn artist(
         WHERE a.profile_id = ?
           AND a.remote_id = ?
         ",
-        profile_id,
-        artist_id
     )
+    .bind(profile_id)
+    .bind(artist_id)
     .fetch_optional(&repo.pool)
     .await
     .map_err(|error| format!("Failed to read cached artist: {error}"))?;

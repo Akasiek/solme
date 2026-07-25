@@ -1,5 +1,3 @@
-use std::{collections::BTreeSet, path::Path};
-
 use async_trait::async_trait;
 
 use super::{
@@ -13,17 +11,12 @@ use crate::database::SqliteRepository;
 use crate::library::models::CachedArtist;
 
 #[async_trait]
-pub trait LibraryRepository: Send + Sync {
-    async fn server_revision(&self, profile_id: &str) -> Result<Option<String>, String>;
-    async fn activate_snapshot(
-        &self,
-        profile_id: &str,
-        generation: &str,
-        revision: Option<&str>,
-        snapshot: &LibrarySnapshot,
-        completed_at: i64,
-    ) -> Result<(), String>;
+pub trait LibraryStateRepository: Send + Sync {
     async fn summary(&self, profile_id: &str) -> Result<LibrarySummary, String>;
+}
+
+#[async_trait]
+pub trait LibraryCatalogRepository: LibraryStateRepository {
     async fn artist(
         &self,
         profile_id: &str,
@@ -73,6 +66,23 @@ pub trait LibraryRepository: Send + Sync {
         limit: i64,
     ) -> Result<Vec<CachedSong>, String>;
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String>;
+}
+
+#[async_trait]
+pub trait LibrarySnapshotRepository: LibraryStateRepository {
+    async fn server_revision(&self, profile_id: &str) -> Result<Option<String>, String>;
+    async fn activate_snapshot(
+        &self,
+        profile_id: &str,
+        generation: &str,
+        revision: Option<&str>,
+        snapshot: &LibrarySnapshot,
+        completed_at: i64,
+    ) -> Result<(), String>;
+}
+
+#[async_trait]
+pub trait ArtworkRepository: Send + Sync {
     async fn artwork_is_fresh(
         &self,
         profile_id: &str,
@@ -89,26 +99,21 @@ pub trait LibraryRepository: Send + Sync {
     ) -> Result<(), String>;
 }
 
-impl SqliteRepository {}
+pub trait LibrarySyncRepository: LibrarySnapshotRepository + ArtworkRepository {}
 
-fn audio_format_label(suffix: Option<&str>, content_type: Option<&str>) -> Option<String> {
-    suffix
-        .filter(|value| !value.trim().is_empty())
-        .or_else(|| content_type.and_then(|value| value.rsplit('/').next()))
-        .map(|value| value.trim().to_uppercase())
+impl<T> LibrarySyncRepository for T where T: LibrarySnapshotRepository + ArtworkRepository {}
+
+#[async_trait]
+impl LibraryStateRepository for SqliteRepository {
+    async fn summary(&self, profile_id: &str) -> Result<LibrarySummary, String> {
+        query::summary(self, profile_id).await
+    }
 }
 
 #[async_trait]
-impl LibraryRepository for SqliteRepository {
+impl LibrarySnapshotRepository for SqliteRepository {
     async fn server_revision(&self, profile_id: &str) -> Result<Option<String>, String> {
-        sqlx::query_scalar!(
-            "SELECT server_revision FROM library_sync_state WHERE profile_id = ?",
-            profile_id,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read library revision: {error}"))
-        .map(Option::flatten)
+        query::server_revision(self, profile_id).await
     }
 
     async fn activate_snapshot(
@@ -119,88 +124,20 @@ impl LibraryRepository for SqliteRepository {
         snapshot: &LibrarySnapshot,
         completed_at: i64,
     ) -> Result<(), String> {
-        let mut transaction = self
-            .pool
-            .begin()
-            .await
-            .map_err(|error| format!("Failed to begin library transaction: {error}"))?;
-
-        query::insert_artists(&mut transaction, profile_id, generation, &snapshot.artists).await?;
-        query::insert_artist_search(&mut transaction, profile_id, generation, &snapshot.artists)
-            .await?;
-        query::insert_genres(&mut transaction, profile_id, generation, &snapshot.genres).await?;
-        query::insert_albums(&mut transaction, profile_id, generation, &snapshot.albums).await?;
-        query::insert_album_genres(&mut transaction, profile_id, generation, &snapshot.albums)
-            .await?;
-        query::insert_album_search(&mut transaction, profile_id, generation, &snapshot.albums)
-            .await?;
-
-        let songs = snapshot
-            .albums
-            .iter()
-            .flat_map(|details| &details.songs)
-            .collect::<Vec<_>>();
-        query::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
-        query::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
-        query::insert_song_search(&mut transaction, profile_id, generation, &songs).await?;
-        let song_count = songs.len() as i64;
-
-        sqlx::query!(
-            "INSERT INTO library_sync_state
-             (profile_id, active_generation, server_revision, last_success_at,
-              artist_count, album_count, song_count, genre_count)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(profile_id) DO UPDATE SET
-               active_generation = excluded.active_generation,
-               server_revision = excluded.server_revision,
-               last_success_at = excluded.last_success_at,
-               artist_count = excluded.artist_count,
-               album_count = excluded.album_count,
-               song_count = excluded.song_count,
-               genre_count = excluded.genre_count",
+        query::activate_snapshot(
+            self,
             profile_id,
             generation,
             revision,
+            snapshot,
             completed_at,
-            snapshot.artists.len() as i64,
-            snapshot.albums.len() as i64,
-            song_count,
-            snapshot.genres.len() as i64,
         )
-        .execute(&mut *transaction)
         .await
-        .map_err(|error| format!("Failed to activate library generation: {error}"))?;
-
-        transaction
-            .commit()
-            .await
-            .map_err(|error| format!("Failed to commit library generation: {error}"))?;
-
-        query::delete_stale_generations(self, profile_id, generation).await;
-
-        Ok(())
     }
+}
 
-    async fn summary(&self, profile_id: &str) -> Result<LibrarySummary, String> {
-        let summary = sqlx::query_as!(
-            LibrarySummary,
-            "SELECT artist_count, album_count, song_count, genre_count, last_success_at
-             FROM library_sync_state WHERE profile_id = ?",
-            profile_id,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read library summary: {error}"))?;
-
-        Ok(summary.unwrap_or(LibrarySummary {
-            artist_count: 0,
-            album_count: 0,
-            song_count: 0,
-            genre_count: 0,
-            last_success_at: None,
-        }))
-    }
-
+#[async_trait]
+impl LibraryCatalogRepository for SqliteRepository {
     async fn artist(
         &self,
         profile_id: &str,
@@ -245,58 +182,15 @@ impl LibraryRepository for SqliteRepository {
     }
 
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
-        sqlx::query_as::<_, CachedAlbum>(
-            "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-                    a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                    a.duration_seconds, artwork.local_path AS artwork_path
-             FROM albums a
-             JOIN library_sync_state state
-               ON state.profile_id = a.profile_id
-              AND state.active_generation = a.generation
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = a.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = a.remote_id
-             WHERE a.profile_id = ? AND a.remote_id = ?",
-        )
-        .bind(profile_id)
-        .bind(album_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached album: {error}"))
+        query::album(self, profile_id, album_id).await
     }
 
     async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String> {
-        sqlx::query_scalar::<_, String>(
-            "SELECT ag.genre
-             FROM album_genres ag
-             JOIN library_sync_state state
-               ON state.profile_id = ag.profile_id
-              AND state.active_generation = ag.generation
-             WHERE ag.profile_id = ? AND ag.album_id = ?
-             ORDER BY ag.genre COLLATE NOCASE",
-        )
-        .bind(profile_id)
-        .bind(album_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached album genres: {error}"))
+        query::album_genres(self, profile_id, album_id).await
     }
 
     async fn album_disc_count(&self, profile_id: &str, album_id: &str) -> Result<i64, String> {
-        sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(DISTINCT COALESCE(NULLIF(song.disc_number, 0), 1))
-             FROM songs song
-             JOIN library_sync_state state
-               ON state.profile_id = song.profile_id
-              AND state.active_generation = song.generation
-             WHERE song.profile_id = ? AND song.album_id = ?",
-        )
-        .bind(profile_id)
-        .bind(album_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached album disc count: {error}"))
+        query::album_disc_count(self, profile_id, album_id).await
     }
 
     async fn album_audio_formats(
@@ -304,31 +198,7 @@ impl LibraryRepository for SqliteRepository {
         profile_id: &str,
         album_id: &str,
     ) -> Result<Vec<String>, String> {
-        let rows = sqlx::query_as::<_, (Option<String>, Option<String>)>(
-            "SELECT DISTINCT song.suffix, song.content_type
-             FROM songs song
-             JOIN library_sync_state state
-               ON state.profile_id = song.profile_id
-              AND state.active_generation = song.generation
-             WHERE song.profile_id = ?
-               AND song.album_id = ?
-               AND COALESCE(NULLIF(song.suffix, ''), song.content_type) IS NOT NULL
-             ORDER BY 1",
-        )
-        .bind(profile_id)
-        .bind(album_id)
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached album audio formats: {error}"))?;
-
-        Ok(rows
-            .into_iter()
-            .filter_map(|(suffix, content_type)| {
-                audio_format_label(suffix.as_deref(), content_type.as_deref())
-            })
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect())
+        query::album_audio_formats(self, profile_id, album_id).await
     }
 
     async fn search_albums(
@@ -350,31 +220,12 @@ impl LibraryRepository for SqliteRepository {
     }
 
     async fn songs(&self, profile_id: &str, album_id: &str) -> Result<Vec<CachedSong>, String> {
-        sqlx::query_as!(
-            CachedSong,
-            "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
-                    song.album_name, artwork.local_path AS artwork_path,
-                    song.track_number, song.disc_number, song.duration_seconds
-             FROM songs song
-             JOIN library_sync_state state
-               ON state.profile_id = song.profile_id
-              AND state.active_generation = song.generation
-             LEFT JOIN artwork_cache artwork
-               ON artwork.profile_id = song.profile_id
-              AND artwork.kind = 'album'
-              AND artwork.remote_id = song.album_id
-             WHERE song.profile_id = ? AND song.album_id = ?
-             ORDER BY COALESCE(song.disc_number, 1),
-                      COALESCE(song.track_number, 2147483647),
-                      song.title COLLATE NOCASE",
-            profile_id,
-            album_id,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached songs: {error}"))
+        query::songs(self, profile_id, album_id).await
     }
+}
 
+#[async_trait]
+impl ArtworkRepository for SqliteRepository {
     async fn artwork_is_fresh(
         &self,
         profile_id: &str,
@@ -383,70 +234,11 @@ impl LibraryRepository for SqliteRepository {
         source_key: Option<&str>,
         fresh_after: i64,
     ) -> Result<bool, String> {
-        let row = sqlx::query!(
-            "SELECT local_path, source_key, downloaded_at
-             FROM artwork_cache
-             WHERE profile_id = ? AND kind = ? AND remote_id = ?",
-            profile_id,
-            kind,
-            remote_id,
-        )
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read artwork cache: {error}"))?;
-
-        Ok(row.is_some_and(|row| {
-            row.local_path
-                .is_some_and(|path| Path::new(&path).is_file())
-                && source_key
-                    .map(|source_key| row.source_key.as_deref() == Some(source_key))
-                    .unwrap_or(true)
-                && row.downloaded_at.is_some_and(|time| time >= fresh_after)
-        }))
+        query::artwork_is_fresh(self, profile_id, kind, remote_id, source_key, fresh_after).await
     }
 
     async fn artwork_candidates(&self, profile_id: &str) -> Result<Vec<ArtworkCandidate>, String> {
-        let album_rows = sqlx::query!(
-            "SELECT a.remote_id, a.cover_art_id AS \"cover_art_id!: String\"
-             FROM albums a
-             JOIN library_sync_state s
-               ON s.profile_id = a.profile_id
-              AND s.active_generation = a.generation
-             WHERE a.profile_id = ? AND a.cover_art_id IS NOT NULL",
-            profile_id,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read album artwork candidates: {error}"))?;
-
-        let artist_rows = sqlx::query!(
-            "SELECT a.remote_id
-             FROM artists a
-             JOIN library_sync_state s
-               ON s.profile_id = a.profile_id
-              AND s.active_generation = a.generation
-             WHERE a.profile_id = ?",
-            profile_id,
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to read artist artwork candidates: {error}"))?;
-
-        let mut candidates = Vec::with_capacity(album_rows.len() + artist_rows.len());
-        candidates.extend(album_rows.into_iter().map(|row| ArtworkCandidate {
-            kind: "album",
-            remote_id: row.remote_id,
-            source_id: row.cover_art_id,
-        }));
-        candidates.extend(artist_rows.into_iter().map(|row| {
-            let remote_id = row.remote_id;
-            ArtworkCandidate {
-                kind: "artist",
-                source_id: remote_id.clone(),
-                remote_id,
-            }
-        }));
-        Ok(candidates)
+        query::artwork_candidates(self, profile_id).await
     }
 
     async fn save_artwork(
@@ -454,34 +246,7 @@ impl LibraryRepository for SqliteRepository {
         profile_id: &str,
         artwork: ArtworkCacheRecord,
     ) -> Result<(), String> {
-        sqlx::query!(
-            "INSERT INTO artwork_cache
-             (profile_id, kind, remote_id, source_key, local_path, content_type,
-              etag, last_modified, downloaded_at, last_accessed_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-             ON CONFLICT(profile_id, kind, remote_id) DO UPDATE SET
-               source_key = excluded.source_key,
-               local_path = excluded.local_path,
-               content_type = excluded.content_type,
-               etag = excluded.etag,
-               last_modified = excluded.last_modified,
-               downloaded_at = excluded.downloaded_at,
-               last_accessed_at = excluded.last_accessed_at",
-            profile_id,
-            artwork.kind,
-            artwork.remote_id,
-            artwork.source_key,
-            artwork.local_path,
-            artwork.content_type,
-            artwork.etag,
-            artwork.last_modified,
-            artwork.downloaded_at,
-            artwork.downloaded_at,
-        )
-        .execute(&self.pool)
-        .await
-        .map_err(|error| format!("Failed to save artwork cache record: {error}"))?;
-        Ok(())
+        query::save_artwork(self, profile_id, artwork).await
     }
 }
 
@@ -491,20 +256,14 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{audio_format_label, LibraryRepository};
+    use super::{
+        ArtworkRepository, LibraryCatalogRepository, LibrarySnapshotRepository,
+        LibraryStateRepository,
+    };
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
         Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, Genre, LibrarySnapshot, Song,
     };
-
-    #[test]
-    fn formats_audio_format_label() {
-        assert_eq!(
-            audio_format_label(Some("flac"), Some("audio/flac")),
-            Some("FLAC".to_string())
-        );
-    }
-
     #[test]
     fn activates_complete_generation() {
         tauri::async_runtime::block_on(async {
