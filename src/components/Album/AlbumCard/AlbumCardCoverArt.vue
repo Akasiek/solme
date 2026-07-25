@@ -43,9 +43,10 @@ const queueAlbumLast = (event: MouseEvent) => {
     <MissingCoverImage v-else />
 
     <div
-      class="absolute inset-0 flex items-center justify-center gap-4 bg-zinc-800/80 text-white opacity-0 transition-opacity duration-300 *:cursor-pointer *:rounded-full *:bg-accent *:p-2 group-hover/image:opacity-100"
+      class="absolute inset-0 flex items-center justify-center gap-4 bg-zinc-800/80 text-white opacity-0 transition-opacity duration-300 group-hover/image:opacity-100"
     >
       <button
+        class="cover-art-button"
         type="button"
         :title="`Play ${album.name} next`"
         :aria-label="`Play ${album.name} next`"
@@ -53,10 +54,17 @@ const queueAlbumLast = (event: MouseEvent) => {
       >
         <ListStart aria-hidden="true" />
       </button>
-      <button type="button" :title="`Add ${album.name} to queue next`" :aria-label="`Play ${album.name} now`" @click="playAlbum">
-        <Play aria-hidden="true" />
+      <button
+        class="cover-art-button"
+        type="button"
+        :title="`Add ${album.name} to queue next`"
+        :aria-label="`Play ${album.name} now`"
+        @click="playAlbum"
+      >
+        <Play aria-hidden="true" class="fill-white" />
       </button>
       <button
+        class="cover-art-button"
         type="button"
         :title="`Add ${album.name} to the end of the queue`"
         :aria-label="`Add ${album.name} to the end of the queue`"
@@ -67,3 +75,11 @@ const queueAlbumLast = (event: MouseEvent) => {
     </div>
   </div>
 </template>
+
+<style scoped>
+@reference "@/style/glob.css";
+
+.cover-art-button {
+  @apply cursor-pointer rounded-full bg-accent p-2 text-zinc-100 transition-colors duration-300 ease-in-out hover:bg-accent/80 active:scale-95;
+}
+</style>
