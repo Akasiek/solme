@@ -48,7 +48,7 @@ const { openSearchModal } = useSearchModal();
 <template>
   <section class="overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900">
     <div class="grid min-h-72 gap-6 p-5 md:p-6 lg:grid-cols-[minmax(0,1fr)_24rem] lg:items-center lg:p-7">
-      <div class="max-w-3xl space-y-5">
+      <div class="@container max-w-3xl space-y-5">
         <div class="flex items-center gap-2 font-sans text-sm font-semibold tracking-wide text-accent uppercase">
           <Library class="size-4" aria-hidden="true" />
           Library
@@ -68,7 +68,7 @@ const { openSearchModal } = useSearchModal();
           </Button>
         </div>
 
-        <div class="grid max-w-2xl grid-cols-2 gap-2.5 sm:grid-cols-4">
+        <div class="grid max-w-2xl grid-cols-2 gap-2.5 @min-[40rem]:grid-cols-4">
           <button
             v-for="section in librarySections"
             :key="section.label"
