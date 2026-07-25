@@ -3,7 +3,7 @@ import { ref } from "vue";
 
 export const useLayoutStore = defineStore("layout", () => {
   const isRightAsideCollapsed = ref(false);
-  const isBigArtworkShown = ref(true);
+  const isBigArtworkShown = ref(false);
   const isSearchModalOpen = ref(false);
 
   const toggleRightAside = () => {
