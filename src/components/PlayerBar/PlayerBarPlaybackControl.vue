@@ -49,29 +49,14 @@ const canGoNext = computed(
 
 .playback-control-container > button {
   @apply cursor-pointer rounded-full bg-accent p-2.5 text-zinc-100 transition-colors duration-300 ease-in-out;
-  box-shadow:
-    inset 0 2px 4px -1px rgba(255, 255, 255, 0.1),
-    inset 0 3px 2px rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px -1px rgba(0, 0, 0, 0.1),
-    inset 0 -3px 2px rgba(0, 0, 0, 0.3);
 }
 
 .playback-control-container > button:not(:disabled):hover {
   @apply bg-accent/90;
-  box-shadow:
-    inset 0 2px 4px -1px rgba(255, 255, 255, 0.2),
-    inset 0 3px 2px rgba(255, 255, 255, 0.4),
-    inset 0 -2px 4px -1px rgba(0, 0, 0, 0.2),
-    inset 0 -3px 2px rgba(0, 0, 0, 0.4);
 }
 
 .playback-control-container > button:not(:disabled):active {
   @apply scale-95 bg-accent/80;
-  box-shadow:
-    inset 0 2px 4px -1px rgba(255, 255, 255, 0.3),
-    inset 0 3px 2px rgba(255, 255, 255, 0.5),
-    inset 0 -2px 4px -1px rgba(0, 0, 0, 0.3),
-    inset 0 -3px 2px rgba(0, 0, 0, 0.5);
 }
 
 .playback-control-container > button:disabled {
@@ -80,11 +65,5 @@ const canGoNext = computed(
 
 .playback-control-container > button > svg {
   @apply fill-white;
-}
-
-.btn-inset-shadow {
-}
-
-.btn-inset-shadow:not(:disabled):hover {
 }
 </style>
