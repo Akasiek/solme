@@ -3,10 +3,15 @@ import { ref } from "vue";
 
 export const useLayoutStore = defineStore("layout", () => {
   const isRightAsideCollapsed = ref(false);
+  const isBigArtworkShown = ref(true);
   const isSearchModalOpen = ref(false);
 
   const toggleRightAside = () => {
     isRightAsideCollapsed.value = !isRightAsideCollapsed.value;
+  };
+
+  const toggleBigArtwork = () => {
+    isBigArtworkShown.value = !isBigArtworkShown.value;
   };
 
   const openSearchModal = () => {
@@ -19,8 +24,10 @@ export const useLayoutStore = defineStore("layout", () => {
 
   return {
     isRightAsideCollapsed,
+    isBigArtworkShown,
     isSearchModalOpen,
     toggleRightAside,
+    toggleBigArtwork,
     openSearchModal,
     closeSearchModal,
   };
