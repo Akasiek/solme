@@ -22,11 +22,7 @@ const canGoForward = computed(() => route.fullPath.length > 0 && historyState()?
 </script>
 
 <template>
-  <nav
-    class="mb-3 flex gap-2 border-b border-zinc-800 pb-3"
-    :class="isCollapsed ? 'flex-col' : 'flex-row'"
-    aria-label="Page history"
-  >
+  <nav class="mb-4 flex gap-2" :class="isCollapsed ? 'flex-col' : 'flex-row'" aria-label="Page history">
     <button
       type="button"
       class="nav-button"
