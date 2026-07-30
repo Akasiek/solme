@@ -1,10 +1,11 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
+import { useStorage } from "@vueuse/core";
 
 export const useLayoutStore = defineStore("layout", () => {
   const isLeftAsideCollapsed = ref(false);
   const isRightAsideCollapsed = ref(false);
-  const isBigArtworkShown = ref(false);
+  const isBigArtworkShown = useStorage("big-artwork-shown", false);
   const isSearchModalOpen = ref(false);
 
   const toggleLeftAside = () => {
