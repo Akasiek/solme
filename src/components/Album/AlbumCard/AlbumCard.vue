@@ -3,15 +3,10 @@ import { computed } from "vue";
 import { CachedAlbum } from "@/types.js";
 import AlbumCardCoverArt from "./AlbumCardCoverArt.vue";
 
-const { album, showReleaseYear } = withDefaults(
-  defineProps<{
-    album: CachedAlbum;
-    showReleaseYear?: boolean;
-  }>(),
-  {
-    showReleaseYear: false,
-  },
-);
+const { album, showReleaseYear = false } = defineProps<{
+  album: CachedAlbum;
+  showReleaseYear?: boolean;
+}>();
 
 const releaseYear = computed(
   () => album.year ?? album.originalReleaseDate?.slice(0, 4) ?? album.releaseDate?.slice(0, 4),
