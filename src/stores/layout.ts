@@ -3,8 +3,8 @@ import { ref } from "vue";
 import { useStorage } from "@vueuse/core";
 
 export const useLayoutStore = defineStore("layout", () => {
-  const isLeftAsideCollapsed = ref(false);
-  const isRightAsideCollapsed = ref(false);
+  const isLeftAsideCollapsed = useStorage("left-aside-menu-collapsed", false);
+  const isRightAsideCollapsed = useStorage("right-aside-menu-collapsed", false);
   const isBigArtworkShown = useStorage("big-artwork-shown", false);
   const isSearchModalOpen = ref(false);
 

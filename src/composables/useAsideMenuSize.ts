@@ -1,4 +1,4 @@
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import type { Ref } from "vue";
 
 interface Options {
@@ -45,13 +45,8 @@ export function useAsideMenuSize(storageKey: string, providedOptions: Options = 
       storageKey,
       JSON.stringify({
         width: width.value,
-        isCollapsed: isCollapsed.value,
       }),
     );
-  };
-
-  const toggleCollapsed = () => {
-    isCollapsed.value = !isCollapsed.value;
   };
 
   const resize = (event: PointerEvent) => {
@@ -125,17 +120,14 @@ export function useAsideMenuSize(storageKey: string, providedOptions: Options = 
     }
 
     try {
-      const parsedState = JSON.parse(savedState) as { width?: number; isCollapsed?: boolean };
+      const parsedState = JSON.parse(savedState) as { width?: number };
       if (typeof parsedState.width === "number") {
         width.value = clampWidth(parsedState.width);
       }
-      isCollapsed.value = parsedState.isCollapsed === true;
     } catch {
       localStorage.removeItem(storageKey);
     }
   });
-
-  watch(isCollapsed, saveState);
 
   onUnmounted(stopResize);
 
@@ -145,6 +137,5 @@ export function useAsideMenuSize(storageKey: string, providedOptions: Options = 
     isResizing,
     resetWidth,
     startResize,
-    toggleCollapsed,
   };
 }
