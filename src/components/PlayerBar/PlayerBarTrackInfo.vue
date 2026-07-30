@@ -8,8 +8,8 @@ import { useLayoutStore } from "@/stores/layout.ts";
 defineProps<{ currentSong: CachedSong }>();
 
 const layoutStore = useLayoutStore();
-const { isBigArtworkShown } = storeToRefs(layoutStore);
 const { toggleBigArtwork } = layoutStore;
+const { isBigArtworkShown, isLeftAsideCollapsed } = storeToRefs(layoutStore);
 </script>
 
 <template>
@@ -23,7 +23,10 @@ const { toggleBigArtwork } = layoutStore;
       leave-from-class="translate-y-0 scale-100 opacity-100"
       leave-to-class="translate-y-2 scale-95 opacity-0"
     >
-      <div v-if="!isBigArtworkShown" class="relative size-16 shrink-0 origin-bottom overflow-hidden rounded">
+      <div
+        v-if="!isBigArtworkShown || isLeftAsideCollapsed"
+        class="relative size-16 shrink-0 origin-bottom overflow-hidden rounded"
+      >
         <div
           class="absolute inset-0 flex cursor-pointer items-center justify-center bg-black/50 opacity-0 transition-opacity hover:opacity-100"
           @click="toggleBigArtwork"
