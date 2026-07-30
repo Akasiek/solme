@@ -35,10 +35,15 @@ pub async fn synchronize_artwork_item(
         return Ok(());
     }
 
-    let artwork = match candidate.kind {
-        "album" => server.album_artwork(&candidate.source_id).await?,
-        "artist" => server.artist_artwork(&candidate.source_id).await?,
+    let artwork_result = match candidate.kind {
+        "album" => server.album_artwork(&candidate.source_id).await,
+        "artist" => server.artist_artwork(&candidate.source_id).await,
         kind => return Err(format!("Unsupported artwork kind: {kind}")),
+    };
+    let artwork = match artwork_result {
+        Ok(artwork) => artwork,
+        Err(error) if is_missing_artwork_error(&error) => return Ok(()),
+        Err(error) => return Err(error),
     };
     let Some(artwork) = artwork else {
         return Ok(());
@@ -78,7 +83,7 @@ async fn write_artwork(
     artwork: &BinaryArtwork,
 ) -> Result<PathBuf, String> {
     let directory = root.join(profile_id).join(kind);
-    let extension = content_type_extension(&artwork.content_type);
+    let extension = artwork_extension(&artwork.content_type)?;
     let filename = format!("{:x}.{extension}", md5::compute(remote_id.as_bytes()));
     let path = directory.join(filename);
     let temporary_path = path.with_extension(format!("{extension}.tmp"));
@@ -91,7 +96,8 @@ async fn write_artwork(
         std::fs::write(&temporary_path, bytes)
             .map_err(|error| format!("Failed to write artwork: {error}"))?;
         std::fs::rename(&temporary_path, &final_path)
-            .map_err(|error| format!("Failed to activate artwork file: {error}"))
+            .map_err(|error| format!("Failed to activate artwork file: {error}"))?;
+        remove_legacy_artwork_files(&final_path)
     })
     .await
     .map_err(|error| format!("Artwork writer task failed: {error}"))??;
@@ -99,15 +105,42 @@ async fn write_artwork(
     Ok(path)
 }
 
-fn content_type_extension(content_type: &str) -> &'static str {
-    match content_type {
-        "image/jpeg" => "jpg",
-        "image/png" => "png",
-        "image/webp" => "webp",
-        "image/gif" => "gif",
-        "image/avif" => "avif",
-        _ => "img",
+fn remove_legacy_artwork_files(path: &Path) -> Result<(), String> {
+    for extension in ["avif", "gif", "jpg", "png", "webp"] {
+        let legacy_path = path.with_extension(extension);
+        if legacy_path == path {
+            continue;
+        }
+        match std::fs::remove_file(&legacy_path) {
+            Ok(()) => {}
+            Err(error) if error.kind() == ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(format!(
+                    "Failed to remove replaced artwork {}: {error}",
+                    legacy_path.display()
+                ))
+            }
+        }
     }
+    Ok(())
+}
+
+fn artwork_extension(content_type: &str) -> Result<&'static str, String> {
+    match content_type {
+        "image/avif" => Ok("avif"),
+        "image/gif" => Ok("gif"),
+        "image/jpeg" | "image/jpg" => Ok("jpg"),
+        "image/png" => Ok("png"),
+        "image/webp" => Ok("webp"),
+        _ => Err(format!("Unsupported artwork content type: {content_type}")),
+    }
+}
+
+fn is_missing_artwork_error(error: &str) -> bool {
+    let error = error.to_ascii_lowercase();
+    error.contains("404 not found")
+        || error.contains("status code 404")
+        || error.contains("http status client error (404")
 }
 
 pub(super) fn remove_profile_artwork(root: &Path, profile_id: &str) -> Result<(), String> {
@@ -164,7 +197,50 @@ mod tests {
 
     use uuid::Uuid;
 
-    use super::{remove_orphaned_artwork, remove_profile_artwork};
+    use super::{
+        artwork_extension, is_missing_artwork_error, remove_legacy_artwork_files,
+        remove_orphaned_artwork, remove_profile_artwork,
+    };
+
+    #[test]
+    fn maps_supported_artwork_content_types_to_extensions() {
+        assert_eq!(artwork_extension("image/jpeg").unwrap(), "jpg");
+        assert_eq!(artwork_extension("image/webp").unwrap(), "webp");
+        assert!(artwork_extension("image/svg+xml").is_err());
+    }
+
+    #[test]
+    fn treats_missing_artwork_errors_as_an_expected_result() {
+        assert!(is_missing_artwork_error(
+            "Artwork request returned an HTTP error: 404 Not Found"
+        ));
+        assert!(is_missing_artwork_error(
+            "HTTP status client error (404 Not Found) for url"
+        ));
+        assert!(!is_missing_artwork_error(
+            "Artwork transport error while reading artwork response"
+        ));
+        assert!(!is_missing_artwork_error(
+            "Artwork request returned an HTTP error: 500 Internal Server Error"
+        ));
+    }
+
+    #[test]
+    fn removes_replaced_artwork_formats_without_removing_the_new_file() {
+        let root = std::env::temp_dir().join(format!("solme-artwork-replace-{}", Uuid::new_v4()));
+        std::fs::create_dir_all(&root).unwrap();
+        let jpg_path = root.join("cover.jpg");
+        std::fs::write(&jpg_path, []).unwrap();
+        std::fs::write(root.join("cover.avif"), []).unwrap();
+        std::fs::write(root.join("cover.png"), []).unwrap();
+
+        remove_legacy_artwork_files(&jpg_path).unwrap();
+
+        assert!(jpg_path.is_file());
+        assert!(!root.join("cover.avif").exists());
+        assert!(!root.join("cover.png").exists());
+        std::fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn removes_only_orphaned_profile_directories() {

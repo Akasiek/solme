@@ -78,6 +78,7 @@ pub struct ArtworkCandidate {
     pub kind: &'static str,
     pub remote_id: String,
     pub source_id: String,
+    pub name: String,
 }
 
 pub struct ArtworkCacheRecord {

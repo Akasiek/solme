@@ -14,7 +14,7 @@ use super::{
         SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig, ServerInfo, ServerType,
         StoredServerProfile,
     },
-    navidrome::NavidromeBackend,
+    navidrome::{NavidromeBackend, ARTWORK_TRANSPORT_ERROR_PREFIX},
     profile_store::ServerProfileStore,
 };
 
@@ -424,6 +424,33 @@ impl FailoverMusicServer {
         Operation: Fn(Arc<dyn MusicServer>) -> Fut,
         Fut: Future<Output = Result<T, String>>,
     {
+        self.with_conditional_failover(operation, |_| true).await
+    }
+
+    async fn with_artwork_failover<T, Fut, Operation>(
+        &self,
+        operation: Operation,
+    ) -> Result<T, String>
+    where
+        Operation: Fn(Arc<dyn MusicServer>) -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+    {
+        self.with_conditional_failover(operation, |error| {
+            error.starts_with(ARTWORK_TRANSPORT_ERROR_PREFIX)
+        })
+        .await
+    }
+
+    async fn with_conditional_failover<T, Fut, Operation, ShouldFailover>(
+        &self,
+        operation: Operation,
+        should_failover: ShouldFailover,
+    ) -> Result<T, String>
+    where
+        Operation: Fn(Arc<dyn MusicServer>) -> Fut,
+        Fut: Future<Output = Result<T, String>>,
+        ShouldFailover: Fn(&str) -> bool,
+    {
         let active = self.active_server()?;
 
         if active.endpoint == SavedServerEndpoint::Secondary {
@@ -434,12 +461,13 @@ impl FailoverMusicServer {
                             self.set_active_server(SavedServerEndpoint::Primary, primary)?;
                             Ok(value)
                         }
-                        Err(error) => {
+                        Err(error) if should_failover(&error) => {
                             log::warn!(
                             "Recovered primary music server request failed, returning to secondary URL: {error}"
                         );
                             operation(Arc::clone(&active.backend)).await
                         }
+                        Err(error) => Err(error),
                     }
                 }
                 Err(error) => {
@@ -450,7 +478,9 @@ impl FailoverMusicServer {
 
         match operation(Arc::clone(&active.backend)).await {
             Ok(value) => Ok(value),
-            Err(error) if active.endpoint == SavedServerEndpoint::Primary => {
+            Err(error)
+                if active.endpoint == SavedServerEndpoint::Primary && should_failover(&error) =>
+            {
                 if self.profile.secondary_url.is_none() {
                     return Err(error);
                 }
@@ -570,7 +600,7 @@ impl MusicServer for FailoverMusicServer {
         &self,
         cover_art_id: &str,
     ) -> Result<Option<crate::library::models::BinaryArtwork>, String> {
-        self.with_failover(|server| async move { server.album_artwork(cover_art_id).await })
+        self.with_artwork_failover(|server| async move { server.album_artwork(cover_art_id).await })
             .await
     }
 
@@ -578,7 +608,7 @@ impl MusicServer for FailoverMusicServer {
         &self,
         artist_id: &str,
     ) -> Result<Option<crate::library::models::BinaryArtwork>, String> {
-        self.with_failover(|server| async move { server.artist_artwork(artist_id).await })
+        self.with_artwork_failover(|server| async move { server.artist_artwork(artist_id).await })
             .await
     }
 }

@@ -283,6 +283,10 @@ impl LibrarySyncService {
                 let repository = Arc::clone(&repository);
                 let artwork_root = artwork_root.clone();
                 let profile_id = profile_id.clone();
+                let artwork_kind = candidate.kind;
+                let artwork_name = candidate.name.clone();
+                let remote_id = candidate.remote_id.clone();
+                let source_id = candidate.source_id.clone();
                 async move {
                     synchronize_artwork_item(
                         &profile_id,
@@ -293,6 +297,12 @@ impl LibrarySyncService {
                         fresh_after,
                     )
                     .await
+                    .map_err(|error| {
+                        format!(
+                            "Failed to cache {artwork_kind} artwork for \"{artwork_name}\" \
+                             (remote ID: {remote_id}, source ID: {source_id}): {error}"
+                        )
+                    })
                 }
             })
             .buffer_unordered(ARTWORK_CONCURRENCY);
@@ -464,6 +474,7 @@ mod tests {
                     kind: "album",
                     remote_id: "album-1".to_string(),
                     source_id: "cover-1".to_string(),
+                    name: "Test album".to_string(),
                 });
             let service = service(server, repository);
 
@@ -473,10 +484,11 @@ mod tests {
             assert_eq!(status.phase, LibrarySyncPhase::Completed);
             assert_eq!(status.processed_artwork, 1);
             assert_eq!(status.total_artwork, 1);
-            assert!(status
-                .last_error
-                .as_deref()
-                .is_some_and(|error| error.contains("Some artwork could not be cached")));
+            assert!(status.last_error.as_deref().is_some_and(|error| {
+                error.contains("Some artwork could not be cached")
+                    && error.contains("Test album")
+                    && error.contains("cover-1")
+            }));
         });
     }
 
@@ -494,6 +506,7 @@ mod tests {
                     kind: "album",
                     remote_id: "album-1".to_string(),
                     source_id: "cover-1".to_string(),
+                    name: "Test album".to_string(),
                 });
             let service = service_with_artwork_root(
                 Arc::clone(&server),

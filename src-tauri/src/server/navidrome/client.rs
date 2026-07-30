@@ -7,6 +7,7 @@ use reqwest::{
     Client, Response, Url,
 };
 use serde::de::DeserializeOwned;
+use tokio::time::sleep;
 
 use crate::library::models::{Album, AlbumWithSongs, Artist, BinaryArtwork, Genre};
 
@@ -14,6 +15,8 @@ use super::models::{
     AlbumDto, AlbumListPayload, AlbumPayload, ArtistInfoPayload, ArtistsPayload, GenresPayload,
     PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
 };
+
+pub(crate) const ARTWORK_TRANSPORT_ERROR_PREFIX: &str = "Artwork transport error";
 use crate::server::{
     backend::MusicServer,
     models::{AlbumQuery, ScrobbleEvent, ServerInfo},
@@ -26,6 +29,8 @@ const LOG_BODY_LIMIT: usize = 4000;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(30);
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
 const PING_TIMEOUT: Duration = Duration::from_secs(5);
+const ARTWORK_REQUEST_ATTEMPTS: usize = 3;
+const ARTWORK_RETRY_DELAY: Duration = Duration::from_millis(250);
 
 pub struct NavidromeBackend {
     client: Client,
@@ -198,6 +203,32 @@ impl NavidromeBackend {
         parameters: &[(&str, String)],
         source_key: String,
     ) -> Result<Option<BinaryArtwork>, String> {
+        for attempt in 1..=ARTWORK_REQUEST_ATTEMPTS {
+            match self
+                .request_binary_once(url.clone(), parameters, source_key.clone())
+                .await
+            {
+                Err(error)
+                    if is_retryable_artwork_error(&error) && attempt < ARTWORK_REQUEST_ATTEMPTS =>
+                {
+                    log::debug!(
+                        "Artwork request failed transiently; retrying ({attempt}/{ARTWORK_REQUEST_ATTEMPTS})"
+                    );
+                    sleep(ARTWORK_RETRY_DELAY).await;
+                }
+                result => return result,
+            }
+        }
+
+        unreachable!("Artwork retry loop always returns from its final attempt")
+    }
+
+    async fn request_binary_once(
+        &self,
+        url: Url,
+        parameters: &[(&str, String)],
+        source_key: String,
+    ) -> Result<Option<BinaryArtwork>, String> {
         let response = self
             .client
             .get(url)
@@ -205,7 +236,9 @@ impl NavidromeBackend {
             .query(parameters)
             .send()
             .await
-            .map_err(|error| format!("Failed to download artwork: {error}"))?;
+            .map_err(|error| {
+                format!("{ARTWORK_TRANSPORT_ERROR_PREFIX} while downloading artwork: {error}")
+            })?;
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
@@ -355,7 +388,7 @@ impl MusicServer for NavidromeBackend {
             self.endpoint_url("getCoverArt"),
             &[
                 ("id", cover_art_id.to_string()),
-                ("size", "600".to_string()),
+                ("size", "512".to_string()),
             ],
             cover_art_id.to_string(),
         )
@@ -405,6 +438,10 @@ impl MusicServer for NavidromeBackend {
     }
 }
 
+fn is_retryable_artwork_error(error: &str) -> bool {
+    error.starts_with(ARTWORK_TRANSPORT_ERROR_PREFIX)
+}
+
 fn scrobble_parameters(
     song_id: &str,
     started_at_ms: i64,
@@ -440,7 +477,13 @@ async fn binary_artwork(response: Response, source_key: String) -> Result<Binary
     let bytes = response
         .bytes()
         .await
-        .map_err(|error| format!("Failed to read artwork response: {error}"))?
+        .map_err(|error| {
+            if error.is_timeout() {
+                format!("{ARTWORK_TRANSPORT_ERROR_PREFIX} while reading artwork response: {error}")
+            } else {
+                format!("Failed to read artwork response: {error}")
+            }
+        })?
         .to_vec();
 
     Ok(BinaryArtwork {
@@ -477,8 +520,8 @@ mod tests {
     use crate::server::{backend::MusicServer, ScrobbleEvent};
 
     use super::{
-        scrobble_parameters, AlbumListPayload, ArtistsPayload, NavidromeBackend, PingPayload,
-        SubsonicEnvelope,
+        is_retryable_artwork_error, scrobble_parameters, AlbumListPayload, ArtistsPayload,
+        NavidromeBackend, PingPayload, SubsonicEnvelope,
     };
 
     #[test]
@@ -565,6 +608,19 @@ mod tests {
             ]
         );
         assert_eq!(submission[2], ("submission", "true".to_string()));
+    }
+
+    #[test]
+    fn retries_only_transport_artwork_errors() {
+        assert!(is_retryable_artwork_error(
+            "Artwork transport error while reading artwork response: timed out"
+        ));
+        assert!(!is_retryable_artwork_error(
+            "Artwork request returned an HTTP error: 404 Not Found"
+        ));
+        assert!(!is_retryable_artwork_error(
+            "Artwork has unsupported content type: application/json"
+        ));
     }
 
     #[test]
