@@ -1,5 +1,7 @@
 <script setup lang="ts">
+import { storeToRefs } from "pinia";
 import { useAsideMenuSize } from "@/composables/useAsideMenuSize";
+import { useLayoutStore } from "@/stores/layout";
 
 import LeftAsideMenuHeader from "./LeftAsideMenuHeader.vue";
 import LeftAsideMenuHistoryNavigation from "./LeftAsideMenuHistoryNavigation.vue";
@@ -7,8 +9,12 @@ import LeftAsideMenuNavigation from "./LeftAsideMenuNavigation.vue";
 import LeftAsideMenuArtwork from "@/components/LeftAsideMenu/LeftAsideMenuArtwork.vue";
 import LeftAsideMenuToggleButton from "@/components/LeftAsideMenu/LeftAsideMenuToggleButton.vue";
 
-const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleCollapsed } =
-  useAsideMenuSize("left-aside-menu-width");
+const layoutStore = useLayoutStore();
+const { isLeftAsideCollapsed } = storeToRefs(layoutStore);
+
+const { asideWidth, isCollapsed, isResizing, resetWidth, startResize } = useAsideMenuSize("left-aside-menu-width", {
+  isCollapsed: isLeftAsideCollapsed,
+});
 </script>
 
 <template>
@@ -22,7 +28,7 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize, toggleColl
       <LeftAsideMenuHistoryNavigation :is-collapsed="isCollapsed" />
       <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
       <div class="mt-auto pt-4 pb-4">
-        <LeftAsideMenuToggleButton :is-collapsed="isCollapsed" @toggle="toggleCollapsed" />
+        <LeftAsideMenuToggleButton />
       </div>
     </div>
     <LeftAsideMenuArtwork :is-collapsed="isCollapsed" />
