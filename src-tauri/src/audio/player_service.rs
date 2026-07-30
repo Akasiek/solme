@@ -263,13 +263,29 @@ impl PlayerService {
         queue: PlayerQueue,
         event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
-        Arc::new(move || match Self::build_status(&audio, &queue) {
-            Ok(status) => {
-                if let Err(error) = event_bus.publish_player_status(status) {
-                    log::error!("Failed to emit player status change: {error}");
+        Arc::new(move || {
+            if !audio.status().playing {
+                match queue.len() {
+                    Ok(0) => {}
+                    Ok(_) => {
+                        if let Err(error) = queue.clear() {
+                            log::error!("Failed to clear completed player queue: {error}");
+                        } else if let Err(error) = event_bus.publish_player_queue_changed() {
+                            log::error!("Failed to emit player queue change: {error}");
+                        }
+                    }
+                    Err(error) => log::error!("Failed to inspect completed player queue: {error}"),
                 }
             }
-            Err(error) => log::error!("Failed to build player status change: {error}"),
+
+            match Self::build_status(&audio, &queue) {
+                Ok(status) => {
+                    if let Err(error) = event_bus.publish_player_status(status) {
+                        log::error!("Failed to emit player status change: {error}");
+                    }
+                }
+                Err(error) => log::error!("Failed to build player status change: {error}"),
+            }
         })
     }
 

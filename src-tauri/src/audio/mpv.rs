@@ -65,6 +65,8 @@ impl MpvBackend {
 
         mpv.observe_property("playlist-pos", Format::Int64, 1)
             .map_err(|error| format!("Failed to observe mpv playlist position: {error}"))?;
+        mpv.observe_property("idle-active", Format::Flag, 2)
+            .map_err(|error| format!("Failed to observe mpv idle state: {error}"))?;
 
         thread::spawn(move || loop {
             match mpv.wait_event(60.0) {
@@ -73,7 +75,7 @@ impl MpvBackend {
                     Self::notify_status_change(&callback)
                 }
                 Some(Ok(Event::PropertyChange {
-                    name: "playlist-pos",
+                    name: "playlist-pos" | "idle-active",
                     ..
                 })) => Self::notify_status_change(&callback),
                 Some(Ok(_)) | None => {}
