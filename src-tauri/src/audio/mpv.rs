@@ -4,13 +4,14 @@ use std::{
     time::{Duration, Instant},
 };
 
-use libmpv2::{events::Event, Format, Mpv, SetData};
+use libmpv2::{events::Event, Error as MpvError, Format, Mpv, SetData};
 
 use super::backend::{AudioBackend, AudioBackendStatus, AudioStatusChangeCallback};
 
 const DEMUXER_READAHEAD_SECS: f64 = 30.0;
 const DEMUXER_MAX_BYTES: i64 = 256 * 1024 * 1024;
 const STREAM_BUFFER_SIZE: i64 = 4 * 1024 * 1024;
+const MPV_ERROR_LOADING_FAILED: i32 = -13;
 
 pub struct MpvBackend {
     mpv: Mpv,
@@ -79,6 +80,10 @@ impl MpvBackend {
                     ..
                 })) => Self::notify_status_change(&callback),
                 Some(Ok(_)) | None => {}
+                Some(Err(MpvError::Raw(MPV_ERROR_LOADING_FAILED))) => {
+                    log::warn!("mpv could not load a playback source");
+                    Self::notify_status_change(&callback);
+                }
                 Some(Err(error)) => log::error!("Failed to read mpv status event: {error}"),
             }
         });
@@ -256,6 +261,10 @@ impl AudioBackend for MpvBackend {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
         }
         Ok(())
+    }
+
+    fn pause_immediately(&self) -> Result<(), String> {
+        self.set_paused(true, "pause playback immediately")
     }
 
     fn pause(&self) -> Result<(), String> {

@@ -12,6 +12,7 @@ pub trait AudioBackend: Send + Sync {
     ) -> Result<(), String>;
     fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String>;
     fn append_sources(&self, sources: &[String]) -> Result<(), String>;
+    fn pause_immediately(&self) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn resume(&self) -> Result<(), String>;
     fn stop(&self) -> Result<(), String>;

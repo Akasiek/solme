@@ -167,6 +167,11 @@ impl AudioBackend for FadingAudioBackend {
         self.inner.append_sources(sources)
     }
 
+    fn pause_immediately(&self) -> Result<(), String> {
+        self.cancel()?;
+        self.inner.pause_immediately()
+    }
+
     fn pause(&self) -> Result<(), String> {
         self.pause_with_fade()
     }
@@ -465,6 +470,11 @@ mod tests {
         }
 
         fn insert_sources(&self, _sources: &[String], _position: usize) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn pause_immediately(&self) -> Result<(), String> {
+            self.state.lock().unwrap().paused = true;
             Ok(())
         }
 
