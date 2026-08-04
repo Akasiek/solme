@@ -91,7 +91,7 @@ export interface CachedSong {
 }
 
 export interface PlayerStatus {
-  state: "stopped" | "playing" | "paused";
+  state: "stopped" | "loading" | "playing" | "paused";
   currentSong?: CachedSong;
   positionSeconds: number;
   durationSeconds: number;

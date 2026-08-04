@@ -18,6 +18,9 @@ const togglePlayback = () => {
   if (!status?.currentSong) {
     return;
   }
+  if (status.state === "loading") {
+    return;
+  }
 
   const cmd = status.state === "playing" ? "player_pause" : "player_resume";
   invoke(cmd).catch((error) => {

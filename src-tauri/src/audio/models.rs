@@ -18,6 +18,7 @@ pub struct PlayerStatus {
 #[serde(rename_all = "snake_case")]
 pub enum PlaybackState {
     Stopped,
+    Loading,
     Playing,
     Paused,
 }

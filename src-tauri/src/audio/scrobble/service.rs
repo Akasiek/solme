@@ -249,6 +249,9 @@ impl ScrobbleTracker {
     }
 
     fn validated_sample<'a>(&mut self, sample: &'a PlaybackSample) -> Option<TrackerSample<'a>> {
+        if sample.state == PlaybackState::Loading {
+            return None;
+        }
         if sample.state == PlaybackState::Stopped {
             self.reset();
             return None;

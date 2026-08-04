@@ -101,6 +101,7 @@ impl PlayerInterface for MprisPlayer {
         match self.status()?.state {
             PlaybackState::Playing => self.player.pause(),
             PlaybackState::Paused | PlaybackState::Stopped => self.player.resume(),
+            PlaybackState::Loading => Ok(()),
         }
         .map_err(fdo::Error::Failed)
     }
@@ -333,6 +334,7 @@ fn current_track_id(status: &PlayerStatus) -> TrackId {
 fn playback_status(state: PlaybackState) -> PlaybackStatus {
     match state {
         PlaybackState::Stopped => PlaybackStatus::Stopped,
+        PlaybackState::Loading => PlaybackStatus::Paused,
         PlaybackState::Playing => PlaybackStatus::Playing,
         PlaybackState::Paused => PlaybackStatus::Paused,
     }
