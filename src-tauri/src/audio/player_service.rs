@@ -2,7 +2,10 @@ use crate::{
     library::{CachedSong, LibraryCatalogRepository},
     server::MusicServerService,
 };
-use std::sync::Arc;
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc,
+};
 
 use super::{
     backend::AudioBackend,
@@ -15,6 +18,24 @@ use super::{
 use crate::events::EventBus;
 
 const PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS: f64 = 5.0;
+type MusicServerBackend = dyn crate::server::backend::MusicServer;
+
+struct QueueLoadGuard {
+    in_progress: Arc<AtomicBool>,
+}
+
+impl QueueLoadGuard {
+    fn begin(in_progress: Arc<AtomicBool>) -> Self {
+        in_progress.store(true, Ordering::Release);
+        Self { in_progress }
+    }
+}
+
+impl Drop for QueueLoadGuard {
+    fn drop(&mut self) {
+        self.in_progress.store(false, Ordering::Release);
+    }
+}
 
 pub struct PlayerService {
     audio: Arc<dyn AudioBackend>,
@@ -23,6 +44,7 @@ pub struct PlayerService {
     preference: PreferenceService,
     event_bus: Arc<EventBus>,
     queue: PlayerQueue,
+    queue_load_in_progress: Arc<AtomicBool>,
 }
 
 impl PlayerService {
@@ -36,10 +58,12 @@ impl PlayerService {
         let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
         let queue = PlayerQueue::default();
+        let queue_load_in_progress = Arc::new(AtomicBool::new(false));
 
         audio.set_status_change_callback(Self::status_change_callback(
             Arc::clone(&audio),
             queue.clone(),
+            Arc::clone(&queue_load_in_progress),
             Arc::clone(&event_bus),
         ));
 
@@ -50,6 +74,7 @@ impl PlayerService {
             preference,
             event_bus,
             queue,
+            queue_load_in_progress,
         }
     }
 
@@ -76,6 +101,28 @@ impl PlayerService {
         Ok(())
     }
 
+    fn notify_queue_item_status(
+        &self,
+        state: PlaybackState,
+        current_song: CachedSong,
+        queue_position: usize,
+        queue_length: usize,
+    ) {
+        let audio_status = self.audio.status();
+        let status = PlayerStatus {
+            state,
+            current_song: Some(current_song),
+            position_seconds: 0.0,
+            duration_seconds: 0.0,
+            queue_position: Some(queue_position + 1),
+            queue_length,
+            volume: audio_status.volume,
+        };
+        if let Err(error) = self.event_bus.publish_player_status(status) {
+            log::error!("Failed to emit player queue item status: {error}");
+        }
+    }
+
     pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<PlayerStatus> {
         self.event_bus.subscribe_player_status()
     }
@@ -85,21 +132,85 @@ impl PlayerService {
         album_id: &str,
         start_song_id: Option<&str>,
     ) -> Result<(), String> {
-        let prepared = self.prepare_album_queue(album_id).await?;
+        let (server, songs) = self.album_songs(album_id).await?;
+        let start_index = Self::album_start_index(&songs, start_song_id)?;
+        let current_song = songs[start_index].clone();
+        let loading = QueueLoadGuard::begin(Arc::clone(&self.queue_load_in_progress));
 
-        let start_index = match start_song_id {
-            Some(song_id) => prepared
-                .songs()
+        self.audio.pause_immediately()?;
+        self.show_loading_queue(&songs, start_index)?;
+        let load_result = self.load_album_sources(&server, &songs, start_index).await;
+
+        drop(loading);
+        self.finish_album_load(load_result, current_song, start_index, songs.len())
+    }
+
+    async fn album_songs(
+        &self,
+        album_id: &str,
+    ) -> Result<(Arc<MusicServerBackend>, Vec<CachedSong>), String> {
+        let (profile_id, server) = self.server.current_server()?;
+        let songs = self.repository.songs(&profile_id, album_id).await?;
+        if songs.is_empty() {
+            return Err("Album has no cached songs".to_string());
+        }
+        Ok((server, songs))
+    }
+
+    fn album_start_index(
+        songs: &[CachedSong],
+        start_song_id: Option<&str>,
+    ) -> Result<usize, String> {
+        match start_song_id {
+            Some(song_id) => songs
                 .iter()
                 .position(|song| song.remote_id == song_id)
-                .ok_or_else(|| "Selected song does not belong to this album".to_string())?,
-            None => 0,
-        };
+                .ok_or_else(|| "Selected song does not belong to this album".to_string()),
+            None => Ok(0),
+        }
+    }
 
-        self.audio.load_sources(prepared.sources(), start_index)?;
-        self.queue.replace(prepared.into_songs())?;
+    fn show_loading_queue(&self, songs: &[CachedSong], start_index: usize) -> Result<(), String> {
+        self.queue.replace(songs.to_vec())?;
         self.notify_queue_changed();
-        self.notify_status_changed()
+        self.notify_queue_item_status(
+            PlaybackState::Loading,
+            songs[start_index].clone(),
+            start_index,
+            songs.len(),
+        );
+        Ok(())
+    }
+
+    async fn load_album_sources(
+        &self,
+        server: &Arc<MusicServerBackend>,
+        songs: &[CachedSong],
+        start_index: usize,
+    ) -> Result<(), String> {
+        let sources = Self::playback_sources(server, songs).await?;
+        self.audio.load_sources(&sources, start_index)
+    }
+
+    fn finish_album_load(
+        &self,
+        result: Result<(), String>,
+        current_song: CachedSong,
+        start_index: usize,
+        queue_length: usize,
+    ) -> Result<(), String> {
+        match result {
+            Ok(()) => self.notify_status_changed(),
+            Err(error) => {
+                self.notify_queue_item_status(
+                    PlaybackState::Stopped,
+                    current_song,
+                    start_index,
+                    queue_length,
+                );
+                Err(error)
+            }
+        }
     }
 
     pub async fn queue_album_next(&self, album_id: &str) -> Result<(), String> {
@@ -239,7 +350,7 @@ impl PlayerService {
     }
 
     async fn playback_sources(
-        server: &Arc<dyn crate::server::backend::MusicServer>,
+        server: &Arc<MusicServerBackend>,
         songs: &[CachedSong],
     ) -> Result<Vec<String>, String> {
         let mut sources = Vec::with_capacity(songs.len());
@@ -261,9 +372,14 @@ impl PlayerService {
     fn status_change_callback(
         audio: Arc<dyn AudioBackend>,
         queue: PlayerQueue,
+        queue_load_in_progress: Arc<AtomicBool>,
         event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
         Arc::new(move || {
+            if queue_load_in_progress.load(Ordering::Acquire) {
+                return;
+            }
+
             if !audio.status().playing {
                 match queue.len() {
                     Ok(0) => {}
@@ -317,7 +433,10 @@ impl PlayerService {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
+    use std::{
+        sync::{mpsc, Arc, Condvar, Mutex},
+        time::Duration,
+    };
 
     use async_trait::async_trait;
     use sqlx::SqlitePool;
@@ -403,6 +522,55 @@ mod tests {
             assert_eq!(status.current_song.unwrap().remote_id, "song-3");
             assert_eq!(status.queue_position, Some(3));
         });
+    }
+
+    #[test]
+    fn exposes_queue_while_first_audio_source_is_loading() {
+        let server_service = tauri::async_runtime::block_on(async { test_server_service().await });
+        let songs = vec![song("song-1"), song("song-2"), song("song-3")];
+        let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
+            songs: songs.clone(),
+        });
+        let (load_started_tx, load_started_rx) = mpsc::sync_channel(0);
+        let load_release = Arc::new((Mutex::new(false), Condvar::new()));
+        let audio_state = Arc::new(Mutex::new(MockAudioState {
+            playing: true,
+            load_started: Some(load_started_tx),
+            load_release: Some(Arc::clone(&load_release)),
+            ..Default::default()
+        }));
+        let player = Arc::new(PlayerService::new(
+            Box::new(MockAudioBackend { state: audio_state }),
+            server_service,
+            repository,
+            Arc::new(MockPreferenceRepository::default()),
+            noop_event_bus(),
+        ));
+        let mut status_receiver = player.subscribe_status();
+
+        let playing_player = Arc::clone(&player);
+        let play_thread = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async {
+                playing_player.play_album("album-1", None).await
+            })
+        });
+
+        load_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("audio loading did not start");
+
+        assert_eq!(player.queue().unwrap(), songs);
+        let loading_status = status_receiver.try_recv().unwrap();
+        assert_eq!(loading_status.state, PlaybackState::Loading);
+        assert_eq!(loading_status.current_song.unwrap().remote_id, "song-1");
+        assert_eq!(loading_status.queue_position, Some(1));
+        assert!(player.audio.status().paused);
+
+        let (released, release_signal) = &*load_release;
+        *released.lock().unwrap() = true;
+        release_signal.notify_one();
+
+        play_thread.join().unwrap().unwrap();
     }
 
     #[test]
@@ -723,6 +891,8 @@ mod tests {
         volume: f64,
         previous_calls: usize,
         keep_stale_position_after_seek: bool,
+        load_started: Option<mpsc::SyncSender<()>>,
+        load_release: Option<Arc<(Mutex<bool>, Condvar)>>,
     }
 
     struct MockAudioBackend {
@@ -740,6 +910,22 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.sources = sources.to_vec();
             state.start_index = start_index;
+            let load_started = state.load_started.take();
+            let load_release = state.load_release.clone();
+            drop(state);
+
+            if let Some(load_started) = load_started {
+                load_started.send(()).unwrap();
+            }
+            if let Some(load_release) = load_release {
+                let (released, release_signal) = &*load_release;
+                let mut released = released.lock().unwrap();
+                while !*released {
+                    released = release_signal.wait(released).unwrap();
+                }
+            }
+
+            let mut state = self.state.lock().unwrap();
             state.playing = true;
             state.paused = false;
             Ok(())
@@ -775,6 +961,11 @@ mod tests {
             let mut state = self.state.lock().unwrap();
             state.inserted_sources.extend_from_slice(sources);
             state.insertion_position = Some(position);
+            Ok(())
+        }
+
+        fn pause_immediately(&self) -> Result<(), String> {
+            self.state.lock().unwrap().paused = true;
             Ok(())
         }
 
