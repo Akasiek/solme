@@ -73,10 +73,6 @@ impl PreparedQueue {
         Ok(Self { songs, sources })
     }
 
-    pub fn songs(&self) -> &[CachedSong] {
-        &self.songs
-    }
-
     pub fn sources(&self) -> &[String] {
         &self.sources
     }
