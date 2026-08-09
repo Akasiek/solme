@@ -69,7 +69,7 @@ const playTrack = async () => {
 
     <button
       type="button"
-      class="grid size-9 place-items-center rounded-full bg-accent text-white transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50"
+      class="grid size-9 cursor-pointer place-items-center rounded-full bg-accent text-white transition-opacity hover:opacity-80 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent disabled:cursor-wait disabled:opacity-50"
       :disabled="isPlaying"
       :title="`Play ${song.title}`"
       @click="playTrack"
