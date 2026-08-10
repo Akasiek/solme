@@ -39,11 +39,14 @@ const releaseDateLabel = computed(() => albumDateFormat(album));
 
 <template>
   <div class="space-y-1 font-sans">
-    <p class="text-sm font-semibold text-zinc-300">
+    <p class="text-xs font-semibold text-zinc-300 @min-[64rem]:text-sm">
       <template v-if="discLabel">{{ discLabel }} ·</template>
       {{ album.songCount }} Tracks · {{ albumDuration }}
     </p>
-    <p v-if="releaseDateLabel" class="text-xs font-semibold tracking-wide text-zinc-500 uppercase">
+    <p
+      v-if="releaseDateLabel"
+      class="text-xxs font-semibold tracking-wide text-zinc-500 uppercase @min-[64rem]:text-xs"
+    >
       Released on {{ releaseDateLabel }}
     </p>
   </div>
