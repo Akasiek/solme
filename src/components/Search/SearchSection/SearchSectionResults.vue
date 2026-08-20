@@ -4,7 +4,7 @@ import ArtistCard from "@/components/Artist/ArtistCard";
 import SearchTrackRow from "@/components/Search/SearchTrackRow";
 import type { CachedAlbum, CachedArtist, CachedSong } from "@/types";
 
-const props = defineProps<{
+defineProps<{
   albums: CachedAlbum[];
   artists: CachedArtist[];
   songs: CachedSong[];
