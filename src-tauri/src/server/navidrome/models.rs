@@ -75,6 +75,7 @@ pub(super) struct ArtistDto {
     pub name: String,
     #[serde(default)]
     pub album_count: i64,
+    pub cover_art: Option<String>,
     pub starred: Option<String>,
     pub user_rating: Option<i64>,
 }
@@ -387,18 +388,4 @@ pub(super) struct GenreDto {
     pub song_count: i64,
     #[serde(default)]
     pub album_count: i64,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct ArtistInfoPayload {
-    pub artist_info2: ArtistInfoDto,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct ArtistInfoDto {
-    pub small_image_url: Option<String>,
-    pub medium_image_url: Option<String>,
-    pub large_image_url: Option<String>,
 }

@@ -737,6 +737,7 @@ mod tests {
                 remote_id: "artist-1".to_string(),
                 name: "Artist".to_string(),
                 album_count: 1,
+                cover_art_id: Some("artist-cover-1".to_string()),
                 favorite: false,
                 rating: None,
             }])

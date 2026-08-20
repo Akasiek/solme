@@ -5,6 +5,7 @@ pub struct Artist {
     pub remote_id: String,
     pub name: String,
     pub album_count: i64,
+    pub cover_art_id: Option<String>,
     pub favorite: bool,
     pub rating: Option<i64>,
 }

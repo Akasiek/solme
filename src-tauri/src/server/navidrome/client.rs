@@ -9,11 +9,13 @@ use reqwest::{
 use serde::de::DeserializeOwned;
 use tokio::time::sleep;
 
-use crate::library::models::{Album, AlbumWithSongs, Artist, BinaryArtwork, Genre};
+use crate::library::models::{
+    Album, AlbumWithSongs, Artist, BinaryArtwork, Genre, LibraryItemKind,
+};
 
 use super::models::{
-    AlbumDto, AlbumListPayload, AlbumPayload, ArtistInfoPayload, ArtistsPayload, GenresPayload,
-    PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
+    AlbumDto, AlbumListPayload, AlbumPayload, ArtistsPayload, GenresPayload, PingPayload,
+    ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
 };
 
 pub(crate) const ARTWORK_TRANSPORT_ERROR_PREFIX: &str = "Artwork transport error";
@@ -249,12 +251,6 @@ impl NavidromeBackend {
             .map_err(|error| format!("Artwork request returned an HTTP error: {error}"))?;
         binary_artwork(response, source_key).await.map(Some)
     }
-
-    fn same_origin(&self, url: &Url) -> bool {
-        url.scheme() == self.base_url.scheme()
-            && url.host_str() == self.base_url.host_str()
-            && url.port_or_known_default() == self.base_url.port_or_known_default()
-    }
 }
 
 #[async_trait]
@@ -291,6 +287,7 @@ impl MusicServer for NavidromeBackend {
                 remote_id: artist.id,
                 name: artist.name,
                 album_count: artist.album_count,
+                cover_art_id: artist.cover_art,
                 favorite: artist.starred.is_some(),
                 rating: super::models::normalize_rating(artist.user_rating),
             })
@@ -437,46 +434,16 @@ impl MusicServer for NavidromeBackend {
         .await
     }
 
-    async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String> {
-        let payload: ArtistInfoPayload = self
-            .request_payload(
-                "getArtistInfo2",
-                &[("id", artist_id.to_string()), ("count", "0".to_string())],
-            )
-            .await?;
-        let Some(source) = payload
-            .artist_info2
-            .large_image_url
-            .or(payload.artist_info2.medium_image_url)
-            .or(payload.artist_info2.small_image_url)
-        else {
-            return Ok(None);
-        };
-        let url = self
-            .base_url
-            .join(&source)
-            .map_err(|error| format!("Artist image URL is invalid: {error}"))?;
-        if !self.same_origin(&url) && url.scheme() != "https" {
-            return Ok(None);
-        }
-
-        if self.same_origin(&url) {
-            return self.request_binary(url, &[], source).await;
-        }
-
-        let response = self
-            .client
-            .get(url)
-            .send()
-            .await
-            .map_err(|error| format!("Failed to download artist image: {error}"))?;
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            return Ok(None);
-        }
-        let response = response
-            .error_for_status()
-            .map_err(|error| format!("Artist image returned an HTTP error: {error}"))?;
-        binary_artwork(response, source).await.map(Some)
+    async fn artist_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
+        self.request_binary(
+            self.endpoint_url("getCoverArt"),
+            &[
+                ("id", cover_art_id.to_string()),
+                ("size", "512".to_string()),
+            ],
+            cover_art_id.to_string(),
+        )
+        .await
     }
 }
 
@@ -594,23 +561,6 @@ mod tests {
     }
 
     #[test]
-    fn only_accepts_artist_images_from_server_origin() {
-        let backend = backend("https://example.com/music");
-        assert!(backend.same_origin(&"https://example.com/art.jpg".parse().unwrap()));
-        assert!(!backend.same_origin(&"https://cdn.example.com/art.jpg".parse().unwrap()));
-        assert!(!backend.same_origin(&"http://example.com/art.jpg".parse().unwrap()));
-    }
-
-    #[test]
-    fn resolves_relative_artist_image_urls_against_server() {
-        let backend = backend("https://example.com/music");
-        let url = backend.base_url.join("/image/artist.jpg").unwrap();
-
-        assert_eq!(url.as_str(), "https://example.com/image/artist.jpg");
-        assert!(backend.same_origin(&url));
-    }
-
-    #[test]
     fn rejects_non_http_url() {
         let result = NavidromeBackend::new(
             "file:///music".to_string(),
@@ -659,6 +609,13 @@ mod tests {
             ]
         );
         assert_eq!(submission[2], ("submission", "true".to_string()));
+    }
+
+    #[test]
+    fn maps_favorite_target_to_id3_parameter() {
+        assert_eq!(favorite_parameter(LibraryItemKind::Artist), "artistId");
+        assert_eq!(favorite_parameter(LibraryItemKind::Album), "albumId");
+        assert_eq!(favorite_parameter(LibraryItemKind::Song), "id");
     }
 
     #[test]
@@ -790,6 +747,41 @@ mod tests {
         assert_eq!(typed_album.album_type.as_deref(), Some("live"));
         assert!(typed_album.favorite);
         assert_eq!(typed_album.rating, Some(4));
+    }
+
+    #[test]
+    fn parses_artist_cover_art_id() {
+        let response: SubsonicEnvelope = serde_json::from_str(
+            r#"{
+              "subsonic-response": {
+                "status": "ok",
+                "version": "1.16.1",
+                "artists": {
+                  "index": [{
+                    "name": "A",
+                    "artist": [{
+                      "id": "artist-1",
+                      "name": "Artist",
+                      "albumCount": 1,
+                      "coverArt": "artist-cover-1"
+                    }]
+                  }]
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let artist = response
+            .subsonic_response
+            .into_payload::<ArtistsPayload>()
+            .unwrap()
+            .artists
+            .index
+            .remove(0)
+            .artist
+            .remove(0);
+        assert_eq!(artist.cover_art.as_deref(), Some("artist-cover-1"));
     }
 
     #[test]

@@ -21,7 +21,7 @@ pub async fn synchronize_artwork_item(
     artwork_root: &Path,
     fresh_after: i64,
 ) -> Result<(), String> {
-    let expected_source = (candidate.kind == "album").then_some(candidate.source_id.as_str());
+    let expected_source = Some(candidate.source_id.as_str());
     if repository
         .artwork_is_fresh(
             profile_id,

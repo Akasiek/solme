@@ -21,6 +21,7 @@ struct AlbumArtworkCandidate {
 #[derive(sqlx::FromRow)]
 struct ArtistArtworkCandidate {
     remote_id: String,
+    cover_art_id: String,
     name: String,
 }
 
@@ -71,12 +72,12 @@ pub(crate) async fn artwork_candidates(
     .map_err(|error| format!("Failed to read album artwork candidates: {error}"))?;
 
     let artist_rows = sqlx::query_as::<_, ArtistArtworkCandidate>(
-        "SELECT a.remote_id, a.name
+        "SELECT a.remote_id, a.cover_art_id, a.name
          FROM artists a
          JOIN library_sync_state s
            ON s.profile_id = a.profile_id
           AND s.active_generation = a.generation
-         WHERE a.profile_id = ?",
+         WHERE a.profile_id = ? AND a.cover_art_id IS NOT NULL",
     )
     .bind(profile_id)
     .fetch_all(&repo.pool)
@@ -90,14 +91,11 @@ pub(crate) async fn artwork_candidates(
         source_id: row.cover_art_id,
         name: row.name,
     }));
-    candidates.extend(artist_rows.into_iter().map(|row| {
-        let remote_id = row.remote_id;
-        ArtworkCandidate {
-            kind: "artist",
-            source_id: remote_id.clone(),
-            remote_id,
-            name: row.name,
-        }
+    candidates.extend(artist_rows.into_iter().map(|row| ArtworkCandidate {
+        kind: "artist",
+        remote_id: row.remote_id,
+        source_id: row.cover_art_id,
+        name: row.name,
     }));
     Ok(candidates)
 }
