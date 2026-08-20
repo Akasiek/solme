@@ -454,7 +454,7 @@ mod tests {
         library::{
             models::{
                 Album, AlbumSort, AlbumWithSongs, Artist, BinaryArtwork, CachedAlbum, CachedArtist,
-                CachedSong, Genre, LibrarySummary,
+                CachedSong, Genre, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
             },
             LibraryCatalogRepository, LibraryStateRepository,
         },
@@ -859,6 +859,8 @@ mod tests {
             track_number: Some(1),
             disc_number: Some(1),
             duration_seconds: 180,
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -1092,6 +1094,24 @@ mod tests {
             Ok(())
         }
 
+        async fn set_favorite(
+            &self,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _favorite: bool,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn set_rating(
+            &self,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _rating: Option<i64>,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
         async fn album_artwork(
             &self,
             _cover_art_id: &str,
@@ -1117,6 +1137,35 @@ mod tests {
 
     #[async_trait]
     impl LibraryCatalogRepository for MockRepository {
+        async fn annotation(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+        ) -> Result<Option<LibraryItemAnnotation>, String> {
+            unimplemented!()
+        }
+
+        async fn set_favorite(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _favorite: bool,
+        ) -> Result<(), String> {
+            unimplemented!()
+        }
+
+        async fn set_rating(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _rating: Option<i64>,
+        ) -> Result<(), String> {
+            unimplemented!()
+        }
+
         async fn artist(
             &self,
             _profile_id: &str,

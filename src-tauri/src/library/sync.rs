@@ -347,6 +347,12 @@ fn merge_album_index_metadata(index: Album, mut details: AlbumWithSongs) -> Albu
     if details.album.original_release_date.is_none() {
         details.album.original_release_date = index.original_release_date;
     }
+    if !details.album.favorite {
+        details.album.favorite = index.favorite;
+    }
+    if details.album.rating.is_none() {
+        details.album.rating = index.rating;
+    }
     details
 }
 
@@ -371,8 +377,8 @@ mod tests {
         library::{
             models::{
                 Album, AlbumWithSongs, Artist, ArtworkCacheRecord, ArtworkCandidate, BinaryArtwork,
-                CachedAlbum, CachedArtist, CachedSong, Genre, LibrarySnapshot, LibrarySummary,
-                LibrarySyncPhase, Song,
+                CachedAlbum, CachedArtist, CachedSong, Genre, LibraryItemAnnotation,
+                LibraryItemKind, LibrarySnapshot, LibrarySummary, LibrarySyncPhase, Song,
             },
             repository::{
                 ArtworkRepository, LibraryCatalogRepository, LibrarySnapshotRepository,
@@ -731,6 +737,8 @@ mod tests {
                 remote_id: "artist-1".to_string(),
                 name: "Artist".to_string(),
                 album_count: 1,
+                favorite: false,
+                rating: None,
             }])
         }
 
@@ -770,6 +778,24 @@ mod tests {
             _song_id: &str,
             _started_at_ms: i64,
             _event: ScrobbleEvent,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn set_favorite(
+            &self,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _favorite: bool,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn set_rating(
+            &self,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _rating: Option<i64>,
         ) -> Result<(), String> {
             Ok(())
         }
@@ -851,6 +877,38 @@ mod tests {
 
     #[async_trait]
     impl LibraryCatalogRepository for MockRepository {
+        async fn annotation(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+        ) -> Result<Option<LibraryItemAnnotation>, String> {
+            Ok(Some(LibraryItemAnnotation {
+                favorite: false,
+                rating: None,
+            }))
+        }
+
+        async fn set_favorite(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _favorite: bool,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
+        async fn set_rating(
+            &self,
+            _profile_id: &str,
+            _item_kind: LibraryItemKind,
+            _item_id: &str,
+            _rating: Option<i64>,
+        ) -> Result<(), String> {
+            Ok(())
+        }
+
         async fn artist(
             &self,
             _profile_id: &str,
@@ -861,6 +919,8 @@ mod tests {
                 name: "Artist".to_string(),
                 album_count: 1,
                 artwork_path: None,
+                favorite: false,
+                rating: None,
             }))
         }
 
@@ -1028,6 +1088,8 @@ mod tests {
             duration_seconds: 180,
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -1045,6 +1107,8 @@ mod tests {
             song_count: 1,
             duration_seconds: 180,
             artwork_path: None,
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -1067,6 +1131,8 @@ mod tests {
             sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
+            favorite: false,
+            rating: None,
         }
     }
 }

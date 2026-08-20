@@ -14,12 +14,13 @@ pub(crate) async fn insert_songs(
     generation: &str,
     songs: &[&Song],
 ) -> Result<(), String> {
-    for songs in songs.chunks(SQLITE_BIND_LIMIT / 18) {
+    for songs in songs.chunks(SQLITE_BIND_LIMIT / 20) {
         let mut query = QueryBuilder::new(
             "INSERT INTO songs
              (profile_id, generation, remote_id, album_id, artist_id, title,
               artist_name, album_name, track_number, disc_number, year,
-              duration_seconds, suffix, content_type, bit_rate, bit_depth, sample_rate, cover_art_id) ",
+              duration_seconds, suffix, content_type, bit_rate, bit_depth, sample_rate,
+              cover_art_id, favorite, rating) ",
         );
         query.push_values(songs, |mut row, song| {
             row.push_bind(profile_id)
@@ -39,7 +40,9 @@ pub(crate) async fn insert_songs(
                 .push_bind(song.bit_rate)
                 .push_bind(song.bit_depth)
                 .push_bind(song.sample_rate)
-                .push_bind(&song.cover_art_id);
+                .push_bind(&song.cover_art_id)
+                .push_bind(song.favorite)
+                .push_bind(song.rating);
         });
         query
             .build()
@@ -119,7 +122,8 @@ pub(crate) async fn fuzzy_song_candidates(
     sqlx::query_as::<_, CachedSong>(
         "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                 song.album_name, artwork.local_path AS artwork_path,
-                song.track_number, song.disc_number, song.duration_seconds
+                song.track_number, song.disc_number, song.duration_seconds,
+                song.favorite, song.rating
          FROM songs song
          JOIN library_sync_state state
            ON state.profile_id = song.profile_id
@@ -144,7 +148,8 @@ pub(crate) async fn songs(
     sqlx::query_as::<_, CachedSong>(
         "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                 song.album_name, artwork.local_path AS artwork_path,
-                song.track_number, song.disc_number, song.duration_seconds
+                song.track_number, song.disc_number, song.duration_seconds,
+                song.favorite, song.rating
          FROM songs song
          JOIN library_sync_state state
            ON state.profile_id = song.profile_id
@@ -178,7 +183,8 @@ pub(crate) async fn search_songs(
     let results = sqlx::query_as::<_, CachedSong>(
         "SELECT song.remote_id, song.album_id, song.artist_id, song.title, song.artist_name,
                 song.album_name, artwork.local_path AS artwork_path,
-                song.track_number, song.disc_number, song.duration_seconds
+                song.track_number, song.disc_number, song.duration_seconds,
+                song.favorite, song.rating
          FROM song_search
          JOIN library_sync_state state
            ON state.profile_id = song_search.profile_id

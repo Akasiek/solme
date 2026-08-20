@@ -351,6 +351,8 @@ mod tests {
             song_count: 1,
             duration_seconds: 180,
             artwork_path: None,
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -360,6 +362,8 @@ mod tests {
             name: name.to_string(),
             album_count: 1,
             artwork_path: None,
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -375,6 +379,8 @@ mod tests {
             track_number: Some(1),
             disc_number: Some(1),
             duration_seconds: 180,
+            favorite: false,
+            rating: None,
         }
     }
 }

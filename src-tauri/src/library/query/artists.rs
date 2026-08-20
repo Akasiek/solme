@@ -15,7 +15,8 @@ pub(crate) async fn artist(
 ) -> Result<Option<CachedArtist>, String> {
     let artist = sqlx::query_as::<_, CachedArtist>(
         "
-        SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path
+        SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path,
+               a.favorite, a.rating
         FROM artists a
         JOIN library_sync_state s
           ON s.profile_id = a.profile_id
@@ -45,7 +46,7 @@ pub(crate) async fn artist_albums(
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path
+                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM albums a
          JOIN library_sync_state state
            ON state.profile_id = a.profile_id
@@ -72,17 +73,20 @@ pub(crate) async fn insert_artists(
     generation: &str,
     artists: &[Artist],
 ) -> Result<(), String> {
-    for artists in artists.chunks(SQLITE_BIND_LIMIT / 5) {
+    for artists in artists.chunks(SQLITE_BIND_LIMIT / 8) {
         let mut query = QueryBuilder::new(
             "INSERT INTO artists
-             (profile_id, generation, remote_id, name, album_count) ",
+             (profile_id, generation, remote_id, name, album_count, cover_art_id, favorite, rating) ",
         );
         query.push_values(artists, |mut row, artist| {
             row.push_bind(profile_id)
                 .push_bind(generation)
                 .push_bind(&artist.remote_id)
                 .push_bind(&artist.name)
-                .push_bind(artist.album_count);
+                .push_bind(artist.album_count)
+                .push_bind(&artist.cover_art_id)
+                .push_bind(artist.favorite)
+                .push_bind(artist.rating);
         });
         query
             .build()
@@ -125,7 +129,7 @@ async fn fuzzy_artist_candidates(
 ) -> Result<Vec<CachedArtist>, String> {
     sqlx::query_as::<_, CachedArtist>(
         "SELECT artist.remote_id, artist.name, artist.album_count,
-                artwork.local_path AS artwork_path
+                artwork.local_path AS artwork_path, artist.favorite, artist.rating
          FROM artists artist
          JOIN library_sync_state state
            ON state.profile_id = artist.profile_id
@@ -154,7 +158,7 @@ pub(crate) async fn search_artists(
     let limit = limit.clamp(1, 500);
     let results = sqlx::query_as::<_, CachedArtist>(
         "SELECT artist.remote_id, artist.name, artist.album_count,
-                artwork.local_path AS artwork_path
+                artwork.local_path AS artwork_path, artist.favorite, artist.rating
          FROM artist_search
          JOIN library_sync_state state
            ON state.profile_id = artist_search.profile_id

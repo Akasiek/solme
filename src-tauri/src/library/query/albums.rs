@@ -12,7 +12,7 @@ const SQLITE_BIND_LIMIT: usize = 999;
 const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
     SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
            a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-           a.duration_seconds, art.local_path AS artwork_path
+           a.duration_seconds, art.local_path AS artwork_path, a.favorite, a.rating
     FROM albums a
     JOIN library_sync_state s
       ON s.profile_id = a.profile_id
@@ -29,11 +29,12 @@ pub(crate) async fn insert_albums(
     generation: &str,
     albums: &[AlbumWithSongs],
 ) -> Result<(), String> {
-    for albums in albums.chunks(SQLITE_BIND_LIMIT / 14) {
+    for albums in albums.chunks(SQLITE_BIND_LIMIT / 16) {
         let mut query = QueryBuilder::new(
             "INSERT INTO albums
              (profile_id, generation, remote_id, name, album_type, artist_id, artist_name,
-              year, release_date, original_release_date, server_added_at, song_count, duration_seconds, cover_art_id) ",
+              year, release_date, original_release_date, server_added_at, song_count,
+              duration_seconds, cover_art_id, favorite, rating) ",
         );
         query.push_values(albums, |mut row, details| {
             let album = &details.album;
@@ -50,7 +51,9 @@ pub(crate) async fn insert_albums(
                 .push_bind(&album.server_added_at)
                 .push_bind(album.song_count)
                 .push_bind(album.duration_seconds)
-                .push_bind(&album.cover_art_id);
+                .push_bind(&album.cover_art_id)
+                .push_bind(album.favorite)
+                .push_bind(album.rating);
         });
         query
             .build()
@@ -130,7 +133,7 @@ pub(crate) async fn album(
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path
+                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM albums a
          JOIN library_sync_state state
            ON state.profile_id = a.profile_id
@@ -328,7 +331,7 @@ pub(crate) async fn fuzzy_album_candidates(
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path
+                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM albums a
          JOIN library_sync_state state
            ON state.profile_id = a.profile_id
@@ -358,7 +361,7 @@ pub(crate) async fn search_albums(
     let results = sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
                 a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path
+                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM album_search
          JOIN library_sync_state state
            ON state.profile_id = album_search.profile_id

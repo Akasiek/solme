@@ -140,6 +140,8 @@ mod tests {
             track_number: Some(1),
             disc_number: Some(1),
             duration_seconds: 180,
+            favorite: false,
+            rating: None,
         }
     }
 }

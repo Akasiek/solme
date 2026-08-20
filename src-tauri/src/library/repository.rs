@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use super::{
     models::{
-        AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong, LibrarySnapshot,
-        LibrarySummary,
+        AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong,
+        LibraryItemAnnotation, LibraryItemKind, LibrarySnapshot, LibrarySummary,
     },
     query,
 };
@@ -17,6 +17,26 @@ pub trait LibraryStateRepository: Send + Sync {
 
 #[async_trait]
 pub trait LibraryCatalogRepository: LibraryStateRepository {
+    async fn annotation(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+    ) -> Result<Option<LibraryItemAnnotation>, String>;
+    async fn set_favorite(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        favorite: bool,
+    ) -> Result<(), String>;
+    async fn set_rating(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        rating: Option<i64>,
+    ) -> Result<(), String>;
     async fn artist(
         &self,
         profile_id: &str,
@@ -138,6 +158,35 @@ impl LibrarySnapshotRepository for SqliteRepository {
 
 #[async_trait]
 impl LibraryCatalogRepository for SqliteRepository {
+    async fn annotation(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+    ) -> Result<Option<LibraryItemAnnotation>, String> {
+        query::annotation(self, profile_id, item_kind, item_id).await
+    }
+
+    async fn set_favorite(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        favorite: bool,
+    ) -> Result<(), String> {
+        query::set_favorite(self, profile_id, item_kind, item_id, favorite).await
+    }
+
+    async fn set_rating(
+        &self,
+        profile_id: &str,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        rating: Option<i64>,
+    ) -> Result<(), String> {
+        query::set_rating(self, profile_id, item_kind, item_id, rating).await
+    }
+
     async fn artist(
         &self,
         profile_id: &str,
@@ -262,7 +311,8 @@ mod tests {
     };
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
-        Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, Genre, LibrarySnapshot, Song,
+        Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, Genre, LibraryItemKind,
+        LibrarySnapshot, Song,
     };
     #[test]
     fn activates_complete_generation() {
@@ -301,6 +351,76 @@ mod tests {
                 repository.album_genres("profile", "album-1").await.unwrap(),
                 vec!["Jazz".to_string()]
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn persists_and_updates_annotations_in_active_generation() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.artists[0].favorite = true;
+            snapshot.artists[0].rating = Some(5);
+            snapshot.albums[0].album.rating = Some(4);
+            snapshot.albums[0].songs[0].favorite = true;
+            snapshot.albums[0].songs[0].rating = Some(3);
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let artist = repository
+                .artist("profile", "artist-1")
+                .await
+                .unwrap()
+                .unwrap();
+            let album = repository
+                .album("profile", "album-1")
+                .await
+                .unwrap()
+                .unwrap();
+            let songs = repository.songs("profile", "album-1").await.unwrap();
+            assert!(artist.favorite);
+            assert_eq!(artist.rating, Some(5));
+            assert!(!album.favorite);
+            assert_eq!(album.rating, Some(4));
+            assert!(songs[0].favorite);
+            assert_eq!(songs[0].rating, Some(3));
+
+            repository
+                .set_favorite("profile", LibraryItemKind::Album, "album-1", true)
+                .await
+                .unwrap();
+            repository
+                .set_rating("profile", LibraryItemKind::Song, "song-1", None)
+                .await
+                .unwrap();
+
+            assert!(
+                repository
+                    .annotation("profile", LibraryItemKind::Album, "album-1")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .favorite
+            );
+            assert_eq!(
+                repository
+                    .annotation("profile", LibraryItemKind::Song, "song-1")
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .rating,
+                None
+            );
+            assert!(repository
+                .set_rating("profile", LibraryItemKind::Artist, "missing", Some(1))
+                .await
+                .is_err());
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -480,6 +600,79 @@ mod tests {
     }
 
     #[test]
+    fn uses_artist_cover_art_id_as_artwork_source() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot(false), 123)
+                .await
+                .unwrap();
+
+            let candidates = repository.artwork_candidates("profile").await.unwrap();
+            let artist = candidates
+                .iter()
+                .find(|candidate| candidate.kind == "artist")
+                .expect("artist artwork candidate should exist");
+            assert_eq!(artist.remote_id, "artist-1");
+            assert_eq!(artist.source_id, "artist-cover-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn changed_artist_cover_art_id_invalidates_fresh_artwork() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let artwork_path = directory.join("artist.webp");
+            fs::write(&artwork_path, [1, 2, 3]).unwrap();
+
+            repository
+                .save_artwork(
+                    "profile",
+                    ArtworkCacheRecord {
+                        kind: "artist",
+                        remote_id: "artist-1".to_string(),
+                        source_key: "artist-cover-old".to_string(),
+                        local_path: artwork_path.to_string_lossy().into_owned(),
+                        content_type: "image/webp".to_string(),
+                        etag: None,
+                        last_modified: None,
+                        downloaded_at: 200,
+                    },
+                )
+                .await
+                .unwrap();
+
+            assert!(repository
+                .artwork_is_fresh(
+                    "profile",
+                    "artist",
+                    "artist-1",
+                    Some("artist-cover-old"),
+                    100,
+                )
+                .await
+                .unwrap());
+            assert!(!repository
+                .artwork_is_fresh(
+                    "profile",
+                    "artist",
+                    "artist-1",
+                    Some("artist-cover-new"),
+                    100,
+                )
+                .await
+                .unwrap());
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
     fn returns_cached_artist_albums_from_active_generation() {
         tauri::async_runtime::block_on(async {
             let (repository, directory) = repository().await;
@@ -489,6 +682,9 @@ mod tests {
                 remote_id: "artist-2".to_string(),
                 name: "Other Artist".to_string(),
                 album_count: 1,
+                cover_art_id: None,
+                favorite: false,
+                rating: None,
             });
             snapshot.albums.push(AlbumWithSongs {
                 album: Album {
@@ -505,6 +701,8 @@ mod tests {
                     duration_seconds: 0,
                     cover_art_id: Some("cover-2".to_string()),
                     genres: vec!["Rock".to_string()],
+                    favorite: false,
+                    rating: None,
                 },
                 songs: Vec::new(),
             });
@@ -813,6 +1011,8 @@ mod tests {
                     sample_rate: None,
                     cover_art_id: Some("cover-1".to_string()),
                     genres: vec!["Modal Jazz".to_string()],
+                    favorite: false,
+                    rating: None,
                 },
                 Song {
                     remote_id: "song-2".to_string(),
@@ -832,6 +1032,8 @@ mod tests {
                     sample_rate: None,
                     cover_art_id: Some("cover-1".to_string()),
                     genres: vec!["Blues".to_string()],
+                    favorite: false,
+                    rating: None,
                 },
             ];
             snapshot.albums[0].album.song_count = snapshot.albums[0].songs.len() as i64;
@@ -1012,6 +1214,9 @@ mod tests {
                 remote_id: "artist-1".to_string(),
                 name: "Artist".to_string(),
                 album_count: 1,
+                cover_art_id: Some("artist-cover-1".to_string()),
+                favorite: false,
+                rating: None,
             }],
             albums: vec![AlbumWithSongs {
                 album: Album {
@@ -1028,6 +1233,8 @@ mod tests {
                     duration_seconds: 180,
                     cover_art_id: Some("cover-1".to_string()),
                     genres: vec!["Jazz".to_string()],
+                    favorite: false,
+                    rating: None,
                 },
                 songs,
             }],
@@ -1060,6 +1267,8 @@ mod tests {
                 duration_seconds: 180,
                 cover_art_id: Some(format!("cover-{remote_id}")),
                 genres: vec!["Jazz".to_string()],
+                favorite: false,
+                rating: None,
             },
             songs: vec![Song {
                 remote_id: format!("song-{remote_id}"),
@@ -1079,6 +1288,8 @@ mod tests {
                 sample_rate: Some(48000),
                 cover_art_id: Some(format!("cover-{remote_id}")),
                 genres: vec!["Jazz".to_string()],
+                favorite: false,
+                rating: None,
             }],
         }
     }
@@ -1102,6 +1313,8 @@ mod tests {
             sample_rate: Some(48000),
             cover_art_id: Some("cover-1".to_string()),
             genres: vec!["Jazz".to_string()],
+            favorite: false,
+            rating: None,
         }
     }
 
@@ -1111,6 +1324,9 @@ mod tests {
                 remote_id: format!("artist-{index}"),
                 name: format!("Artist {index}"),
                 album_count: 1,
+                cover_art_id: Some(format!("artist-cover-{index}")),
+                favorite: false,
+                rating: None,
             })
             .collect();
         let albums = (0..count)
@@ -1132,6 +1348,8 @@ mod tests {
                         duration_seconds: 180,
                         cover_art_id: Some(format!("cover-{index}")),
                         genres: vec!["Jazz".to_string()],
+                        favorite: false,
+                        rating: None,
                     },
                     songs: vec![Song {
                         remote_id: format!("song-{index}"),
@@ -1151,6 +1369,8 @@ mod tests {
                         sample_rate: Some(48000),
                         cover_art_id: Some(format!("cover-{index}")),
                         genres: vec!["Jazz".to_string()],
+                        favorite: false,
+                        rating: None,
                     }],
                 }
             })

@@ -1,6 +1,8 @@
 use async_trait::async_trait;
 
-use crate::library::models::{Album, AlbumWithSongs, Artist, BinaryArtwork, Genre};
+use crate::library::models::{
+    Album, AlbumWithSongs, Artist, BinaryArtwork, Genre, LibraryItemKind,
+};
 
 use super::models::{AlbumQuery, ScrobbleEvent, ServerInfo};
 
@@ -18,6 +20,18 @@ pub trait MusicServer: Send + Sync {
         song_id: &str,
         started_at_ms: i64,
         event: ScrobbleEvent,
+    ) -> Result<(), String>;
+    async fn set_favorite(
+        &self,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        favorite: bool,
+    ) -> Result<(), String>;
+    async fn set_rating(
+        &self,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        rating: Option<i64>,
     ) -> Result<(), String>;
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String>;
     async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String>;

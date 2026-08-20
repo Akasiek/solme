@@ -430,6 +430,8 @@ mod tests {
                 track_number: Some(2),
                 disc_number: Some(1),
                 duration_seconds: 180,
+                favorite: false,
+                rating: None,
             }),
             position_seconds: 30.0,
             duration_seconds: 180.0,

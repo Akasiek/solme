@@ -291,6 +291,8 @@ impl MusicServer for NavidromeBackend {
                 remote_id: artist.id,
                 name: artist.name,
                 album_count: artist.album_count,
+                favorite: artist.starred.is_some(),
+                rating: super::models::normalize_rating(artist.user_rating),
             })
             .collect())
     }
@@ -383,6 +385,46 @@ impl MusicServer for NavidromeBackend {
         .await
     }
 
+    async fn set_favorite(
+        &self,
+        item_kind: LibraryItemKind,
+        item_id: &str,
+        favorite: bool,
+    ) -> Result<(), String> {
+        if item_id.is_empty() {
+            return Err("Library item ID cannot be empty".to_string());
+        }
+
+        self.request_status(
+            if favorite { "star" } else { "unstar" },
+            &[(favorite_parameter(item_kind), item_id.to_string())],
+        )
+        .await
+    }
+
+    async fn set_rating(
+        &self,
+        _item_kind: LibraryItemKind,
+        item_id: &str,
+        rating: Option<i64>,
+    ) -> Result<(), String> {
+        if item_id.is_empty() {
+            return Err("Library item ID cannot be empty".to_string());
+        }
+        if rating.is_some_and(|rating| !(1..=5).contains(&rating)) {
+            return Err("Rating must be between 1 and 5".to_string());
+        }
+
+        self.request_status(
+            "setRating",
+            &[
+                ("id", item_id.to_string()),
+                ("rating", rating.unwrap_or(0).to_string()),
+            ],
+        )
+        .await
+    }
+
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
         self.request_binary(
             self.endpoint_url("getCoverArt"),
@@ -457,6 +499,14 @@ fn scrobble_parameters(
     ]
 }
 
+fn favorite_parameter(item_kind: LibraryItemKind) -> &'static str {
+    match item_kind {
+        LibraryItemKind::Artist => "artistId",
+        LibraryItemKind::Album => "albumId",
+        LibraryItemKind::Song => "id",
+    }
+}
+
 async fn binary_artwork(response: Response, source_key: String) -> Result<BinaryArtwork, String> {
     let content_type = response
         .headers()
@@ -517,11 +567,12 @@ fn abbreviated_body(body: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use crate::library::models::LibraryItemKind;
     use crate::server::{backend::MusicServer, ScrobbleEvent};
 
     use super::{
-        is_retryable_artwork_error, scrobble_parameters, AlbumListPayload, ArtistsPayload,
-        NavidromeBackend, PingPayload, SubsonicEnvelope,
+        favorite_parameter, is_retryable_artwork_error, scrobble_parameters, AlbumListPayload,
+        AlbumPayload, ArtistsPayload, NavidromeBackend, PingPayload, SubsonicEnvelope,
     };
 
     #[test]
@@ -633,7 +684,13 @@ mod tests {
                 "artists": {
                   "index": [{
                     "name": "A",
-                    "artist": [{"id": "artist-1", "name": "Artist", "albumCount": 2}]
+                    "artist": [{
+                      "id": "artist-1",
+                      "name": "Artist",
+                      "albumCount": 2,
+                      "starred": "2026-08-10T10:00:00Z",
+                      "userRating": 5
+                    }]
                   }]
                 }
               }
@@ -648,6 +705,8 @@ mod tests {
             .artists;
         assert_eq!(artists.index[0].artist[0].id, "artist-1");
         assert_eq!(artists.index[0].artist[0].album_count, 2);
+        assert!(artists.index[0].artist[0].starred.is_some());
+        assert_eq!(artists.index[0].artist[0].user_rating, Some(5));
     }
 
     #[test]
@@ -689,6 +748,8 @@ mod tests {
                     "songCount": 4,
                     "duration": 900,
                     "coverArt": "cover-1",
+                    "starred": "2026-08-10T10:00:00Z",
+                    "userRating": 4,
                     "musicBrainzReleaseGroupType": "album;live",
                     "releaseDate": {"year": 2026, "month": 7, "day": 4},
                     "originalReleaseDate": {"year": 2025, "month": 12, "day": 31}
@@ -727,6 +788,41 @@ mod tests {
 
         let typed_album = albums.into_iter().next().unwrap().into_album();
         assert_eq!(typed_album.album_type.as_deref(), Some("live"));
+        assert!(typed_album.favorite);
+        assert_eq!(typed_album.rating, Some(4));
+    }
+
+    #[test]
+    fn parses_song_annotations_and_normalizes_zero_rating() {
+        let response: SubsonicEnvelope = serde_json::from_str(
+            r#"{
+              "subsonic-response": {
+                "status": "ok",
+                "version": "1.16.1",
+                "album": {
+                  "id": "album-1",
+                  "name": "Album",
+                  "artist": "Artist",
+                  "song": [{
+                    "id": "song-1",
+                    "title": "Song",
+                    "starred": "2026-08-10T10:00:00Z",
+                    "userRating": 0
+                  }]
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let details = response
+            .subsonic_response
+            .into_payload::<AlbumPayload>()
+            .unwrap()
+            .album
+            .into_album_with_songs();
+        assert!(details.songs[0].favorite);
+        assert_eq!(details.songs[0].rating, None);
     }
 
     fn backend(url: &str) -> NavidromeBackend {

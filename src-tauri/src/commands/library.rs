@@ -4,8 +4,8 @@ use tauri::State;
 
 use crate::library::{
     CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong,
-    HomeAlbumSections, LibraryCatalogService, LibrarySummary, LibrarySyncService,
-    LibrarySyncStatus,
+    HomeAlbumSections, LibraryCatalogService, LibraryItemAnnotation, LibraryItemKind,
+    LibrarySummary, LibrarySyncService, LibrarySyncStatus,
 };
 
 #[tauri::command]
@@ -28,6 +28,26 @@ pub async fn get_library_summary(
     library: State<'_, Arc<LibraryCatalogService>>,
 ) -> Result<LibrarySummary, String> {
     library.summary().await
+}
+
+#[tauri::command]
+pub async fn set_library_item_favorite(
+    item_kind: LibraryItemKind,
+    item_id: String,
+    favorite: bool,
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<LibraryItemAnnotation, String> {
+    library.set_favorite(item_kind, &item_id, favorite).await
+}
+
+#[tauri::command]
+pub async fn set_library_item_rating(
+    item_kind: LibraryItemKind,
+    item_id: String,
+    rating: Option<i64>,
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<LibraryItemAnnotation, String> {
+    library.set_rating(item_kind, &item_id, rating).await
 }
 
 #[tauri::command]

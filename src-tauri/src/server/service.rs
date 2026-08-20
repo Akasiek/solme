@@ -596,6 +596,30 @@ impl MusicServer for FailoverMusicServer {
         .await
     }
 
+    async fn set_favorite(
+        &self,
+        item_kind: crate::library::models::LibraryItemKind,
+        item_id: &str,
+        favorite: bool,
+    ) -> Result<(), String> {
+        self.with_failover(|server| async move {
+            server.set_favorite(item_kind, item_id, favorite).await
+        })
+        .await
+    }
+
+    async fn set_rating(
+        &self,
+        item_kind: crate::library::models::LibraryItemKind,
+        item_id: &str,
+        rating: Option<i64>,
+    ) -> Result<(), String> {
+        self.with_failover(
+            |server| async move { server.set_rating(item_kind, item_id, rating).await },
+        )
+        .await
+    }
+
     async fn album_artwork(
         &self,
         cover_art_id: &str,

@@ -75,6 +75,8 @@ pub(super) struct ArtistDto {
     pub name: String,
     #[serde(default)]
     pub album_count: i64,
+    pub starred: Option<String>,
+    pub user_rating: Option<i64>,
 }
 
 #[derive(Deserialize)]
@@ -118,6 +120,8 @@ pub(super) struct AlbumDto {
     genres: Vec<NamedGenreDto>,
     #[serde(default)]
     song: Vec<SongDto>,
+    starred: Option<String>,
+    user_rating: Option<i64>,
 }
 
 impl AlbumDto {
@@ -139,6 +143,8 @@ impl AlbumDto {
             cover_art,
             genre,
             genres,
+            starred,
+            user_rating,
             ..
         } = self;
 
@@ -160,6 +166,8 @@ impl AlbumDto {
             duration_seconds: duration,
             cover_art_id: cover_art,
             genres: collect_genres(genre, genres),
+            favorite: starred.is_some(),
+            rating: normalize_rating(user_rating),
         }
     }
 
@@ -182,6 +190,8 @@ impl AlbumDto {
             genre,
             genres,
             song,
+            starred,
+            user_rating,
         } = self;
         let songs = song
             .into_iter()
@@ -207,6 +217,8 @@ impl AlbumDto {
                 duration_seconds: duration,
                 cover_art_id: cover_art,
                 genres: collect_genres(genre, genres),
+                favorite: starred.is_some(),
+                rating: normalize_rating(user_rating),
             },
             songs,
         }
@@ -241,6 +253,8 @@ struct SongDto {
     genre: Option<String>,
     #[serde(default)]
     genres: Vec<NamedGenreDto>,
+    starred: Option<String>,
+    user_rating: Option<i64>,
 }
 
 impl SongDto {
@@ -270,6 +284,8 @@ impl SongDto {
             sample_rate: self.sampling_rate,
             cover_art_id: self.cover_art,
             genres: collect_genres(self.genre, self.genres),
+            favorite: self.starred.is_some(),
+            rating: normalize_rating(self.user_rating),
         }
     }
 }
@@ -320,6 +336,10 @@ fn collect_genres(primary: Option<String>, genres: Vec<NamedGenreDto>) -> Vec<St
         }
     }
     values
+}
+
+pub(super) fn normalize_rating(rating: Option<i64>) -> Option<i64> {
+    rating.filter(|rating| (1..=5).contains(rating))
 }
 
 fn album_type(

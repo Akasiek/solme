@@ -1,4 +1,5 @@
 mod albums;
+mod annotations;
 mod artists;
 mod artwork;
 mod library;
@@ -9,6 +10,7 @@ pub(crate) use albums::{
     album, album_audio_formats, album_disc_count, album_genres, albums, albums_by_ids,
     insert_album_genres, insert_album_search, insert_albums, search_albums,
 };
+pub(crate) use annotations::{annotation, set_favorite, set_rating};
 pub(crate) use artists::{
     artist, artist_albums, insert_artist_search, insert_artists, insert_genres, search_artists,
 };

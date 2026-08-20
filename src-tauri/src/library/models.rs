@@ -5,6 +5,8 @@ pub struct Artist {
     pub remote_id: String,
     pub name: String,
     pub album_count: i64,
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -22,6 +24,8 @@ pub struct Album {
     pub duration_seconds: i64,
     pub cover_art_id: Option<String>,
     pub genres: Vec<String>,
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -43,6 +47,8 @@ pub struct Song {
     pub sample_rate: Option<i64>,
     pub cover_art_id: Option<String>,
     pub genres: Vec<String>,
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone)]
@@ -128,6 +134,8 @@ pub struct CachedArtist {
     pub name: String,
     pub album_count: i64,
     pub artwork_path: Option<String>,
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -152,6 +160,8 @@ pub struct CachedAlbum {
     pub song_count: i64,
     pub duration_seconds: i64,
     pub artwork_path: Option<String>,
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -177,6 +187,33 @@ pub struct CachedSong {
     pub track_number: Option<i64>,
     pub disc_number: Option<i64>,
     pub duration_seconds: i64,
+    pub favorite: bool,
+    pub rating: Option<i64>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum LibraryItemKind {
+    Artist,
+    Album,
+    Song,
+}
+
+impl LibraryItemKind {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Artist => "artist",
+            Self::Album => "album",
+            Self::Song => "song",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryItemAnnotation {
+    pub favorite: bool,
+    pub rating: Option<i64>,
 }
 
 #[derive(Clone, Copy, Debug, Default, Eq, PartialEq, Serialize)]
