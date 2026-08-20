@@ -18,9 +18,9 @@ defineEmits<{
 }>();
 
 const compactGridClass =
-  "grid w-full justify-start gap-4 pb-1 grid-flow-col auto-cols-[9rem] md:auto-cols-[11rem] lg:auto-cols-[13rem]";
+  "grid w-full justify-start gap-x-2 gap-y-4 pb-1 grid-flow-col auto-cols-[9rem] md:auto-cols-[11rem] lg:auto-cols-[13rem]";
 const fullGridClass =
-  "grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-4 md:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
+  "grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-x-2 gap-y-4 md:grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] lg:grid-cols-[repeat(auto-fill,minmax(12rem,1fr))]";
 </script>
 
 <template>

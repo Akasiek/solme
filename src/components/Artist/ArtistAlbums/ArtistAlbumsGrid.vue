@@ -8,7 +8,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,12rem),1fr))] gap-4">
+  <div class="grid grid-cols-[repeat(auto-fill,minmax(min(100%,12rem),1fr))] gap-x-2 gap-y-4">
     <AlbumCard v-for="album in albums" :key="album.remoteId" :album="album" show-release-year />
   </div>
 </template>

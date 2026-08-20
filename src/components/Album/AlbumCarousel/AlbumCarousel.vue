@@ -81,7 +81,7 @@ watch(
     <div v-else ref="viewport" class="relative overflow-hidden">
       <div class="relative overflow-hidden">
         <Transition v-if="viewportWidth > 0" :name="carouselTransitionName">
-          <div :key="page.key" class="grid gap-4" :style="page.gridStyle">
+          <div :key="page.key" class="grid gap-x-2 gap-y-4" :style="page.gridStyle">
             <div v-for="album in page.albums" :key="album.remoteId" class="min-w-0">
               <AlbumCard :album="album" />
             </div>
