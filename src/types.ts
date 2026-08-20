@@ -38,6 +38,8 @@ export interface CachedArtist {
   name: string;
   albumCount: number;
   artworkPath?: string;
+  favorite: boolean;
+  rating: number | null;
 }
 
 export interface CachedArtistDetails {
@@ -58,6 +60,8 @@ export interface CachedAlbum {
   songCount: number;
   durationSeconds: number;
   artworkPath?: string;
+  favorite: boolean;
+  rating: number | null;
 }
 
 export interface CachedAlbumDetails {
@@ -88,7 +92,16 @@ export interface CachedSong {
   trackNumber?: number;
   discNumber?: number;
   durationSeconds: number;
+  favorite: boolean;
+  rating: number | null;
 }
+
+export interface LibraryItemAnnotation {
+  favorite: boolean;
+  rating: number | null;
+}
+
+export type LibraryItemKind = "artist" | "album" | "song";
 
 export interface PlayerStatus {
   state: "stopped" | "loading" | "playing" | "paused";
