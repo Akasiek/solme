@@ -52,7 +52,7 @@ const setRating = (value: number) => {
 </script>
 
 <template>
-  <div class="flex h-10 items-center gap-0.5 rounded-md border border-zinc-700 px-2" :aria-label="`${itemName} rating`">
+  <div class="flex h-8 items-center gap-0.5 rounded-md border border-zinc-700 px-2" :aria-label="`${itemName} rating`">
     <button
       v-for="value in 5"
       :key="value"
@@ -64,7 +64,7 @@ const setRating = (value: number) => {
       :title="currentRating === value ? `Remove ${value}-star rating` : `Rate ${value} out of 5`"
       @click="setRating(value)"
     >
-      <Star class="size-4" :fill="value <= (currentRating ?? 0) ? 'currentColor' : 'none'" aria-hidden="true" />
+      <Star class="size-3.5" :fill="value <= (currentRating ?? 0) ? 'currentColor' : 'none'" aria-hidden="true" />
     </button>
   </div>
 </template>

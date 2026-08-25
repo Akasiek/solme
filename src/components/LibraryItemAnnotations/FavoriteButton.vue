@@ -54,7 +54,7 @@ const toggleFavorite = () => {
 <template>
   <button
     type="button"
-    class="grid size-10 cursor-pointer place-items-center rounded-md border transition-colors focus:ring-2 focus:ring-zinc-500 focus:outline-none"
+    class="grid size-8 cursor-pointer place-items-center rounded-md border transition-colors focus:ring-2 focus:ring-zinc-500 focus:outline-none"
     :class="
       currentFavorite
         ? 'border-accent/60 bg-accent/10 text-accent hover:bg-accent/20'
@@ -65,6 +65,6 @@ const toggleFavorite = () => {
     :title="currentFavorite ? `Remove ${itemName} from favorites` : `Add ${itemName} to favorites`"
     @click="toggleFavorite"
   >
-    <Heart class="size-5" :fill="currentFavorite ? 'currentColor' : 'none'" aria-hidden="true" />
+    <Heart class="size-4" :fill="currentFavorite ? 'currentColor' : 'none'" aria-hidden="true" />
   </button>
 </template>
