@@ -8,7 +8,7 @@ const { artist } = defineProps<{
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-3 pt-2 font-sans">
+  <div class="flex flex-wrap items-center gap-2 pt-2 font-sans">
     <FavoriteButton
       item-kind="artist"
       :item-id="artist.remoteId"
