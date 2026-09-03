@@ -1,54 +1,24 @@
 <script setup lang="ts">
 import { Heart } from "@lucide/vue";
-import { invoke } from "@tauri-apps/api/core";
-import { ref, watch } from "vue";
+import { computed, watch } from "vue";
 
-import { useToastStore } from "@/stores/toast";
-import type { LibraryItemAnnotation, LibraryItemKind } from "@/types";
+import { useLibraryAnnotationsStore } from "@/stores/libraryAnnotations";
+import type { AnnotatableLibraryItem } from "@/types";
+import { libraryItemName } from "@/utils/libraryItem";
 
-const props = defineProps<{
-  itemKind: LibraryItemKind;
-  itemId: string;
-  itemName: string;
-  favorite: boolean;
+const { item } = defineProps<{
+  item: AnnotatableLibraryItem;
 }>();
 
-const toastStore = useToastStore();
-const currentFavorite = ref(props.favorite);
-let mutationQueue = Promise.resolve();
+const { favoriteFor, seedAnnotation, toggleFavorite } = useLibraryAnnotationsStore();
+const currentFavorite = computed(() => favoriteFor(item));
+const itemName = computed(() => libraryItemName(item));
 
 watch(
-  () => props.favorite,
-  (value) => {
-    currentFavorite.value = value;
-  },
+  () => item,
+  (value) => seedAnnotation(value),
+  { immediate: true },
 );
-
-const errorMessage = (cause: unknown) =>
-  typeof cause === "string" ? cause : cause instanceof Error ? cause.message : "Unexpected error.";
-
-const toggleFavorite = () => {
-  const oldFavoriteValue = currentFavorite.value;
-  const newFavoriteValue = !oldFavoriteValue;
-  const { itemId, itemKind, itemName } = props;
-
-  currentFavorite.value = newFavoriteValue;
-
-  mutationQueue = mutationQueue.then(async () => {
-    try {
-      await invoke<LibraryItemAnnotation>("set_library_item_favorite", {
-        itemKind,
-        itemId,
-        favorite: newFavoriteValue,
-      });
-    } catch (cause) {
-      if (props.itemId !== itemId || currentFavorite.value !== newFavoriteValue) return;
-
-      currentFavorite.value = oldFavoriteValue;
-      toastStore.show(`Could not update ${itemName}: ${errorMessage(cause)}`);
-    }
-  });
-};
 </script>
 
 <template>
@@ -63,7 +33,7 @@ const toggleFavorite = () => {
     :aria-pressed="currentFavorite"
     :aria-label="currentFavorite ? `Remove ${itemName} from favorites` : `Add ${itemName} to favorites`"
     :title="currentFavorite ? `Remove ${itemName} from favorites` : `Add ${itemName} to favorites`"
-    @click="toggleFavorite"
+    @click="toggleFavorite(item)"
   >
     <Heart class="size-4" :fill="currentFavorite ? 'currentColor' : 'none'" aria-hidden="true" />
   </button>

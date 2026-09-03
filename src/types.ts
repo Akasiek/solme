@@ -103,6 +103,8 @@ export interface LibraryItemAnnotation {
 
 export type LibraryItemKind = "artist" | "album" | "song";
 
+export type AnnotatableLibraryItem = CachedArtist | CachedAlbum | CachedSong;
+
 export interface PlayerStatus {
   state: "stopped" | "loading" | "playing" | "paused";
   currentSong?: CachedSong;

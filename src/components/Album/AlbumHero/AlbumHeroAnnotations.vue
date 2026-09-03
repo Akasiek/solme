@@ -9,7 +9,7 @@ defineProps<{
 
 <template>
   <div class="flex flex-wrap items-center gap-2">
-    <FavoriteButton item-kind="album" :item-id="album.remoteId" :item-name="album.name" :favorite="album.favorite" />
-    <RatingStars item-kind="album" :item-id="album.remoteId" :item-name="album.name" :rating="album.rating" />
+    <FavoriteButton :item="album" />
+    <RatingStars :item="album" />
   </div>
 </template>

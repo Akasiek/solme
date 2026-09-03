@@ -1,54 +1,24 @@
 <script setup lang="ts">
 import { Star } from "@lucide/vue";
-import { invoke } from "@tauri-apps/api/core";
-import { ref, watch } from "vue";
+import { computed, watch } from "vue";
 
-import { useToastStore } from "@/stores/toast";
-import type { LibraryItemAnnotation, LibraryItemKind } from "@/types";
+import { useLibraryAnnotationsStore } from "@/stores/libraryAnnotations";
+import type { AnnotatableLibraryItem } from "@/types";
+import { libraryItemName } from "@/utils/libraryItem";
 
-const props = defineProps<{
-  itemKind: LibraryItemKind;
-  itemId: string;
-  itemName: string;
-  rating: number | null;
+const { item } = defineProps<{
+  item: AnnotatableLibraryItem;
 }>();
 
-const toastStore = useToastStore();
-const currentRating = ref(props.rating);
-let mutationQueue = Promise.resolve();
+const { ratingFor, seedAnnotation, setRating } = useLibraryAnnotationsStore();
+const currentRating = computed(() => ratingFor(item));
+const itemName = computed(() => libraryItemName(item));
 
 watch(
-  () => props.rating,
-  (value) => {
-    currentRating.value = value;
-  },
+  () => item,
+  (value) => seedAnnotation(value),
+  { immediate: true },
 );
-
-const errorMessage = (cause: unknown) =>
-  typeof cause === "string" ? cause : cause instanceof Error ? cause.message : "Unexpected error.";
-
-const setRating = (value: number) => {
-  const previousRating = currentRating.value;
-  const nextRating = previousRating === value ? null : value;
-  const { itemId, itemKind, itemName } = props;
-
-  currentRating.value = nextRating;
-
-  mutationQueue = mutationQueue.then(async () => {
-    try {
-      await invoke<LibraryItemAnnotation>("set_library_item_rating", {
-        itemKind,
-        itemId,
-        rating: nextRating,
-      });
-    } catch (cause) {
-      if (props.itemId !== itemId || currentRating.value !== nextRating) return;
-
-      currentRating.value = previousRating;
-      toastStore.show(`Could not update ${itemName}: ${errorMessage(cause)}`);
-    }
-  });
-};
 </script>
 
 <template>
@@ -62,7 +32,7 @@ const setRating = (value: number) => {
       :aria-label="currentRating === value ? `Remove ${value}-star rating` : `Rate ${value} out of 5`"
       :aria-pressed="currentRating === value"
       :title="currentRating === value ? `Remove ${value}-star rating` : `Rate ${value} out of 5`"
-      @click="setRating(value)"
+      @click="setRating(item, value)"
     >
       <Star class="size-3.5" :fill="value <= (currentRating ?? 0) ? 'currentColor' : 'none'" aria-hidden="true" />
     </button>
