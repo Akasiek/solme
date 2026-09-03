@@ -74,7 +74,7 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div>
+      <div class="@container">
         <AlbumTracklistHeader />
 
         <div v-if="albumDetails.songs.length">

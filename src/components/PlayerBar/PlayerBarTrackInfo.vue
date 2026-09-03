@@ -13,7 +13,7 @@ const { isBigArtworkShown, isLeftAsideCollapsed } = storeToRefs(layoutStore);
 </script>
 
 <template>
-  <div class="flex h-16 w-full min-w-0 items-center gap-4">
+  <div class="flex h-16 min-w-0 items-center gap-4">
     <Transition
       appear
       enter-active-class="transition duration-300 ease-out"
