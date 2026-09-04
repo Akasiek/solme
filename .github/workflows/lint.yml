@@ -1,0 +1,67 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: TypeScript / Oxc
+    runs-on: ubuntu-latest
+    container: node:24-bookworm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting with Oxfmt
+        run: pnpm fmt:check
+
+      - name: Lint with Oxlint
+        run: pnpm lint
+
+  rust:
+    name: Rust / rustfmt and Clippy
+    runs-on: ubuntu-latest
+    container: rust:1.98-bookworm
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust components
+        run: rustup component add clippy rustfmt
+
+      - name: Install Linux build dependencies
+        run: |
+          apt-get update
+          apt-get install -y \
+            libayatana-appindicator3-dev \
+            libmpv-dev \
+            librsvg2-dev \
+            libssl-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+
+      - name: Lint Rust
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --locked -- -D warnings
