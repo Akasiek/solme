@@ -1,3 +1,5 @@
+#![allow(clippy::needless_pass_by_value)] // Tauri commands deserialize and own their arguments.
+
 use std::sync::Arc;
 
 use tauri::State;

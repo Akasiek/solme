@@ -22,7 +22,7 @@ use super::{
 const ALBUM_CONCURRENCY: usize = 6;
 const ARTWORK_CONCURRENCY: usize = 4;
 const ARTWORK_MAX_AGE_SECONDS: i64 = 7 * 24 * 60 * 60;
-const LIBRARY_SYNC_INTERVAL: Duration = Duration::from_secs(5 * 60);
+const LIBRARY_SYNC_INTERVAL: Duration = Duration::from_mins(5);
 
 pub struct LibrarySyncService {
     server: Arc<MusicServerService>,
@@ -252,9 +252,9 @@ impl LibrarySyncService {
     async fn restore_cached_metadata_status(&self, profile_id: &str) -> Result<(), String> {
         let summary = self.repository.summary(profile_id).await?;
         self.update_status(|status| {
-            status.processed_artists = summary.artist_count as u64;
-            status.processed_albums = summary.album_count as u64;
-            status.processed_songs = summary.song_count as u64;
+            status.processed_artists = u64::try_from(summary.artist_count).unwrap_or(0);
+            status.processed_albums = u64::try_from(summary.album_count).unwrap_or(0);
+            status.processed_songs = u64::try_from(summary.song_count).unwrap_or(0);
             status.last_success_at = summary.last_success_at;
         });
         Ok(())
@@ -277,7 +277,7 @@ impl LibrarySyncService {
         let artwork_root = self.artwork_root.clone();
         let status = &self.status;
 
-        let mut tasks = stream::iter(candidates.into_iter())
+        let mut tasks = stream::iter(candidates)
             .map(|candidate| {
                 let server = Arc::clone(&server);
                 let repository = Arc::clone(&repository);
@@ -966,7 +966,10 @@ mod tests {
                 _ => Vec::new(),
             };
 
-            Ok(albums.into_iter().take(limit as usize).collect())
+            Ok(albums
+                .into_iter()
+                .take(usize::try_from(limit).unwrap_or(0))
+                .collect())
         }
 
         async fn albums_by_ids(

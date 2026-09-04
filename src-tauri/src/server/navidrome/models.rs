@@ -350,7 +350,7 @@ fn album_type(
 ) -> Option<String> {
     let album_types = secondary_types
         .into_iter()
-        .chain(release_types.into_iter())
+        .chain(release_types)
         .chain(primary_type)
         .flat_map(|album_type| {
             album_type

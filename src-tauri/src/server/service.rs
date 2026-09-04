@@ -61,13 +61,12 @@ impl MusicServerService {
             password,
             save_credentials,
         } = config;
-        let url = normalize_required_url(url)?;
+        let url = normalize_required_url(&url)?;
         let secondary_url = normalize_optional_url(secondary_url);
         let should_update_password = !password.is_empty();
         let resolved_password = match (profile_id.as_deref(), should_update_password) {
-            (_, true) => password.clone(),
+            (_, true) | (None, false) => password.clone(),
             (Some(profile_id), false) => self.load_password(profile_id).await?,
-            (None, false) => password.clone(),
         };
 
         let profile = StoredServerProfile {
@@ -270,8 +269,7 @@ impl MusicServerService {
                         && profile.url == url
                         && profile.username == username
                 })
-                .map(|profile| profile.id)
-                .unwrap_or_else(|| Uuid::new_v4().to_string()),
+                .map_or_else(|| Uuid::new_v4().to_string(), |profile| profile.id),
         };
         let profile = StoredServerProfile {
             id: id.clone(),
@@ -639,7 +637,7 @@ impl MusicServer for FailoverMusicServer {
 
 fn create_server(
     server_type: ServerType,
-    url: String,
+    url: &str,
     username: String,
     password: String,
 ) -> Result<Arc<dyn MusicServer>, String> {
@@ -661,17 +659,12 @@ async fn connect_server_url(
     username: &str,
     password: &str,
 ) -> Result<(Arc<dyn MusicServer>, ServerInfo), String> {
-    let server = create_server(
-        server_type,
-        url.to_string(),
-        username.to_string(),
-        password.to_string(),
-    )?;
+    let server = create_server(server_type, url, username.to_string(), password.to_string())?;
     let info = server.ping().await?;
     Ok((server, info))
 }
 
-fn normalize_required_url(url: String) -> Result<String, String> {
+fn normalize_required_url(url: &str) -> Result<String, String> {
     let url = url.trim().to_string();
     if url.is_empty() {
         return Err("Server URL cannot be empty".to_string());

@@ -45,7 +45,14 @@ pub(crate) async fn activate_snapshot(
     super::insert_songs(&mut transaction, profile_id, generation, &songs).await?;
     super::insert_song_genres(&mut transaction, profile_id, generation, &songs).await?;
     super::insert_song_search(&mut transaction, profile_id, generation, &songs).await?;
-    let song_count = songs.len() as i64;
+    let song_count =
+        i64::try_from(songs.len()).map_err(|_| "Library contains too many songs".to_string())?;
+    let artist_count = i64::try_from(snapshot.artists.len())
+        .map_err(|_| "Library contains too many artists".to_string())?;
+    let album_count = i64::try_from(snapshot.albums.len())
+        .map_err(|_| "Library contains too many albums".to_string())?;
+    let genre_count = i64::try_from(snapshot.genres.len())
+        .map_err(|_| "Library contains too many genres".to_string())?;
 
     sqlx::query(
         "INSERT INTO library_sync_state
@@ -65,10 +72,10 @@ pub(crate) async fn activate_snapshot(
     .bind(generation)
     .bind(revision)
     .bind(completed_at)
-    .bind(snapshot.artists.len() as i64)
-    .bind(snapshot.albums.len() as i64)
+    .bind(artist_count)
+    .bind(album_count)
     .bind(song_count)
-    .bind(snapshot.genres.len() as i64)
+    .bind(genre_count)
     .execute(&mut *transaction)
     .await
     .map_err(|error| format!("Failed to activate library generation: {error}"))?;

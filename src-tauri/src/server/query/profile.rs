@@ -197,6 +197,7 @@ pub(in crate::server) async fn clear_active_profile_id(
     Ok(())
 }
 
+#[allow(clippy::needless_pass_by_value)] // SQLx iterator APIs yield owned rows.
 fn profile_from_row(row: sqlx::sqlite::SqliteRow) -> Result<StoredServerProfile, String> {
     let server_type = ServerType::from_storage_value(row.get("server_type"))?;
     Ok(StoredServerProfile {

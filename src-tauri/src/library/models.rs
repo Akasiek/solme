@@ -11,6 +11,7 @@ pub struct Artist {
 }
 
 #[derive(Clone)]
+#[allow(clippy::struct_field_names)]
 pub struct Album {
     pub remote_id: String,
     pub name: String,
@@ -119,6 +120,7 @@ pub enum AlbumSort {
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
+#[allow(clippy::struct_field_names)]
 pub struct HomeAlbumSections {
     pub hero_random_albums: Vec<CachedAlbum>,
     pub recently_played_albums: Vec<CachedAlbum>,

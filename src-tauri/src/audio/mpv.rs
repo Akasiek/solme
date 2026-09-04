@@ -73,7 +73,7 @@ impl MpvBackend {
             match mpv.wait_event(60.0) {
                 Some(Ok(Event::Shutdown)) => break,
                 Some(Ok(Event::StartFile | Event::FileLoaded)) => {
-                    Self::notify_status_change(&callback)
+                    Self::notify_status_change(&callback);
                 }
                 Some(Ok(Event::PropertyChange {
                     name: "playlist-pos" | "idle-active",
@@ -92,12 +92,11 @@ impl MpvBackend {
     }
 
     fn notify_status_change(callback: &Arc<Mutex<Option<AudioStatusChangeCallback>>>) {
-        let callback = match callback.lock() {
-            Ok(callback) => callback.clone(),
-            Err(_) => {
-                log::error!("Failed to read mpv status change callback");
-                return;
-            }
+        let callback = if let Ok(callback) = callback.lock() {
+            callback.clone()
+        } else {
+            log::error!("Failed to read mpv status change callback");
+            return;
         };
 
         if let Some(callback) = callback {
@@ -146,15 +145,20 @@ impl MpvBackend {
         }
 
         self.set_paused(true, "pause while loading queue")?;
+        let (first_source, remaining_sources) = sources
+            .split_first()
+            .ok_or_else(|| "Cannot play an empty queue".to_string())?;
         self.execute_command(
             "loadfile",
-            &[&sources[0], "replace"],
+            &[first_source, "replace"],
             "load first queue item",
         )?;
-        for source in &sources[1..] {
+        for source in remaining_sources {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
         }
-        self.set_property("playlist-pos", start_index as i64, "select queue item")?;
+        let start_index =
+            i64::try_from(start_index).map_err(|_| "Queue start index is too large".to_string())?;
+        self.set_property("playlist-pos", start_index, "select queue item")?;
         self.set_paused(paused, "set playback state after loading queue")?;
 
         if let Some(position_seconds) = position_seconds.filter(|p| *p > 0.0) {
@@ -181,7 +185,7 @@ impl MpvBackend {
         while let Some(remaining) = timeout.checked_sub(started_at.elapsed()) {
             match self.mpv.wait_event(remaining.as_secs_f64()) {
                 Some(Ok(Event::FileLoaded)) => return true,
-                Some(_) => continue,
+                Some(_) => {}
                 None => return false,
             }
         }
@@ -213,10 +217,8 @@ impl AudioBackend for MpvBackend {
             .mpv
             .get_property::<i64>("playlist-count")
             .map_err(|error| format!("Failed to read playlist length: {error}"))?;
-        if queue_length < 0 {
-            return Err("Playlist length is invalid".to_string());
-        }
-        let queue_length = queue_length as usize;
+        let queue_length =
+            usize::try_from(queue_length).map_err(|_| "Playlist length is invalid".to_string())?;
         if position > queue_length {
             return Err("Queue insertion position is out of bounds".to_string());
         }
@@ -224,8 +226,7 @@ impl AudioBackend for MpvBackend {
             .mpv
             .get_property::<i64>("playlist-pos")
             .ok()
-            .filter(|position| *position >= 0)
-            .map(|position| position as usize);
+            .and_then(|position| usize::try_from(position).ok());
 
         for source in sources {
             self.execute_command("loadfile", &[source, "append"], "append queue item")?;
@@ -242,9 +243,11 @@ impl AudioBackend for MpvBackend {
             }
         }
         if let Some(active_index) = active_index.filter(|active_index| position <= *active_index) {
+            let restored_index = i64::try_from(active_index.saturating_add(sources.len()))
+                .map_err(|_| "Queue position is too large".to_string())?;
             self.set_property(
                 "playlist-pos",
-                (active_index + sources.len()) as i64,
+                restored_index,
                 "restore active queue item after insert",
             )?;
         }
@@ -288,7 +291,8 @@ impl AudioBackend for MpvBackend {
     }
 
     fn skip_to_queue_position(&self, index: usize) -> Result<(), String> {
-        self.set_property("playlist-pos", index as i64, "skip to track")
+        let index = i64::try_from(index).map_err(|_| "Queue position is too large".to_string())?;
+        self.set_property("playlist-pos", index, "skip to track")
     }
 
     fn seek(&self, position_seconds: f64) -> Result<(), String> {
@@ -316,8 +320,7 @@ impl AudioBackend for MpvBackend {
                 .mpv
                 .get_property::<i64>("playlist-pos")
                 .ok()
-                .filter(|position| *position >= 0)
-                .map(|position| position as usize),
+                .and_then(|position| usize::try_from(position).ok()),
         }
     }
 

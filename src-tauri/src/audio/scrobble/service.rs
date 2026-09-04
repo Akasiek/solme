@@ -1,3 +1,10 @@
+#![allow(
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::cast_sign_loss
+)]
+// Protocol timestamps and playback progress cross integer and floating-point units.
+
 use std::{
     sync::Arc,
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
@@ -81,8 +88,7 @@ impl ScrobbleService {
             .map(|song| song.remote_id.clone());
         let duration_seconds = status
             .current_song
-            .map(|song| song.duration_seconds as f64)
-            .unwrap_or(status.duration_seconds);
+            .map_or(status.duration_seconds, |song| song.duration_seconds as f64);
 
         Ok(PlaybackSample {
             state: status.state,
@@ -99,7 +105,7 @@ impl ScrobbleService {
                 profile_id,
                 song_id,
                 started_at_ms,
-            } => self.send_now_playing(profile_id, song_id, started_at_ms),
+            } => self.send_now_playing(&profile_id, song_id, started_at_ms),
             ScrobbleAction::Submission {
                 profile_id,
                 song_id,
@@ -116,7 +122,7 @@ impl ScrobbleService {
         }
     }
 
-    fn send_now_playing(&self, profile_id: String, song_id: String, started_at_ms: i64) {
+    fn send_now_playing(&self, profile_id: &str, song_id: String, started_at_ms: i64) {
         let Ok((current_profile_id, backend)) = self.server.current_server() else {
             return;
         };
@@ -306,7 +312,9 @@ impl ScrobbleTracker {
         sample: &TrackerSample<'_>,
         elapsed: Duration,
     ) -> Vec<ScrobbleAction> {
-        let active = self.active.as_mut().expect("active playback was checked");
+        let Some(active) = self.active.as_mut() else {
+            return Vec::new();
+        };
         active.duration_seconds = sample.duration_seconds;
         if sample.is_playing {
             active.listened = active.listened.saturating_add(elapsed);
@@ -460,7 +468,7 @@ mod tests {
         assert_eq!(
             tracker.update(
                 &sample("song-1", PlaybackState::Playing, 3600.0),
-                Duration::from_secs(240),
+                Duration::from_mins(4),
                 2000,
             ),
             [ScrobbleAction::Submission {

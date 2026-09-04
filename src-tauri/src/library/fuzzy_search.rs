@@ -3,11 +3,14 @@ use std::{cmp::Ordering, collections::HashSet};
 use super::models::{CachedAlbum, CachedArtist, CachedSong};
 
 const FUZZY_MIN_RESULTS: usize = 1;
+const FUZZY_MIN_QUERY_LENGTH: usize = 1;
 
 pub fn should_use_fuzzy(query: &str, result_count: usize, limit: i64) -> Option<String> {
     let query = normalized_search_text(query);
 
-    if query.chars().count() < 1 || result_count >= FUZZY_MIN_RESULTS.min(limit as usize) {
+    if query.chars().count() < FUZZY_MIN_QUERY_LENGTH
+        || result_count >= FUZZY_MIN_RESULTS.min(usize::try_from(limit).unwrap_or(0))
+    {
         return None;
     }
 
@@ -41,7 +44,7 @@ pub fn merge_albums(
             .into_iter()
             .filter_map(|album| seen.insert(album.remote_id.clone()).then_some(album)),
     );
-    results.truncate(limit as usize);
+    results.truncate(usize::try_from(limit).unwrap_or(0));
     results
 }
 
@@ -60,7 +63,7 @@ pub fn merge_artists(
             .into_iter()
             .filter_map(|artist| seen.insert(artist.remote_id.clone()).then_some(artist)),
     );
-    results.truncate(limit as usize);
+    results.truncate(usize::try_from(limit).unwrap_or(0));
     results
 }
 
@@ -79,7 +82,7 @@ pub fn merge_songs(
             .into_iter()
             .filter_map(|song| seen.insert(song.remote_id.clone()).then_some(song)),
     );
-    results.truncate(limit as usize);
+    results.truncate(usize::try_from(limit).unwrap_or(0));
     results
 }
 
@@ -103,7 +106,7 @@ fn rank_candidates<T>(
             .partial_cmp(left_score)
             .unwrap_or(Ordering::Equal)
     });
-    ranked.truncate(limit as usize);
+    ranked.truncate(usize::try_from(limit).unwrap_or(0));
     ranked
         .into_iter()
         .map(|(candidate, _)| candidate)
@@ -176,6 +179,8 @@ fn text_similarity(query: &str, text: &str) -> f64 {
 /// The score is in the `0.0..=1.0` range, where `1.0` means an exact match.
 /// Jaro-Winkler favors strings that share an early prefix, which makes it a
 /// useful fallback for short music-search typos like `nibana` vs `nirvana`.
+// Matching bounds are maintained explicitly by the Jaro-Winkler algorithm.
+#[allow(clippy::indexing_slicing, clippy::cast_precision_loss)]
 fn jaro_winkler(left: &str, right: &str) -> f64 {
     if left == right {
         return 1.0;
@@ -234,10 +239,10 @@ fn jaro_winkler(left: &str, right: &str) -> f64 {
         right_index += 1;
     }
 
-    let matches = matches as f64;
+    let matches = f64::from(matches);
     let jaro = ((matches / left_len as f64)
         + (matches / right_len as f64)
-        + ((matches - (transpositions as f64 / 2.0)) / matches))
+        + ((matches - (f64::from(transpositions) / 2.0)) / matches))
         / 3.0;
     let prefix_len = left
         .iter()

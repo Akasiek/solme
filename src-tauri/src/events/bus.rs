@@ -26,9 +26,10 @@ impl EventBus {
         Self::new(Arc::new(EventEmitter::disabled()))
     }
 
+    #[allow(clippy::needless_pass_by_value)] // The broadcast channel requires an owned value.
     pub fn publish_player_status(&self, status: PlayerStatus) -> Result<(), String> {
         let _ = self.player_status.send(status.clone());
-        self.emitter.player_status_changed(status)
+        self.emitter.player_status_changed(&status)
     }
 
     pub fn publish_player_queue_changed(&self) -> Result<(), String> {

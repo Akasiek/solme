@@ -29,7 +29,7 @@ mod setup;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    if let Err(error) = tauri::Builder::default()
         .setup(setup_app)
         .plugin(
             tauri_plugin_log::Builder::new()
@@ -80,5 +80,7 @@ pub fn run() {
             search_cached_songs
         ])
         .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    {
+        log::error!("Error while running Tauri application: {error}");
+    }
 }

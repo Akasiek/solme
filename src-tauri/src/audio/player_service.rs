@@ -134,7 +134,10 @@ impl PlayerService {
     ) -> Result<(), String> {
         let (server, songs) = self.album_songs(album_id).await?;
         let start_index = Self::album_start_index(&songs, start_song_id)?;
-        let current_song = songs[start_index].clone();
+        let current_song = songs
+            .get(start_index)
+            .cloned()
+            .ok_or_else(|| "Queue start index is out of bounds".to_string())?;
         let loading = QueueLoadGuard::begin(Arc::clone(&self.queue_load_in_progress));
 
         self.audio.pause_immediately()?;
@@ -175,7 +178,10 @@ impl PlayerService {
         self.notify_queue_changed();
         self.notify_queue_item_status(
             PlaybackState::Loading,
-            songs[start_index].clone(),
+            songs
+                .get(start_index)
+                .cloned()
+                .ok_or_else(|| "Queue start index is out of bounds".to_string())?,
             start_index,
             songs.len(),
         );
@@ -432,6 +438,7 @@ impl PlayerService {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp, clippy::unimplemented, clippy::unused_async)]
 mod tests {
     use std::{
         sync::{mpsc, Arc, Condvar, Mutex},

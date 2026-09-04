@@ -104,7 +104,7 @@ mod tests {
                     .load("profile", PreferenceKey::Volume)
                     .await
                     .unwrap()
-                    .and_then(|preference| preference.volume_value()),
+                    .map(|preference| preference.volume_value()),
                 Some(42.5)
             );
 

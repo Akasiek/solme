@@ -72,7 +72,7 @@ impl ServerProfileStore {
         if active_profile_id.as_deref() == Some(&deleted.id) {
             match query::next_profile_id(&mut transaction).await? {
                 Some(next_profile_id) => {
-                    query::save_active_profile_id(&mut transaction, &next_profile_id).await?
+                    query::save_active_profile_id(&mut transaction, &next_profile_id).await?;
                 }
                 None => query::clear_active_profile_id(&mut transaction).await?,
             }

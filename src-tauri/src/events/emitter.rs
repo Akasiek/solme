@@ -19,15 +19,15 @@ impl EventEmitter {
         Self { app: None }
     }
 
-    pub fn player_status_changed(&self, status: PlayerStatus) -> Result<(), String> {
-        self.emit(Event::PlayerStatusChanged, status)
+    pub fn player_status_changed(&self, status: &PlayerStatus) -> Result<(), String> {
+        self.emit(&Event::PlayerStatusChanged, status)
     }
 
     pub fn player_queue_changed(&self) -> Result<(), String> {
-        self.emit(Event::PlayerQueueChanged, ())
+        self.emit(&Event::PlayerQueueChanged, &())
     }
 
-    fn emit<S: Serialize + Clone>(&self, event: Event, payload: S) -> Result<(), String> {
+    fn emit<S: Serialize + Clone>(&self, event: &Event, payload: &S) -> Result<(), String> {
         let Some(app) = &self.app else {
             return Ok(());
         };

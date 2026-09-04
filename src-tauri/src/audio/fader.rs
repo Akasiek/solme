@@ -312,6 +312,7 @@ fn finish_fade(state: &Mutex<FadeState>, generation: u64) {
 }
 
 #[cfg(test)]
+#[allow(clippy::float_cmp)] // These tests use exactly representable values.
 mod tests {
     use std::sync::{Arc, Mutex};
 

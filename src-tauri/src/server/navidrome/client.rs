@@ -42,7 +42,7 @@ pub struct NavidromeBackend {
 }
 
 impl NavidromeBackend {
-    pub fn new(url: String, username: String, password: String) -> Result<Self, String> {
+    pub fn new(url: &str, username: String, password: String) -> Result<Self, String> {
         let base_url =
             Url::parse(url.trim()).map_err(|error| format!("Invalid server URL: {error}"))?;
 
@@ -154,8 +154,7 @@ impl NavidromeBackend {
         if response.status != "ok" {
             let message = response
                 .error
-                .map(|error| error.message)
-                .unwrap_or_else(|| "Unknown server error".to_string());
+                .map_or_else(|| "Unknown server error".to_string(), |error| error.message);
             return Err(format!("{endpoint} failed: {message}"));
         }
 
@@ -562,11 +561,8 @@ mod tests {
 
     #[test]
     fn rejects_non_http_url() {
-        let result = NavidromeBackend::new(
-            "file:///music".to_string(),
-            "user".to_string(),
-            "password".to_string(),
-        );
+        let result =
+            NavidromeBackend::new("file:///music", "user".to_string(), "password".to_string());
         assert_eq!(
             result.err().as_deref(),
             Some("Server URL must use HTTP or HTTPS")
@@ -585,8 +581,14 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
 
         assert_eq!(url.path(), "/music/rest/stream.view");
-        assert_eq!(query.get("id").map(|value| value.as_ref()), Some("song-1"));
-        assert_eq!(query.get("u").map(|value| value.as_ref()), Some("user"));
+        assert_eq!(
+            query.get("id").map(AsRef::as_ref),
+            Some("song-1")
+        );
+        assert_eq!(
+            query.get("u").map(AsRef::as_ref),
+            Some("user")
+        );
         assert!(query.contains_key("t"));
         assert!(query.contains_key("s"));
         assert!(!query.contains_key("f"));
@@ -818,6 +820,6 @@ mod tests {
     }
 
     fn backend(url: &str) -> NavidromeBackend {
-        NavidromeBackend::new(url.to_string(), "user".to_string(), "password".to_string()).unwrap()
+        NavidromeBackend::new(url, "user".to_string(), "password".to_string()).unwrap()
     }
 }

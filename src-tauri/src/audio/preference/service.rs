@@ -24,7 +24,7 @@ impl PreferenceService {
             return Ok(None);
         };
 
-        Ok(preference.volume_value())
+        Ok(Some(preference.volume_value()))
     }
 
     pub fn save_volume(&self, volume: f64) {

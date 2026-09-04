@@ -300,6 +300,7 @@ impl ArtworkRepository for SqliteRepository {
 }
 
 #[cfg(test)]
+#[allow(clippy::cast_possible_wrap)] // Fixture sizes are deliberately tiny.
 mod tests {
     use std::fs;
 

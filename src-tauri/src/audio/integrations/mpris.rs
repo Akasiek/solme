@@ -1,3 +1,6 @@
+#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
+// MPRIS represents time as integer microseconds while the player uses f64 seconds.
+
 use crate::audio::{PlaybackState, PlayerService, PlayerStatus};
 use mpris_server::{
     zbus::{fdo, Result},
@@ -334,9 +337,8 @@ fn current_track_id(status: &PlayerStatus) -> TrackId {
 fn playback_status(state: PlaybackState) -> PlaybackStatus {
     match state {
         PlaybackState::Stopped => PlaybackStatus::Stopped,
-        PlaybackState::Loading => PlaybackStatus::Paused,
+        PlaybackState::Loading | PlaybackState::Paused => PlaybackStatus::Paused,
         PlaybackState::Playing => PlaybackStatus::Playing,
-        PlaybackState::Paused => PlaybackStatus::Paused,
     }
 }
 

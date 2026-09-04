@@ -47,9 +47,7 @@ pub(crate) async fn artwork_is_fresh(
     Ok(row.is_some_and(|row| {
         row.local_path
             .is_some_and(|path| Path::new(&path).is_file())
-            && source_key
-                .map(|source_key| row.source_key.as_deref() == Some(source_key))
-                .unwrap_or(true)
+            && source_key.is_none_or(|source_key| row.source_key.as_deref() == Some(source_key))
             && row.downloaded_at.is_some_and(|time| time >= fresh_after)
     }))
 }

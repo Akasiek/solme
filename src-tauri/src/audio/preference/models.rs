@@ -12,9 +12,9 @@ impl Preference {
         }
     }
 
-    pub fn volume_value(&self) -> Option<f64> {
+    pub fn volume_value(&self) -> f64 {
         match self.value {
-            PreferenceValue::Volume(volume) => Some(volume),
+            PreferenceValue::Volume(volume) => volume,
         }
     }
 }

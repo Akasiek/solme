@@ -107,7 +107,10 @@ impl LibraryCatalogService {
         };
         let limit = limit.clamp(1, 50);
         let (recently_played_albums, most_played_albums) = self
-            .played_album_sections(&profile_id, limit as usize)
+            .played_album_sections(
+                &profile_id,
+                usize::try_from(limit).map_err(|_| "Invalid album limit".to_string())?,
+            )
             .await?;
         let hero_random_albums = self
             .repository
@@ -279,6 +282,7 @@ fn missing_item_error(item_kind: LibraryItemKind, item_id: &str) -> String {
 }
 
 #[cfg(test)]
+#[allow(clippy::unimplemented)] // Unused trait methods deliberately fail in focused mocks.
 mod tests {
     use std::{
         fs,
