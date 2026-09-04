@@ -19,8 +19,10 @@ defineProps<{
       >
         {{ artist.name }}
       </h1>
-      <p class="font-sans text-base text-zinc-300">{{ artist.albumCount }} albums</p>
       <ArtistHeroAnnotations :artist="artist" />
+      <p class="font-sans text-base text-zinc-300">
+        {{ artist.albumCount }} {{ artist.albumCount !== 1 ? "albums" : "album" }}
+      </p>
     </div>
   </div>
 </template>
