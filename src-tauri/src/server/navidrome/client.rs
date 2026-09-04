@@ -581,14 +581,8 @@ mod tests {
             .collect::<std::collections::HashMap<_, _>>();
 
         assert_eq!(url.path(), "/music/rest/stream.view");
-        assert_eq!(
-            query.get("id").map(AsRef::as_ref),
-            Some("song-1")
-        );
-        assert_eq!(
-            query.get("u").map(AsRef::as_ref),
-            Some("user")
-        );
+        assert_eq!(query.get("id").map(AsRef::as_ref), Some("song-1"));
+        assert_eq!(query.get("u").map(AsRef::as_ref), Some("user"));
         assert!(query.contains_key("t"));
         assert!(query.contains_key("s"));
         assert!(!query.contains_key("f"));
