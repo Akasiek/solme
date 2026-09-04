@@ -22,7 +22,7 @@ watch(
 </script>
 
 <template>
-  <div class="flex h-8 items-center gap-0.5 rounded-md border border-zinc-700 px-2" :aria-label="`${itemName} rating`">
+  <div class="flex h-7 items-center gap-0 rounded-md border border-zinc-700 px-1" :aria-label="`${itemName} rating`">
     <button
       v-for="value in 5"
       :key="value"
