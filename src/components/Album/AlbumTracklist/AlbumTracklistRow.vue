@@ -2,7 +2,7 @@
 import { Play } from "@lucide/vue";
 import { ref } from "vue";
 import ContextMenu from "@/components/ContextMenu";
-import { FavoriteButton, RatingStars } from "@/components/LibraryItemAnnotations";
+import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 import { CachedSong } from "@/types.ts";
 import { formatTime } from "@/utils/format.ts";
 
@@ -63,9 +63,8 @@ const openContextMenu = (event: MouseEvent) => {
       </span>
     </button>
 
-    <div class="col-start-3 row-start-1 hidden items-center gap-2 @min-[48rem]:flex">
-      <RatingStars :item="song" />
-      <FavoriteButton :item="song" />
+    <div class="col-start-3 row-start-1 hidden @min-[48rem]:flex">
+      <LibraryItemAnnotations :item="song" />
     </div>
 
     <ContextMenu
@@ -77,10 +76,7 @@ const openContextMenu = (event: MouseEvent) => {
     >
       <div class="w-52 p-1">
         <p class="mb-2 truncate text-xs font-medium text-zinc-400" :title="song.title">{{ song.title }}</p>
-        <div class="flex items-center gap-2">
-          <RatingStars :item="song" />
-          <FavoriteButton :item="song" />
-        </div>
+        <LibraryItemAnnotations :item="song" />
       </div>
     </ContextMenu>
   </div>

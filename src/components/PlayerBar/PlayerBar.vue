@@ -8,7 +8,7 @@ import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeContro
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
 import PlayerBarRightAsideMenuToggleButton from "@/components/PlayerBar/PlayerBarRightAsideMenuToggleButton.vue";
-import { FavoriteButton, RatingStars } from "@/components/LibraryItemAnnotations";
+import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 
 const playerStore = usePlayerStore();
 const playerStatus = computed(() => playerStore.status);
@@ -51,10 +51,7 @@ onMounted(async () => {
     >
       <div class="flex h-16 min-w-0 items-center gap-8">
         <PlayerBarTrackInfo :currentSong="currentSong" />
-        <div class="flex shrink-0 items-center gap-2">
-          <RatingStars :item="currentSong" />
-          <FavoriteButton :item="currentSong" />
-        </div>
+        <LibraryItemAnnotations :item="currentSong" />
       </div>
 
       <div class="grid w-full min-w-0 items-center justify-items-center gap-2">

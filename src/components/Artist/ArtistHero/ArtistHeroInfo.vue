@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { CachedArtist } from "@/types";
-import ArtistHeroAnnotations from "@/components/Artist/ArtistHero/ArtistHeroAnnotations.vue";
+import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 
 defineProps<{
   artist: CachedArtist;
@@ -19,10 +19,10 @@ defineProps<{
       >
         {{ artist.name }}
       </h1>
-      <ArtistHeroAnnotations :artist="artist" />
       <p class="font-sans text-base text-zinc-300">
         {{ artist.albumCount }} {{ artist.albumCount !== 1 ? "albums" : "album" }}
       </p>
+      <LibraryItemAnnotations :item="artist" />
     </div>
   </div>
 </template>

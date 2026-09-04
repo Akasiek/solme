@@ -5,7 +5,7 @@ import AlbumHeroGenres from "@/components/Album/AlbumHero/AlbumHeroGenres.vue";
 import AlbumHeroPlayerButtons from "@/components/Album/AlbumHero/AlbumHeroPlayerButtons.vue";
 import AlbumHeroQualityBadge from "@/components/Album/AlbumHero/AlbumHeroQualityBadge.vue";
 import AlbumHeroStats from "@/components/Album/AlbumHero/AlbumHeroStats.vue";
-import AlbumHeroAnnotations from "@/components/Album/AlbumHero/AlbumHeroAnnotations.vue";
+import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 
 const { albumDetails } = defineProps<{
   albumDetails: CachedAlbumDetails;
@@ -40,7 +40,7 @@ const { album, genres, discCount, audioFormats } = albumDetails;
           </p>
           <AlbumHeroStats :album="album" :disc-count="discCount" />
         </div>
-        <AlbumHeroAnnotations :album="album" />
+        <LibraryItemAnnotations :item="album" />
 
         <AlbumHeroGenres :genres="genres" />
 
