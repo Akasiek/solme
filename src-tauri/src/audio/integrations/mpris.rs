@@ -1,5 +1,11 @@
-#![allow(clippy::cast_precision_loss, clippy::cast_possible_truncation)]
-// MPRIS represents time as integer microseconds while the player uses f64 seconds.
+#![allow(
+    unknown_lints,
+    clippy::cast_precision_loss,
+    clippy::cast_possible_truncation,
+    clippy::unused_async_trait_impl
+)]
+// MPRIS crosses integer/floating-point time units and defines async interface methods,
+// including handlers whose implementations complete synchronously.
 
 use crate::audio::{PlaybackState, PlayerService, PlayerStatus};
 use mpris_server::{
