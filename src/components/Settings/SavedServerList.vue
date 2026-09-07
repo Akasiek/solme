@@ -140,8 +140,8 @@ defineExpose({
   <div class="space-y-3">
     <h3 class="font-serif text-xl font-bold">Saved servers</h3>
 
-    <p v-if="isLoading" class="text-sm text-zinc-400">Loading servers...</p>
-    <p v-else-if="profiles.length === 0" class="text-sm text-zinc-400">No saved servers.</p>
+    <p v-if="isLoading" class="font-sans text-sm text-zinc-400">Loading servers...</p>
+    <p v-else-if="profiles.length === 0" class="font-sans text-sm text-zinc-400">No saved servers.</p>
 
     <ul v-else class="space-y-2">
       <SavedServerListItem
@@ -159,6 +159,6 @@ defineExpose({
       />
     </ul>
 
-    <p v-if="error" class="text-sm text-red-300">{{ error }}</p>
+    <p v-if="error" class="font-sans text-sm text-red-300">{{ error }}</p>
   </div>
 </template>

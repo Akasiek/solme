@@ -16,10 +16,10 @@ const emit = defineEmits<{
   <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
     <div class="space-y-1">
       <h2 class="font-serif text-2xl font-bold">Servers</h2>
-      <p v-if="serverInfo" class="text-sm text-zinc-400">
+      <p v-if="serverInfo" class="font-sans text-sm text-zinc-400">
         Connected as {{ serverInfo.username }} through {{ serverInfo.serverType }}
       </p>
-      <p v-else class="text-sm text-zinc-400">No server is connected.</p>
+      <p v-else class="font-sans text-sm text-zinc-400">No server is connected.</p>
     </div>
 
     <Button v-if="canAddServer" type="button" @click="emit('addServer')">Add server</Button>

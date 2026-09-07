@@ -34,7 +34,9 @@ const emit = defineEmits<{
       <div class="min-w-0">
         <div class="flex items-center gap-2">
           <p class="truncate font-medium">{{ profile.username }}</p>
-          <span v-if="profile.isCurrent" class="rounded bg-zinc-800 px-2 py-0.5 text-xs text-zinc-300"> Current </span>
+          <span v-if="profile.isCurrent" class="rounded bg-zinc-800 px-2 py-0.5 font-sans text-xs text-zinc-300">
+            Current
+          </span>
         </div>
         <p class="truncate font-sans text-sm text-zinc-400">{{ profile.url }}</p>
         <p v-if="profile.secondaryUrl" class="truncate font-sans text-sm text-zinc-500">
