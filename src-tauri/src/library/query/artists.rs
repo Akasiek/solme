@@ -3,39 +3,36 @@ use super::super::{
     models::{Artist, Genre},
 };
 use crate::database::SqliteRepository;
-use crate::library::models::{CachedAlbum, CachedArtist};
+use crate::library::models::{ArtistPageSort, CachedAlbum, CachedArtist, Paginated, Pagination};
 use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 const SQLITE_BIND_LIMIT: usize = 999;
+
+const ARTIST_SELECT_FROM_ACTIVE_GENERATION: &str = "
+    SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path, a.favorite,
+           a.rating
+    FROM artists a
+    JOIN library_sync_state s ON s.profile_id = a.profile_id AND s.active_generation = a.generation
+    LEFT JOIN artwork_cache artwork ON artwork.profile_id = a.profile_id
+      AND artwork.kind = 'artist' AND artwork.remote_id = a.remote_id
+    WHERE a.profile_id = ";
 
 pub(crate) async fn artist(
     repo: &SqliteRepository,
     profile_id: &str,
     artist_id: &str,
 ) -> Result<Option<CachedArtist>, String> {
-    let artist = sqlx::query_as::<_, CachedArtist>(
-        "
-        SELECT a.remote_id, a.name, a.album_count, artwork.local_path AS artwork_path,
-               a.favorite, a.rating
-        FROM artists a
-        JOIN library_sync_state s
-          ON s.profile_id = a.profile_id
-         AND s.active_generation = a.generation
-        LEFT JOIN artwork_cache artwork
-          ON artwork.profile_id = a.profile_id
-         AND artwork.kind = 'artist'
-         AND artwork.remote_id = a.remote_id
-        WHERE a.profile_id = ?
-          AND a.remote_id = ?
-        ",
-    )
-    .bind(profile_id)
-    .bind(artist_id)
-    .fetch_optional(&repo.pool)
-    .await
-    .map_err(|error| format!("Failed to read cached artist: {error}"))?;
+    let mut query = QueryBuilder::new(ARTIST_SELECT_FROM_ACTIVE_GENERATION);
+    query
+        .push_bind(profile_id)
+        .push(" AND a.remote_id = ")
+        .push_bind(artist_id);
 
-    Ok(artist)
+    query
+        .build_query_as::<CachedArtist>()
+        .fetch_optional(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached artist: {error}"))
 }
 
 pub(crate) async fn artist_albums(
@@ -60,11 +57,87 @@ pub(crate) async fn artist_albums(
                   COALESCE(a.original_release_date, a.release_date, CASE WHEN a.year IS NOT NULL THEN printf('%04d-12-31', a.year) END) DESC,
                   a.name COLLATE NOCASE",
     )
-    .bind(profile_id)
-    .bind(artist_id)
-    .fetch_all(&repo.pool)
-    .await
-    .map_err(|error| format!("Failed to read cached artist albums: {error}"))
+        .bind(profile_id)
+        .bind(artist_id)
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached artist albums: {error}"))
+}
+
+pub(crate) async fn artist_page(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    search: &str,
+    sort: ArtistPageSort,
+    pagination: Pagination,
+) -> Result<Paginated<CachedArtist>, String> {
+    let mut items_query = artist_page_query(profile_id, search, sort, pagination);
+    let items = items_query
+        .build_query_as::<CachedArtist>()
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read artist page: {error}"))?;
+
+    let total = count_artists(repo, profile_id, search).await?;
+
+    Ok(Paginated { items, total })
+}
+
+fn artist_page_query(
+    profile_id: &str,
+    search: &str,
+    sort: ArtistPageSort,
+    pagination: Pagination,
+) -> QueryBuilder<Sqlite> {
+    let mut query = QueryBuilder::new(ARTIST_SELECT_FROM_ACTIVE_GENERATION);
+    query.push_bind(profile_id.to_owned());
+
+    push_artist_page_search(&mut query, search);
+    push_artist_page_sort(&mut query, sort);
+    push_artist_page_pagination(&mut query, pagination);
+
+    query
+}
+
+fn push_artist_page_sort(query: &mut QueryBuilder<Sqlite>, sort: ArtistPageSort) {
+    query.push(" ").push(match sort {
+        ArtistPageSort::Name => "ORDER BY a.name COLLATE NOCASE",
+        ArtistPageSort::MostAlbums => "ORDER BY a.album_count DESC, a.name COLLATE NOCASE",
+        ArtistPageSort::FewestAlbums => "ORDER BY a.album_count, a.name COLLATE NOCASE",
+    });
+}
+
+fn push_artist_page_pagination(query: &mut QueryBuilder<Sqlite>, pagination: Pagination) {
+    let pagination = pagination.normalized();
+    query.push(" LIMIT ").push_bind(pagination.limit);
+    query.push(" OFFSET ").push_bind(pagination.offset);
+}
+
+fn push_artist_page_search(query: &mut QueryBuilder<Sqlite>, search: &str) {
+    let search = search.trim();
+    if !search.is_empty() {
+        query.push(" AND INSTR(LOWER(a.name), LOWER(");
+        query.push_bind(search.to_owned()).push(")) > 0");
+    }
+}
+
+async fn count_artists(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    search: &str,
+) -> Result<i64, String> {
+    let mut query = QueryBuilder::new(
+        "SELECT COUNT(*) FROM artists a JOIN library_sync_state s
+         ON s.profile_id = a.profile_id AND s.active_generation = a.generation WHERE a.profile_id = ",
+    );
+    query.push_bind(profile_id);
+    push_artist_page_search(&mut query, search);
+
+    query
+        .build_query_scalar::<i64>()
+        .fetch_one(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to count filtered artists: {error}"))
 }
 
 pub(crate) async fn insert_artists(

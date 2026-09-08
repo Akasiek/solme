@@ -6,8 +6,9 @@ use crate::server::{AlbumQuery, MusicServerService};
 
 use super::{
     models::{
-        Album, AlbumSort, CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails,
-        CachedSong, HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
+        Album, AlbumPage, AlbumPageSort, AlbumSort, ArtistPageSort, CachedAlbum,
+        CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, HomeAlbumSections,
+        LibraryItemAnnotation, LibraryItemKind, LibrarySummary, Paginated, Pagination,
     },
     repository::LibraryCatalogRepository,
 };
@@ -91,6 +92,44 @@ impl LibraryCatalogService {
         };
         self.repository
             .albums(&profile_id, offset, limit, AlbumSort::Artist)
+            .await
+    }
+
+    pub async fn album_page(
+        &self,
+        query: &str,
+        album_types: &[String],
+        sort: AlbumPageSort,
+        pagination: Pagination,
+    ) -> Result<AlbumPage, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(AlbumPage {
+                page: Paginated {
+                    items: Vec::new(),
+                    total: 0,
+                },
+                album_types: Vec::new(),
+            });
+        };
+        self.repository
+            .album_page(&profile_id, query, album_types, sort, pagination)
+            .await
+    }
+
+    pub async fn artist_page(
+        &self,
+        query: &str,
+        sort: ArtistPageSort,
+        pagination: Pagination,
+    ) -> Result<Paginated<CachedArtist>, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Paginated {
+                items: Vec::new(),
+                total: 0,
+            });
+        };
+        self.repository
+            .artist_page(&profile_id, query, sort, pagination)
             .await
     }
 

@@ -5,9 +5,10 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::library::{
-    CachedAlbum, CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong,
-    HomeAlbumSections, LibraryCatalogService, LibraryItemAnnotation, LibraryItemKind,
-    LibrarySummary, LibrarySyncService, LibrarySyncStatus,
+    AlbumPage, AlbumPageSort, ArtistPageSort, CachedAlbum, CachedAlbumDetails, CachedArtist,
+    CachedArtistDetails, CachedSong, HomeAlbumSections, LibraryCatalogService,
+    LibraryItemAnnotation, LibraryItemKind, LibrarySummary, LibrarySyncService, LibrarySyncStatus,
+    Paginated, Pagination,
 };
 
 #[tauri::command]
@@ -67,6 +68,29 @@ pub async fn get_cached_albums(
     library: State<'_, Arc<LibraryCatalogService>>,
 ) -> Result<Vec<CachedAlbum>, String> {
     library.albums(offset, limit).await
+}
+
+#[tauri::command]
+pub async fn get_album_page(
+    query: String,
+    album_types: Vec<String>,
+    sort: AlbumPageSort,
+    pagination: Pagination,
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<AlbumPage, String> {
+    library
+        .album_page(&query, &album_types, sort, pagination)
+        .await
+}
+
+#[tauri::command]
+pub async fn get_artist_page(
+    query: String,
+    sort: ArtistPageSort,
+    pagination: Pagination,
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<Paginated<CachedArtist>, String> {
+    library.artist_page(&query, sort, pagination).await
 }
 
 #[tauri::command]

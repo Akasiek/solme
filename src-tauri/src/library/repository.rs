@@ -2,13 +2,13 @@ use async_trait::async_trait;
 
 use super::{
     models::{
-        AlbumSort, ArtworkCacheRecord, ArtworkCandidate, CachedAlbum, CachedSong,
-        LibraryItemAnnotation, LibraryItemKind, LibrarySnapshot, LibrarySummary,
+        AlbumPage, AlbumPageSort, AlbumSort, ArtistPageSort, ArtworkCacheRecord, ArtworkCandidate,
+        CachedAlbum, CachedArtist, CachedSong, LibraryItemAnnotation, LibraryItemKind,
+        LibrarySnapshot, LibrarySummary, Paginated, Pagination,
     },
     query,
 };
 use crate::database::SqliteRepository;
-use crate::library::models::CachedArtist;
 
 #[async_trait]
 pub trait LibraryStateRepository: Send + Sync {
@@ -60,6 +60,25 @@ pub trait LibraryCatalogRepository: LibraryStateRepository {
         limit: i64,
         sort: AlbumSort,
     ) -> Result<Vec<CachedAlbum>, String>;
+    async fn album_page(
+        &self,
+        _profile_id: &str,
+        _query: &str,
+        _album_types: &[String],
+        _sort: AlbumPageSort,
+        _pagination: Pagination,
+    ) -> Result<AlbumPage, String> {
+        Err("Album pagination is not implemented".to_string())
+    }
+    async fn artist_page(
+        &self,
+        _profile_id: &str,
+        _query: &str,
+        _sort: ArtistPageSort,
+        _pagination: Pagination,
+    ) -> Result<Paginated<CachedArtist>, String> {
+        Err("Artist pagination is not implemented".to_string())
+    }
     async fn albums_by_ids(
         &self,
         profile_id: &str,
@@ -222,6 +241,27 @@ impl LibraryCatalogRepository for SqliteRepository {
         query::albums(self, profile_id, offset, limit, sort).await
     }
 
+    async fn album_page(
+        &self,
+        profile_id: &str,
+        search: &str,
+        album_types: &[String],
+        sort: AlbumPageSort,
+        pagination: Pagination,
+    ) -> Result<AlbumPage, String> {
+        query::album_page(self, profile_id, search, album_types, sort, pagination).await
+    }
+
+    async fn artist_page(
+        &self,
+        profile_id: &str,
+        search: &str,
+        sort: ArtistPageSort,
+        pagination: Pagination,
+    ) -> Result<Paginated<CachedArtist>, String> {
+        query::artist_page(self, profile_id, search, sort, pagination).await
+    }
+
     async fn albums_by_ids(
         &self,
         profile_id: &str,
@@ -312,8 +352,8 @@ mod tests {
     };
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
-        Album, AlbumSort, AlbumWithSongs, Artist, ArtworkCacheRecord, Genre, LibraryItemKind,
-        LibrarySnapshot, Song,
+        Album, AlbumPageSort, AlbumSort, AlbumWithSongs, Artist, ArtistPageSort,
+        ArtworkCacheRecord, Genre, LibraryItemKind, LibrarySnapshot, Pagination, Song,
     };
     #[test]
     fn activates_complete_generation() {
@@ -828,6 +868,100 @@ mod tests {
                     .len(),
                 260
             );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn filters_sorts_and_paginates_album_page_in_sqlite() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = snapshot(false);
+            snapshot.albums = vec![
+                album_with_dates("album-1", "Alpha", Some("2020-01-01"), None),
+                album_with_dates("album-2", "Beta", Some("2024-01-01"), None),
+                album_with_dates("album-3", "Gamma", Some("2022-01-01"), None),
+            ];
+            snapshot.albums[0].album.album_type = Some("album".to_string());
+            snapshot.albums[1].album.album_type = Some("single".to_string());
+            snapshot.albums[2].album.album_type = Some("album".to_string());
+            snapshot.albums[2].album.artist_name = "Guest Artist".to_string();
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let first_page = repository
+                .album_page(
+                    "profile",
+                    "a",
+                    &["album".to_string()],
+                    AlbumPageSort::Newest,
+                    Pagination {
+                        offset: 0,
+                        limit: 1,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(first_page.page.total, 2);
+            assert_eq!(first_page.page.items.len(), 1);
+            assert_eq!(first_page.page.items[0].remote_id, "album-3");
+            assert_eq!(first_page.album_types, vec!["album", "single"]);
+
+            let second_page = repository
+                .album_page(
+                    "profile",
+                    "a",
+                    &["album".to_string()],
+                    AlbumPageSort::Newest,
+                    Pagination {
+                        offset: 1,
+                        limit: 1,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(second_page.page.total, 2);
+            assert_eq!(second_page.page.items[0].remote_id, "album-1");
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn filters_sorts_and_paginates_artist_page_in_sqlite() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = large_snapshot(30);
+            for (index, artist) in snapshot.artists.iter_mut().enumerate() {
+                artist.album_count = index as i64;
+            }
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let result = repository
+                .artist_page(
+                    "profile",
+                    "artist 1",
+                    ArtistPageSort::MostAlbums,
+                    Pagination {
+                        offset: 0,
+                        limit: 2,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(result.total, 11);
+            assert_eq!(result.items.len(), 2);
+            assert_eq!(result.items[0].name, "Artist 19");
+            assert_eq!(result.items[1].name, "Artist 18");
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

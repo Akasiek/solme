@@ -1,5 +1,28 @@
 use serde::{Deserialize, Serialize};
 
+#[derive(Clone, Copy, Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pagination {
+    pub offset: i64,
+    pub limit: i64,
+}
+
+impl Pagination {
+    pub fn normalized(self) -> Self {
+        Self {
+            offset: self.offset.max(0),
+            limit: self.limit.clamp(1, 100),
+        }
+    }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Paginated<T> {
+    pub items: Vec<T>,
+    pub total: i64,
+}
+
 #[derive(Clone)]
 pub struct Artist {
     pub remote_id: String,
@@ -8,6 +31,14 @@ pub struct Artist {
     pub cover_art_id: Option<String>,
     pub favorite: bool,
     pub rating: Option<i64>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ArtistPageSort {
+    Name,
+    MostAlbums,
+    FewestAlbums,
 }
 
 #[derive(Clone)]
@@ -31,6 +62,38 @@ pub struct Album {
 }
 
 #[derive(Clone)]
+pub struct AlbumWithSongs {
+    pub album: Album,
+    pub songs: Vec<Song>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum AlbumSort {
+    Artist,
+    Random,
+    RecentlyAdded,
+    RecentlyReleased,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AlbumPage {
+    #[serde(flatten)]
+    pub page: Paginated<CachedAlbum>,
+    pub album_types: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum AlbumPageSort {
+    Artist,
+    Title,
+    Newest,
+    Oldest,
+    RecentlyAdded,
+}
+
+#[derive(Clone)]
 pub struct Song {
     pub remote_id: String,
     pub album_id: String,
@@ -51,12 +114,6 @@ pub struct Song {
     pub genres: Vec<String>,
     pub favorite: bool,
     pub rating: Option<i64>,
-}
-
-#[derive(Clone)]
-pub struct AlbumWithSongs {
-    pub album: Album,
-    pub songs: Vec<Song>,
 }
 
 #[derive(Clone)]
@@ -108,14 +165,6 @@ pub struct LibrarySummary {
     pub song_count: i64,
     pub genre_count: i64,
     pub last_success_at: Option<i64>,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub enum AlbumSort {
-    Artist,
-    Random,
-    RecentlyAdded,
-    RecentlyReleased,
 }
 
 #[derive(Serialize)]

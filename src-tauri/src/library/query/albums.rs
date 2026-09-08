@@ -4,12 +4,14 @@ use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 use super::super::{
     fuzzy_search,
-    models::{AlbumSort, AlbumWithSongs, CachedAlbum},
+    models::{
+        AlbumPage, AlbumPageSort, AlbumSort, AlbumWithSongs, CachedAlbum, Paginated, Pagination,
+    },
 };
 use crate::database::SqliteRepository;
 
 const SQLITE_BIND_LIMIT: usize = 999;
-const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
+pub(super) const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
     SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
            a.release_date, a.original_release_date, a.server_added_at, a.song_count,
            a.duration_seconds, art.local_path AS artwork_path, a.favorite, a.rating
@@ -92,6 +94,138 @@ pub(crate) async fn albums(
         .map_err(|error| format!("Failed to read cached albums: {error}"))
 }
 
+pub(crate) async fn album_page(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    search: &str,
+    album_types: &[String],
+    sort: AlbumPageSort,
+    pagination: Pagination,
+) -> Result<AlbumPage, String> {
+    let mut items_query = album_page_query(profile_id, search, album_types, sort, pagination);
+    let items = items_query
+        .build_query_as::<CachedAlbum>()
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read album page: {error}"))?;
+
+    let total = count_albums(repo, profile_id, search, album_types).await?;
+    let album_types = available_album_types(repo, profile_id).await?;
+
+    Ok(AlbumPage {
+        page: Paginated { items, total },
+        album_types,
+    })
+}
+
+fn album_page_query(
+    profile_id: &str,
+    search: &str,
+    album_types: &[String],
+    sort: AlbumPageSort,
+    pagination: Pagination,
+) -> QueryBuilder<Sqlite> {
+    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
+    query.push_bind(profile_id.to_owned());
+
+    push_album_page_search(&mut query, search.trim(), album_types);
+    push_album_page_sort(&mut query, sort);
+    push_album_page_pagination(&mut query, pagination);
+
+    query
+}
+
+fn push_album_page_search(query: &mut QueryBuilder<Sqlite>, search: &str, album_types: &[String]) {
+    if !search.is_empty() {
+        query
+            .push(" AND (INSTR(LOWER(a.name), LOWER(")
+            .push_bind(search.to_owned())
+            .push(")) > 0 OR INSTR(LOWER(a.artist_name), LOWER(")
+            .push_bind(search.to_owned())
+            .push(")) > 0)");
+    }
+    if !album_types.is_empty() {
+        query.push(" AND a.album_type IN (");
+        let mut types = query.separated(", ");
+        for album_type in album_types {
+            types.push_bind(album_type.clone());
+        }
+        types.push_unseparated(")");
+    }
+}
+
+fn push_album_page_sort(query: &mut QueryBuilder<Sqlite>, sort: AlbumPageSort) {
+    query.push(" ").push(match sort {
+        AlbumPageSort::Artist => {
+            "ORDER BY a.artist_name COLLATE NOCASE, a.year, a.name COLLATE NOCASE"
+        }
+        AlbumPageSort::Title => {
+            "ORDER BY a.name COLLATE NOCASE, a.artist_name COLLATE NOCASE, a.year"
+        }
+        AlbumPageSort::Newest => {
+            "ORDER BY COALESCE(a.original_release_date, a.release_date, printf('%04d', a.year)) IS NULL,
+                      COALESCE(a.original_release_date, a.release_date, printf('%04d', a.year)) DESC,
+                      a.name COLLATE NOCASE"
+        }
+        AlbumPageSort::Oldest => {
+            "ORDER BY COALESCE(a.original_release_date, a.release_date, printf('%04d', a.year)) IS NULL,
+                      COALESCE(a.original_release_date, a.release_date, printf('%04d', a.year)),
+                      a.name COLLATE NOCASE"
+        }
+        AlbumPageSort::RecentlyAdded => {
+            "ORDER BY a.server_added_at IS NULL, a.server_added_at DESC, a.name COLLATE NOCASE"
+        }
+    });
+}
+
+fn push_album_page_pagination(query: &mut QueryBuilder<Sqlite>, pagination: Pagination) {
+    let pagination = pagination.normalized();
+    query.push(" LIMIT ").push_bind(pagination.limit);
+    query.push(" OFFSET ").push_bind(pagination.offset);
+}
+
+async fn count_albums(
+    repo: &SqliteRepository,
+    profile_id: &str,
+    search: &str,
+    album_types: &[String],
+) -> Result<i64, String> {
+    let mut query = QueryBuilder::new(
+        "SELECT COUNT(*) FROM albums a
+         JOIN library_sync_state s
+           ON s.profile_id = a.profile_id
+          AND s.active_generation = a.generation
+         WHERE a.profile_id = ",
+    );
+    query.push_bind(profile_id);
+    push_album_page_search(&mut query, search.trim(), album_types);
+
+    query
+        .build_query_scalar::<i64>()
+        .fetch_one(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to count filtered albums: {error}"))
+}
+
+async fn available_album_types(
+    repo: &SqliteRepository,
+    profile_id: &str,
+) -> Result<Vec<String>, String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT a.album_type
+         FROM albums a
+         JOIN library_sync_state s
+           ON s.profile_id = a.profile_id
+          AND s.active_generation = a.generation
+         WHERE a.profile_id = ? AND a.album_type IS NOT NULL AND TRIM(a.album_type) != ''
+         ORDER BY a.album_type COLLATE NOCASE",
+    )
+    .bind(profile_id)
+    .fetch_all(&repo.pool)
+    .await
+    .map_err(|error| format!("Failed to read album types: {error}"))
+}
+
 pub(crate) async fn albums_by_ids(
     repo: &SqliteRepository,
     profile_id: &str,
@@ -130,25 +264,17 @@ pub(crate) async fn album(
     profile_id: &str,
     album_id: &str,
 ) -> Result<Option<CachedAlbum>, String> {
-    sqlx::query_as::<_, CachedAlbum>(
-        "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
-         FROM albums a
-         JOIN library_sync_state state
-           ON state.profile_id = a.profile_id
-          AND state.active_generation = a.generation
-         LEFT JOIN artwork_cache artwork
-           ON artwork.profile_id = a.profile_id
-          AND artwork.kind = 'album'
-          AND artwork.remote_id = a.remote_id
-         WHERE a.profile_id = ? AND a.remote_id = ?",
-    )
-    .bind(profile_id)
-    .bind(album_id)
-    .fetch_optional(&repo.pool)
-    .await
-    .map_err(|error| format!("Failed to read cached album: {error}"))
+    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
+    query
+        .push_bind(profile_id)
+        .push(" AND a.remote_id = ")
+        .push_bind(album_id);
+
+    query
+        .build_query_as::<CachedAlbum>()
+        .fetch_optional(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read cached album: {error}"))
 }
 
 pub(crate) async fn album_genres(
@@ -328,24 +454,14 @@ pub(crate) async fn fuzzy_album_candidates(
     repo: &SqliteRepository,
     profile_id: &str,
 ) -> Result<Vec<CachedAlbum>, String> {
-    sqlx::query_as::<_, CachedAlbum>(
-        "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
-                a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
-         FROM albums a
-         JOIN library_sync_state state
-           ON state.profile_id = a.profile_id
-          AND state.active_generation = a.generation
-         LEFT JOIN artwork_cache artwork
-           ON artwork.profile_id = a.profile_id
-          AND artwork.kind = 'album'
-          AND artwork.remote_id = a.remote_id
-         WHERE a.profile_id = ?",
-    )
-    .bind(profile_id)
-    .fetch_all(&repo.pool)
-    .await
-    .map_err(|error| format!("Failed to read fuzzy album candidates: {error}"))
+    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
+    query.push_bind(profile_id);
+
+    query
+        .build_query_as::<CachedAlbum>()
+        .fetch_all(&repo.pool)
+        .await
+        .map_err(|error| format!("Failed to read fuzzy album candidates: {error}"))
 }
 
 pub(crate) async fn search_albums(

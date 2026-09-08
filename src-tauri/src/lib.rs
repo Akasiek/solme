@@ -1,8 +1,8 @@
 use crate::commands::library::{
-    get_cached_album, get_cached_albums, get_cached_artist, get_cached_songs,
-    get_home_album_sections, get_library_summary, get_library_sync_status, search_cached_albums,
-    search_cached_artists, search_cached_songs, set_library_item_favorite, set_library_item_rating,
-    sync_library,
+    get_album_page, get_artist_page, get_cached_album, get_cached_albums, get_cached_artist,
+    get_cached_songs, get_home_album_sections, get_library_summary, get_library_sync_status,
+    search_cached_albums, search_cached_artists, search_cached_songs, set_library_item_favorite,
+    set_library_item_rating, sync_library,
 };
 use crate::commands::player::{
     get_player_queue, get_player_status, player_next, player_pause, player_play_album,
@@ -73,6 +73,8 @@ pub fn run() {
             get_cached_artist,
             get_cached_album,
             get_cached_albums,
+            get_album_page,
+            get_artist_page,
             get_home_album_sections,
             get_cached_songs,
             search_cached_albums,
