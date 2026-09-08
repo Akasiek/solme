@@ -59,7 +59,7 @@ const isActiveRoute = (route: string) => {
     >
       <component
         :is="item.icon"
-        class="mt-0.5 size-5 shrink-0 transition-transform duration-200 ease-out"
+        class="mt-0.5 size-5 shrink-0 transition-transform delay-100 duration-300 ease-[cubic-bezier(0.678,-0.202,0.308,1.397)] group-hover:delay-0"
         :class="item.animation"
       />
       <span
