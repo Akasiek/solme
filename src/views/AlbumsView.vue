@@ -8,6 +8,7 @@ import AsyncViewState from "@/components/AsyncViewState.vue";
 import LibraryCardGrid from "@/components/LibraryCardGrid.vue";
 import PaginatedResults from "@/components/PaginatedResults.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
+import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
 import type { AlbumPage, AlbumPageSort } from "@/types";
 
 const query = ref("");
@@ -16,6 +17,8 @@ const albumTypeKey = computed(() => selectedAlbumTypes.value.join("\0"));
 const sort = ref<AlbumPageSort>("artist");
 const page = ref(1);
 const pageSize = 24;
+
+useKeepAliveScrollRestoration();
 
 const {
   data: albumPage,

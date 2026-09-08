@@ -7,12 +7,15 @@ import AsyncViewState from "@/components/AsyncViewState.vue";
 import LibraryCardGrid from "@/components/LibraryCardGrid.vue";
 import PaginatedResults from "@/components/PaginatedResults.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
+import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
 import type { ArtistPageSort, CachedArtist, Paginated } from "@/types";
 
 const query = ref("");
 const sort = ref<ArtistPageSort>("name");
 const page = ref(1);
 const pageSize = 24;
+
+useKeepAliveScrollRestoration();
 const {
   data,
   isLoading,

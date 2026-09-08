@@ -20,7 +20,11 @@ const { isSearchModalOpen } = storeToRefs(layoutStore);
     <div class="flex min-h-0 flex-1">
       <LeftAsideMenu />
       <main class="min-w-0 flex-1 overflow-y-auto">
-        <RouterView />
+        <RouterView v-slot="{ Component }">
+          <KeepAlive include="AlbumsView,ArtistsView">
+            <component :is="Component" />
+          </KeepAlive>
+        </RouterView>
       </main>
       <RightAsideMenu />
     </div>
