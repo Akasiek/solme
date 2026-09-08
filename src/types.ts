@@ -64,6 +64,18 @@ export interface CachedAlbum {
   rating: number | null;
 }
 
+export interface Paginated<T> {
+  items: T[];
+  total: number;
+}
+
+export interface AlbumPage extends Paginated<CachedAlbum> {
+  albumTypes: string[];
+}
+
+export type AlbumPageSort = "artist" | "title" | "newest" | "oldest" | "recently-added";
+export type ArtistPageSort = "name" | "most-albums" | "fewest-albums";
+
 export interface CachedAlbumDetails {
   album: CachedAlbum;
   genres: string[];

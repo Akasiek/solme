@@ -3,6 +3,7 @@ import { onMounted, ref } from "vue";
 export function useAsyncData<T>(loader: () => Promise<T>, initialValue: T) {
   const data = ref<T>(initialValue);
   const isLoading = ref(true);
+  const hasLoaded = ref(false);
   const error = ref<string | null>(null);
 
   async function reload() {
@@ -15,6 +16,7 @@ export function useAsyncData<T>(loader: () => Promise<T>, initialValue: T) {
       error.value = cause instanceof Error ? cause.message : "Unexpected error.";
     } finally {
       isLoading.value = false;
+      hasLoaded.value = true;
     }
   }
 
@@ -25,6 +27,7 @@ export function useAsyncData<T>(loader: () => Promise<T>, initialValue: T) {
   return {
     data,
     isLoading,
+    hasLoaded,
     error,
     reload,
   };
