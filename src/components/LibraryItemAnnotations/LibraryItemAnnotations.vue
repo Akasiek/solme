@@ -9,7 +9,7 @@ defineProps<{
 </script>
 
 <template>
-  <div class="flex flex-wrap items-center gap-1.5">
+  <div class="flex items-center gap-1.5">
     <FavoriteButton :item="item" />
     <RatingStars :item="item" />
   </div>
