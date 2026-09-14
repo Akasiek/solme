@@ -29,7 +29,7 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize } = useAsid
       <div class="min-h-0 flex-1 overflow-y-auto">
         <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
       </div>
-      <div class="shrink-0 pt-4 pb-4">
+      <div class="shrink-0 py-2">
         <LeftAsideMenuToggleButton />
       </div>
     </div>
