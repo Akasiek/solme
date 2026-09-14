@@ -114,13 +114,13 @@ function optionalNumber(event: Event) {
     </div>
   </fieldset>
 
-  <fieldset v-if="genres.length">
+  <fieldset v-if="genres.length" class="min-w-0">
     <legend class="mb-2 font-sans text-sm font-bold text-zinc-200">Genre</legend>
-    <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
+    <div class="max-h-44 min-w-0 space-y-1 overflow-y-auto pr-1">
       <label
         v-for="genre in genres"
         :key="genre"
-        class="flex cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
+        class="flex min-w-0 cursor-pointer items-center gap-2.5 rounded px-2 py-1.5 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
       >
         <span class="relative size-4 shrink-0">
           <input
@@ -134,7 +134,7 @@ function optionalNumber(event: Event) {
             class="pointer-events-none absolute inset-0 size-4 stroke-3 text-white opacity-0 transition-opacity peer-checked:opacity-100"
           />
         </span>
-        <span class="truncate font-sans" :title="genre">{{ genre }}</span>
+        <span class="min-w-0 flex-1 truncate font-sans" :title="genre">{{ genre }}</span>
       </label>
     </div>
   </fieldset>
