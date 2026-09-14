@@ -23,7 +23,7 @@ const items = [
     icon: Disc3,
     route: "/albums",
     animation:
-      "group-hover:rotate-390 group-hover:scale-110 duration-500 ease-[cubic-bezier(0.678,-0.202,0.308,1.397)]",
+      "group-hover:rotate-390 group-hover:scale-110 duration-600 ease-[cubic-bezier(0.678,-0.202,0.308,1.397)]",
   },
   {
     name: "Artists",

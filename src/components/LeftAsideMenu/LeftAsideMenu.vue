@@ -26,8 +26,10 @@ const { asideWidth, isCollapsed, isResizing, resetWidth, startResize } = useAsid
     <div class="flex min-h-0 flex-1 flex-col px-3 pt-3">
       <LeftAsideMenuHeader :is-collapsed="isCollapsed" />
       <LeftAsideMenuHistoryNavigation :is-collapsed="isCollapsed" />
-      <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
-      <div class="mt-auto pt-4 pb-4">
+      <div class="min-h-0 flex-1 overflow-y-auto">
+        <LeftAsideMenuNavigation :is-collapsed="isCollapsed" />
+      </div>
+      <div class="shrink-0 pt-4 pb-4">
         <LeftAsideMenuToggleButton />
       </div>
     </div>
