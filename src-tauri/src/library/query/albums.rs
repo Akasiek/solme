@@ -5,7 +5,8 @@ use sqlx::{QueryBuilder, Sqlite, Transaction};
 use super::super::{
     fuzzy_search,
     models::{
-        AlbumPage, AlbumPageSort, AlbumSort, AlbumWithSongs, CachedAlbum, Paginated, Pagination,
+        AlbumPage, AlbumPageSort, AlbumSort, AlbumWithSongs, CachedAlbum, CatalogFilter, Paginated,
+        Pagination,
     },
 };
 use crate::database::SqliteRepository;
@@ -102,22 +103,32 @@ pub(crate) async fn album_page(
     profile_id: &str,
     search: &str,
     album_types: &[String],
+    filters: CatalogFilter,
     sort: AlbumPageSort,
     pagination: Pagination,
 ) -> Result<AlbumPage, String> {
-    let mut items_query = album_page_query(profile_id, search, album_types, sort, pagination);
+    let mut items_query = album_page_query(
+        profile_id,
+        search,
+        album_types,
+        filters.clone(),
+        sort,
+        pagination,
+    );
     let items = items_query
         .build_query_as::<CachedAlbum>()
         .fetch_all(&repo.pool)
         .await
         .map_err(|error| format!("Failed to read album page: {error}"))?;
 
-    let total = count_albums(repo, profile_id, search, album_types).await?;
+    let total = count_albums(repo, profile_id, search, album_types, filters).await?;
     let album_types = available_album_types(repo, profile_id).await?;
+    let genres = available_genres(repo, profile_id).await?;
 
     Ok(AlbumPage {
         page: Paginated { items, total },
         album_types,
+        genres,
     })
 }
 
@@ -125,20 +136,38 @@ fn album_page_query(
     profile_id: &str,
     search: &str,
     album_types: &[String],
+    filters: CatalogFilter,
     sort: AlbumPageSort,
     pagination: Pagination,
 ) -> QueryBuilder<Sqlite> {
     let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
     query.push_bind(profile_id.to_owned());
 
-    push_album_page_search(&mut query, search.trim(), album_types);
+    push_album_page_filters(&mut query, search.trim(), album_types, filters);
     push_album_page_sort(&mut query, sort);
     push_album_page_pagination(&mut query, pagination);
 
     query
 }
 
-fn push_album_page_search(query: &mut QueryBuilder<Sqlite>, search: &str, album_types: &[String]) {
+fn push_album_page_filters(
+    query: &mut QueryBuilder<Sqlite>,
+    search: &str,
+    album_types: &[String],
+    filters: CatalogFilter,
+) {
+    let filters = filters.normalized();
+    push_album_search_filter(query, search);
+    push_album_types_filter(query, album_types);
+    push_annotation_filters(query, filters.clone());
+    push_album_from_year_filter(query, filters.from_year);
+    push_album_to_year_filter(query, filters.to_year);
+    push_album_genres_filter(query, filters.genres);
+    push_album_never_played_filter(query, filters.never_played);
+    push_album_minimum_play_count_filter(query, filters.minimum_play_count);
+}
+
+fn push_album_search_filter(query: &mut QueryBuilder<Sqlite>, search: &str) {
     if !search.is_empty() {
         query
             .push(" AND (INSTR(LOWER(a.name), LOWER(")
@@ -147,6 +176,9 @@ fn push_album_page_search(query: &mut QueryBuilder<Sqlite>, search: &str, album_
             .push_bind(search.to_owned())
             .push(")) > 0)");
     }
+}
+
+fn push_album_types_filter(query: &mut QueryBuilder<Sqlite>, album_types: &[String]) {
     if !album_types.is_empty() {
         query.push(" AND a.album_type IN (");
         let mut types = query.separated(", ");
@@ -154,6 +186,75 @@ fn push_album_page_search(query: &mut QueryBuilder<Sqlite>, search: &str, album_
             types.push_bind(album_type.clone());
         }
         types.push_unseparated(")");
+    }
+}
+
+fn push_album_from_year_filter(query: &mut QueryBuilder<Sqlite>, from_year: Option<i64>) {
+    if let Some(from_year) = from_year {
+        query.push(" AND a.year >= ").push_bind(from_year);
+    }
+}
+
+fn push_album_to_year_filter(query: &mut QueryBuilder<Sqlite>, to_year: Option<i64>) {
+    if let Some(to_year) = to_year {
+        query.push(" AND a.year <= ").push_bind(to_year);
+    }
+}
+
+fn push_album_genres_filter(query: &mut QueryBuilder<Sqlite>, selected_genres: Vec<String>) {
+    if !selected_genres.is_empty() {
+        query.push(
+            " AND EXISTS (SELECT 1 FROM album_genres ag
+             WHERE ag.profile_id = a.profile_id AND ag.generation = a.generation
+               AND ag.album_id = a.remote_id AND ag.genre IN (",
+        );
+        let mut genres = query.separated(", ");
+        for genre in selected_genres {
+            genres.push_bind(genre);
+        }
+        genres.push_unseparated("))");
+    }
+}
+
+fn push_album_never_played_filter(query: &mut QueryBuilder<Sqlite>, never_played: bool) {
+    if never_played {
+        query.push(" AND a.play_count = 0");
+    }
+}
+
+fn push_album_minimum_play_count_filter(
+    query: &mut QueryBuilder<Sqlite>,
+    minimum_play_count: Option<i64>,
+) {
+    if let Some(minimum_play_count) = minimum_play_count {
+        query
+            .push(" AND a.play_count >= ")
+            .push_bind(minimum_play_count);
+    }
+}
+
+pub(super) fn push_annotation_filters(query: &mut QueryBuilder<Sqlite>, filters: CatalogFilter) {
+    let filters = filters.normalized();
+    push_favorite_filter(query, filters.favorite_only);
+    push_minimum_rating_filter(query, filters.minimum_rating);
+    push_unrated_filter(query, filters.unrated_only);
+}
+
+fn push_favorite_filter(query: &mut QueryBuilder<Sqlite>, favorite_only: bool) {
+    if favorite_only {
+        query.push(" AND a.favorite = 1");
+    }
+}
+
+fn push_minimum_rating_filter(query: &mut QueryBuilder<Sqlite>, minimum_rating: Option<i64>) {
+    if let Some(minimum_rating) = minimum_rating {
+        query.push(" AND a.rating >= ").push_bind(minimum_rating);
+    }
+}
+
+fn push_unrated_filter(query: &mut QueryBuilder<Sqlite>, unrated_only: bool) {
+    if unrated_only {
+        query.push(" AND a.rating IS NULL");
     }
 }
 
@@ -178,6 +279,12 @@ fn push_album_page_sort(query: &mut QueryBuilder<Sqlite>, sort: AlbumPageSort) {
         AlbumPageSort::RecentlyAdded => {
             "ORDER BY a.server_added_at IS NULL, a.server_added_at DESC, a.name COLLATE NOCASE"
         }
+        AlbumPageSort::RecentlyPlayed => {
+            "ORDER BY a.last_played_at IS NULL, a.last_played_at DESC, a.name COLLATE NOCASE"
+        }
+        AlbumPageSort::MostPlayed => {
+            "ORDER BY a.play_count DESC, a.name COLLATE NOCASE"
+        }
     });
 }
 
@@ -192,6 +299,7 @@ async fn count_albums(
     profile_id: &str,
     search: &str,
     album_types: &[String],
+    filters: CatalogFilter,
 ) -> Result<i64, String> {
     let mut query = QueryBuilder::new(
         "SELECT COUNT(*) FROM albums a
@@ -201,7 +309,7 @@ async fn count_albums(
          WHERE a.profile_id = ",
     );
     query.push_bind(profile_id);
-    push_album_page_search(&mut query, search.trim(), album_types);
+    push_album_page_filters(&mut query, search.trim(), album_types, filters);
 
     query
         .build_query_scalar::<i64>()
@@ -227,6 +335,25 @@ async fn available_album_types(
     .fetch_all(&repo.pool)
     .await
     .map_err(|error| format!("Failed to read album types: {error}"))
+}
+
+async fn available_genres(
+    repo: &SqliteRepository,
+    profile_id: &str,
+) -> Result<Vec<String>, String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT ag.genre
+         FROM album_genres ag
+         JOIN library_sync_state s
+           ON s.profile_id = ag.profile_id
+          AND s.active_generation = ag.generation
+         WHERE ag.profile_id = ? AND TRIM(ag.genre) != ''
+         ORDER BY ag.genre COLLATE NOCASE",
+    )
+    .bind(profile_id)
+    .fetch_all(&repo.pool)
+    .await
+    .map_err(|error| format!("Failed to read album genres: {error}"))
 }
 
 pub(crate) async fn albums_by_ids(

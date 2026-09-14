@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import { Search, SlidersHorizontal } from "@lucide/vue";
 import FormSelect from "@/components/FormSelect.vue";
+import CatalogFilters from "@/components/CatalogFilters.vue";
 import TextInput from "@/components/TextInput.vue";
-import type { ArtistPageSort } from "@/types";
+import type { ArtistPageSort, CatalogFilter } from "@/types";
+
+defineProps<{ genres: string[] }>();
 
 const query = defineModel<string>("query", { required: true });
+const filters = defineModel<CatalogFilter>("filters", { required: true });
 const sort = defineModel<ArtistPageSort>("sort", { required: true });
 </script>
 
@@ -18,6 +22,10 @@ const sort = defineModel<ArtistPageSort>("sort", { required: true });
       <option value="name">Name</option>
       <option value="most-albums">Most albums</option>
       <option value="fewest-albums">Fewest albums</option>
+      <option value="recently-played">Recently played</option>
+      <option value="most-played">Most played</option>
+      <option value="recently-added">Recently added</option>
     </FormSelect>
+    <CatalogFilters v-model="filters" :genres="genres" />
   </aside>
 </template>

@@ -6,9 +6,10 @@ use crate::server::{AlbumQuery, MusicServerService};
 
 use super::{
     models::{
-        Album, AlbumPage, AlbumPageSort, AlbumSort, ArtistPageSort, CachedAlbum,
-        CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, HomeAlbumSections,
-        LibraryItemAnnotation, LibraryItemKind, LibrarySummary, Paginated, Pagination,
+        Album, AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, CachedAlbum,
+        CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter,
+        HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary, Paginated,
+        Pagination,
     },
     repository::LibraryCatalogRepository,
 };
@@ -99,6 +100,7 @@ impl LibraryCatalogService {
         &self,
         query: &str,
         album_types: &[String],
+        filters: CatalogFilter,
         sort: AlbumPageSort,
         pagination: Pagination,
     ) -> Result<AlbumPage, String> {
@@ -109,27 +111,32 @@ impl LibraryCatalogService {
                     total: 0,
                 },
                 album_types: Vec::new(),
+                genres: Vec::new(),
             });
         };
         self.repository
-            .album_page(&profile_id, query, album_types, sort, pagination)
+            .album_page(&profile_id, query, album_types, filters, sort, pagination)
             .await
     }
 
     pub async fn artist_page(
         &self,
         query: &str,
+        filters: CatalogFilter,
         sort: ArtistPageSort,
         pagination: Pagination,
-    ) -> Result<Paginated<CachedArtist>, String> {
+    ) -> Result<ArtistPage, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
-            return Ok(Paginated {
-                items: Vec::new(),
-                total: 0,
+            return Ok(ArtistPage {
+                page: Paginated {
+                    items: Vec::new(),
+                    total: 0,
+                },
+                genres: Vec::new(),
             });
         };
         self.repository
-            .artist_page(&profile_id, query, sort, pagination)
+            .artist_page(&profile_id, query, filters, sort, pagination)
             .await
     }
 

@@ -3,7 +3,9 @@ use super::super::{
     models::{Artist, Genre},
 };
 use crate::database::SqliteRepository;
-use crate::library::models::{ArtistPageSort, CachedAlbum, CachedArtist, Paginated, Pagination};
+use crate::library::models::{
+    ArtistPage, ArtistPageSort, CachedAlbum, CachedArtist, CatalogFilter, Paginated, Pagination,
+};
 use sqlx::{QueryBuilder, Sqlite, Transaction};
 
 const SQLITE_BIND_LIMIT: usize = 999;
@@ -69,24 +71,31 @@ pub(crate) async fn artist_page(
     repo: &SqliteRepository,
     profile_id: &str,
     search: &str,
+    filters: CatalogFilter,
     sort: ArtistPageSort,
     pagination: Pagination,
-) -> Result<Paginated<CachedArtist>, String> {
-    let mut items_query = artist_page_query(profile_id, search, sort, pagination);
+) -> Result<ArtistPage, String> {
+    let mut items_query = artist_page_query(profile_id, search, filters.clone(), sort, pagination);
     let items = items_query
         .build_query_as::<CachedArtist>()
         .fetch_all(&repo.pool)
         .await
         .map_err(|error| format!("Failed to read artist page: {error}"))?;
 
-    let total = count_artists(repo, profile_id, search).await?;
+    let total = count_artists(repo, profile_id, search, filters).await?;
 
-    Ok(Paginated { items, total })
+    let genres = available_artist_genres(repo, profile_id).await?;
+
+    Ok(ArtistPage {
+        page: Paginated { items, total },
+        genres,
+    })
 }
 
 fn artist_page_query(
     profile_id: &str,
     search: &str,
+    filters: CatalogFilter,
     sort: ArtistPageSort,
     pagination: Pagination,
 ) -> QueryBuilder<Sqlite> {
@@ -94,6 +103,7 @@ fn artist_page_query(
     query.push_bind(profile_id.to_owned());
 
     push_artist_page_search(&mut query, search);
+    push_artist_page_filters(&mut query, filters);
     push_artist_page_sort(&mut query, sort);
     push_artist_page_pagination(&mut query, pagination);
 
@@ -105,6 +115,30 @@ fn push_artist_page_sort(query: &mut QueryBuilder<Sqlite>, sort: ArtistPageSort)
         ArtistPageSort::Name => "ORDER BY a.name COLLATE NOCASE",
         ArtistPageSort::MostAlbums => "ORDER BY a.album_count DESC, a.name COLLATE NOCASE",
         ArtistPageSort::FewestAlbums => "ORDER BY a.album_count, a.name COLLATE NOCASE",
+        ArtistPageSort::RecentlyPlayed => {
+            "ORDER BY (SELECT MAX(album.last_played_at) FROM albums album
+                       WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                         AND album.artist_id = a.remote_id) IS NULL,
+                      (SELECT MAX(album.last_played_at) FROM albums album
+                       WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                         AND album.artist_id = a.remote_id) DESC,
+                      a.name COLLATE NOCASE"
+        }
+        ArtistPageSort::MostPlayed => {
+            "ORDER BY (SELECT COALESCE(SUM(album.play_count), 0) FROM albums album
+                       WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                         AND album.artist_id = a.remote_id) DESC,
+                      a.name COLLATE NOCASE"
+        }
+        ArtistPageSort::RecentlyAdded => {
+            "ORDER BY (SELECT MAX(album.server_added_at) FROM albums album
+                       WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                         AND album.artist_id = a.remote_id) IS NULL,
+                      (SELECT MAX(album.server_added_at) FROM albums album
+                       WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                         AND album.artist_id = a.remote_id) DESC,
+                      a.name COLLATE NOCASE"
+        }
     });
 }
 
@@ -122,10 +156,90 @@ fn push_artist_page_search(query: &mut QueryBuilder<Sqlite>, search: &str) {
     }
 }
 
+fn push_artist_page_filters(query: &mut QueryBuilder<Sqlite>, filters: CatalogFilter) {
+    let filters = filters.normalized();
+    super::albums::push_annotation_filters(query, filters.clone());
+    push_artist_album_filters(query, filters.from_year, filters.to_year, filters.genres);
+    push_artist_never_played_filter(query, filters.never_played);
+    push_artist_minimum_play_count_filter(query, filters.minimum_play_count);
+}
+
+fn push_artist_album_filters(
+    query: &mut QueryBuilder<Sqlite>,
+    from_year: Option<i64>,
+    to_year: Option<i64>,
+    selected_genres: Vec<String>,
+) {
+    if from_year.is_some() || to_year.is_some() || !selected_genres.is_empty() {
+        query.push(
+            " AND EXISTS (SELECT 1 FROM albums album
+             WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+               AND album.artist_id = a.remote_id",
+        );
+        push_artist_from_year_filter(query, from_year);
+        push_artist_to_year_filter(query, to_year);
+        push_artist_genres_filter(query, selected_genres);
+        query.push(")");
+    }
+}
+
+fn push_artist_from_year_filter(query: &mut QueryBuilder<Sqlite>, from_year: Option<i64>) {
+    if let Some(from_year) = from_year {
+        query.push(" AND album.year >= ").push_bind(from_year);
+    }
+}
+
+fn push_artist_to_year_filter(query: &mut QueryBuilder<Sqlite>, to_year: Option<i64>) {
+    if let Some(to_year) = to_year {
+        query.push(" AND album.year <= ").push_bind(to_year);
+    }
+}
+
+fn push_artist_genres_filter(query: &mut QueryBuilder<Sqlite>, selected_genres: Vec<String>) {
+    if !selected_genres.is_empty() {
+        query.push(
+            " AND EXISTS (SELECT 1 FROM album_genres ag
+             WHERE ag.profile_id = album.profile_id AND ag.generation = album.generation
+               AND ag.album_id = album.remote_id AND ag.genre IN (",
+        );
+        let mut genres = query.separated(", ");
+        for genre in selected_genres {
+            genres.push_bind(genre);
+        }
+        genres.push_unseparated("))");
+    }
+}
+
+fn push_artist_never_played_filter(query: &mut QueryBuilder<Sqlite>, never_played: bool) {
+    if never_played {
+        query.push(
+            " AND NOT EXISTS (SELECT 1 FROM albums album
+             WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+               AND album.artist_id = a.remote_id AND album.play_count > 0)",
+        );
+    }
+}
+
+fn push_artist_minimum_play_count_filter(
+    query: &mut QueryBuilder<Sqlite>,
+    minimum_play_count: Option<i64>,
+) {
+    if let Some(minimum_play_count) = minimum_play_count {
+        query
+            .push(
+                " AND (SELECT COALESCE(SUM(album.play_count), 0) FROM albums album
+                 WHERE album.profile_id = a.profile_id AND album.generation = a.generation
+                   AND album.artist_id = a.remote_id) >= ",
+            )
+            .push_bind(minimum_play_count);
+    }
+}
+
 async fn count_artists(
     repo: &SqliteRepository,
     profile_id: &str,
     search: &str,
+    filters: CatalogFilter,
 ) -> Result<i64, String> {
     let mut query = QueryBuilder::new(
         "SELECT COUNT(*) FROM artists a JOIN library_sync_state s
@@ -133,12 +247,31 @@ async fn count_artists(
     );
     query.push_bind(profile_id);
     push_artist_page_search(&mut query, search);
+    push_artist_page_filters(&mut query, filters);
 
     query
         .build_query_scalar::<i64>()
         .fetch_one(&repo.pool)
         .await
         .map_err(|error| format!("Failed to count filtered artists: {error}"))
+}
+
+async fn available_artist_genres(
+    repo: &SqliteRepository,
+    profile_id: &str,
+) -> Result<Vec<String>, String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT ag.genre
+         FROM album_genres ag
+         JOIN library_sync_state s
+           ON s.profile_id = ag.profile_id AND s.active_generation = ag.generation
+         WHERE ag.profile_id = ? AND TRIM(ag.genre) != ''
+         ORDER BY ag.genre COLLATE NOCASE",
+    )
+    .bind(profile_id)
+    .fetch_all(&repo.pool)
+    .await
+    .map_err(|error| format!("Failed to read artist genres: {error}"))
 }
 
 pub(crate) async fn insert_artists(

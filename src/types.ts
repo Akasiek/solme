@@ -73,10 +73,39 @@ export interface Paginated<T> {
 
 export interface AlbumPage extends Paginated<CachedAlbum> {
   albumTypes: string[];
+  genres: string[];
 }
 
-export type AlbumPageSort = "artist" | "title" | "newest" | "oldest" | "recently-added";
-export type ArtistPageSort = "name" | "most-albums" | "fewest-albums";
+export interface ArtistPage extends Paginated<CachedArtist> {
+  genres: string[];
+}
+
+export interface CatalogFilter {
+  favoriteOnly: boolean;
+  minimumRating: number | null;
+  unratedOnly: boolean;
+  fromYear: number | null;
+  toYear: number | null;
+  genres: string[];
+  neverPlayed: boolean;
+  minimumPlayCount: number | null;
+}
+
+export type AlbumPageSort =
+  | "artist"
+  | "title"
+  | "newest"
+  | "oldest"
+  | "recently-added"
+  | "recently-played"
+  | "most-played";
+export type ArtistPageSort =
+  | "name"
+  | "most-albums"
+  | "fewest-albums"
+  | "recently-played"
+  | "most-played"
+  | "recently-added";
 
 export interface CachedAlbumDetails {
   album: CachedAlbum;

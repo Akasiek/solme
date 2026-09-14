@@ -16,6 +16,45 @@ impl Pagination {
     }
 }
 
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogFilter {
+    pub favorite_only: bool,
+    pub minimum_rating: Option<i64>,
+    pub unrated_only: bool,
+    pub from_year: Option<i64>,
+    pub to_year: Option<i64>,
+    pub genres: Vec<String>,
+    pub never_played: bool,
+    pub minimum_play_count: Option<i64>,
+}
+
+impl CatalogFilter {
+    pub fn normalized(self) -> Self {
+        let minimum_rating = if self.unrated_only {
+            None
+        } else {
+            self.minimum_rating
+                .filter(|rating| (1..=5).contains(rating))
+        };
+        let minimum_play_count = if self.never_played {
+            None
+        } else {
+            self.minimum_play_count.filter(|count| *count > 0)
+        };
+        Self {
+            favorite_only: self.favorite_only,
+            minimum_rating,
+            unrated_only: self.unrated_only,
+            from_year: self.from_year.filter(|year| *year > 0),
+            to_year: self.to_year.filter(|year| *year > 0),
+            genres: self.genres,
+            never_played: self.never_played,
+            minimum_play_count,
+        }
+    }
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Paginated<T> {
@@ -39,6 +78,9 @@ pub enum ArtistPageSort {
     Name,
     MostAlbums,
     FewestAlbums,
+    RecentlyPlayed,
+    MostPlayed,
+    RecentlyAdded,
 }
 
 #[derive(Clone)]
@@ -83,6 +125,15 @@ pub struct AlbumPage {
     #[serde(flatten)]
     pub page: Paginated<CachedAlbum>,
     pub album_types: Vec<String>,
+    pub genres: Vec<String>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ArtistPage {
+    #[serde(flatten)]
+    pub page: Paginated<CachedArtist>,
+    pub genres: Vec<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
@@ -93,6 +144,8 @@ pub enum AlbumPageSort {
     Newest,
     Oldest,
     RecentlyAdded,
+    RecentlyPlayed,
+    MostPlayed,
 }
 
 #[derive(Clone)]

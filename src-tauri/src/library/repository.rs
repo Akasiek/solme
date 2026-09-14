@@ -2,9 +2,9 @@ use async_trait::async_trait;
 
 use super::{
     models::{
-        AlbumPage, AlbumPageSort, AlbumSort, ArtistPageSort, ArtworkCacheRecord, ArtworkCandidate,
-        CachedAlbum, CachedArtist, CachedSong, LibraryItemAnnotation, LibraryItemKind,
-        LibrarySnapshot, LibrarySummary, Paginated, Pagination,
+        AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, ArtworkCacheRecord,
+        ArtworkCandidate, CachedAlbum, CachedArtist, CachedSong, CatalogFilter,
+        LibraryItemAnnotation, LibraryItemKind, LibrarySnapshot, LibrarySummary, Pagination,
     },
     query,
 };
@@ -65,6 +65,7 @@ pub trait LibraryCatalogRepository: LibraryStateRepository {
         _profile_id: &str,
         _query: &str,
         _album_types: &[String],
+        _filters: CatalogFilter,
         _sort: AlbumPageSort,
         _pagination: Pagination,
     ) -> Result<AlbumPage, String> {
@@ -74,9 +75,10 @@ pub trait LibraryCatalogRepository: LibraryStateRepository {
         &self,
         _profile_id: &str,
         _query: &str,
+        _filters: CatalogFilter,
         _sort: ArtistPageSort,
         _pagination: Pagination,
-    ) -> Result<Paginated<CachedArtist>, String> {
+    ) -> Result<ArtistPage, String> {
         Err("Artist pagination is not implemented".to_string())
     }
     async fn albums_by_ids(
@@ -246,20 +248,31 @@ impl LibraryCatalogRepository for SqliteRepository {
         profile_id: &str,
         search: &str,
         album_types: &[String],
+        filters: CatalogFilter,
         sort: AlbumPageSort,
         pagination: Pagination,
     ) -> Result<AlbumPage, String> {
-        query::album_page(self, profile_id, search, album_types, sort, pagination).await
+        query::album_page(
+            self,
+            profile_id,
+            search,
+            album_types,
+            filters,
+            sort,
+            pagination,
+        )
+        .await
     }
 
     async fn artist_page(
         &self,
         profile_id: &str,
         search: &str,
+        filters: CatalogFilter,
         sort: ArtistPageSort,
         pagination: Pagination,
-    ) -> Result<Paginated<CachedArtist>, String> {
-        query::artist_page(self, profile_id, search, sort, pagination).await
+    ) -> Result<ArtistPage, String> {
+        query::artist_page(self, profile_id, search, filters, sort, pagination).await
     }
 
     async fn albums_by_ids(
@@ -353,7 +366,8 @@ mod tests {
     use crate::database::{SqliteRepository, DATABASE_FILE_NAME};
     use crate::library::models::{
         Album, AlbumPageSort, AlbumSort, AlbumWithSongs, Artist, ArtistPageSort,
-        ArtworkCacheRecord, Genre, LibraryItemKind, LibrarySnapshot, Pagination, Song,
+        ArtworkCacheRecord, CatalogFilter, Genre, LibraryItemKind, LibrarySnapshot, Pagination,
+        Song,
     };
     #[test]
     fn activates_complete_generation() {
@@ -877,6 +891,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)] // Covers filters, facets, sorting, counts, and pagination together.
     fn filters_sorts_and_paginates_album_page_in_sqlite() {
         tauri::async_runtime::block_on(async {
             let (repository, directory) = repository().await;
@@ -901,6 +916,7 @@ mod tests {
                     "profile",
                     "a",
                     &["album".to_string()],
+                    CatalogFilter::default(),
                     AlbumPageSort::Newest,
                     Pagination {
                         offset: 0,
@@ -919,6 +935,7 @@ mod tests {
                     "profile",
                     "a",
                     &["album".to_string()],
+                    CatalogFilter::default(),
                     AlbumPageSort::Newest,
                     Pagination {
                         offset: 1,
@@ -929,6 +946,60 @@ mod tests {
                 .unwrap();
             assert_eq!(second_page.page.total, 2);
             assert_eq!(second_page.page.items[0].remote_id, "album-1");
+
+            snapshot.albums[2].album.favorite = true;
+            snapshot.albums[2].album.rating = Some(4);
+            snapshot.albums[2].album.play_count = 7;
+            snapshot.albums[2].album.last_played_at = Some("2026-09-01T12:00:00Z".to_string());
+            repository
+                .activate_snapshot("profile", "generation-2", None, &snapshot, 124)
+                .await
+                .unwrap();
+            let annotated = repository
+                .album_page(
+                    "profile",
+                    "a",
+                    &["album".to_string()],
+                    CatalogFilter {
+                        favorite_only: true,
+                        minimum_rating: Some(4),
+                        from_year: Some(2026),
+                        genres: vec!["Jazz".to_string()],
+                        minimum_play_count: Some(5),
+                        ..CatalogFilter::default()
+                    },
+                    AlbumPageSort::Newest,
+                    Pagination {
+                        offset: 0,
+                        limit: 24,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(annotated.page.total, 1);
+            assert_eq!(annotated.page.items[0].remote_id, "album-3");
+            assert_eq!(annotated.genres, vec!["Jazz"]);
+
+            let unplayed = repository
+                .album_page(
+                    "profile",
+                    "a",
+                    &["album".to_string()],
+                    CatalogFilter {
+                        unrated_only: true,
+                        never_played: true,
+                        ..CatalogFilter::default()
+                    },
+                    AlbumPageSort::RecentlyPlayed,
+                    Pagination {
+                        offset: 0,
+                        limit: 24,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(unplayed.page.total, 1);
+            assert_eq!(unplayed.page.items[0].remote_id, "album-1");
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();
@@ -943,6 +1014,10 @@ mod tests {
             for (index, artist) in snapshot.artists.iter_mut().enumerate() {
                 artist.album_count = index as i64;
             }
+            snapshot.artists[19].favorite = true;
+            snapshot.artists[19].rating = Some(5);
+            snapshot.albums[19].album.play_count = 9;
+            snapshot.albums[19].album.last_played_at = Some("2026-09-02T12:00:00Z".to_string());
             repository
                 .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
                 .await
@@ -952,6 +1027,7 @@ mod tests {
                 .artist_page(
                     "profile",
                     "artist 1",
+                    CatalogFilter::default(),
                     ArtistPageSort::MostAlbums,
                     Pagination {
                         offset: 0,
@@ -960,10 +1036,34 @@ mod tests {
                 )
                 .await
                 .unwrap();
-            assert_eq!(result.total, 11);
-            assert_eq!(result.items.len(), 2);
-            assert_eq!(result.items[0].name, "Artist 19");
-            assert_eq!(result.items[1].name, "Artist 18");
+            assert_eq!(result.page.total, 11);
+            assert_eq!(result.page.items.len(), 2);
+            assert_eq!(result.page.items[0].name, "Artist 19");
+            assert_eq!(result.page.items[1].name, "Artist 18");
+
+            let annotated = repository
+                .artist_page(
+                    "profile",
+                    "artist 1",
+                    CatalogFilter {
+                        favorite_only: true,
+                        minimum_rating: Some(5),
+                        from_year: Some(2026),
+                        genres: vec!["Jazz".to_string()],
+                        minimum_play_count: Some(9),
+                        ..CatalogFilter::default()
+                    },
+                    ArtistPageSort::MostAlbums,
+                    Pagination {
+                        offset: 0,
+                        limit: 24,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(annotated.page.total, 1);
+            assert_eq!(annotated.page.items[0].name, "Artist 19");
+            assert_eq!(annotated.genres, vec!["Jazz"]);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

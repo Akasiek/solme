@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { Check, Search, SlidersHorizontal } from "@lucide/vue";
 import FormSelect from "@/components/FormSelect.vue";
+import CatalogFilters from "@/components/CatalogFilters.vue";
 import TextInput from "@/components/TextInput.vue";
-import type { AlbumPageSort } from "@/types";
+import type { AlbumPageSort, CatalogFilter } from "@/types";
 
-defineProps<{ albumTypes: string[] }>();
+defineProps<{ albumTypes: string[]; genres: string[] }>();
 const query = defineModel<string>("query", { required: true });
 const selectedAlbumTypes = defineModel<string[]>("selectedAlbumTypes", { required: true });
+const filters = defineModel<CatalogFilter>("filters", { required: true });
 const sort = defineModel<AlbumPageSort>("sort", { required: true });
 </script>
 
@@ -21,6 +23,16 @@ const sort = defineModel<AlbumPageSort>("sort", { required: true });
     >
       <template #leading><Search class="size-4" /></template>
     </TextInput>
+    <FormSelect v-model="sort" label="Sort by">
+      <template #icon><SlidersHorizontal class="size-4" /></template>
+      <option value="artist">Artist</option>
+      <option value="title">Album title</option>
+      <option value="newest">Newest release</option>
+      <option value="oldest">Oldest release</option>
+      <option value="recently-added">Recently added</option>
+      <option value="recently-played">Recently played</option>
+      <option value="most-played">Most played</option>
+    </FormSelect>
     <fieldset>
       <legend class="mb-2 font-sans text-sm font-bold text-zinc-200">Album type</legend>
       <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
@@ -45,13 +57,6 @@ const sort = defineModel<AlbumPageSort>("sort", { required: true });
         </label>
       </div>
     </fieldset>
-    <FormSelect v-model="sort" label="Sort by">
-      <template #icon><SlidersHorizontal class="size-4" /></template>
-      <option value="artist">Artist</option>
-      <option value="title">Album title</option>
-      <option value="newest">Newest release</option>
-      <option value="oldest">Oldest release</option>
-      <option value="recently-added">Recently added</option>
-    </FormSelect>
+    <CatalogFilters v-model="filters" :genres="genres" />
   </aside>
 </template>

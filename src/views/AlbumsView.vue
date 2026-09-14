@@ -9,11 +9,22 @@ import LibraryCardGrid from "@/components/LibraryCardGrid.vue";
 import PaginatedResults from "@/components/PaginatedResults.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
 import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
-import type { AlbumPage, AlbumPageSort } from "@/types";
+import type { AlbumPage, AlbumPageSort, CatalogFilter } from "@/types";
 
 const query = ref("");
 const selectedAlbumTypes = ref<string[]>([]);
 const albumTypeKey = computed(() => selectedAlbumTypes.value.join("\0"));
+const filters = ref<CatalogFilter>({
+  favoriteOnly: false,
+  minimumRating: null,
+  unratedOnly: false,
+  fromYear: null,
+  toYear: null,
+  genres: [],
+  neverPlayed: false,
+  minimumPlayCount: null,
+});
+const filterKey = computed(() => JSON.stringify(filters.value));
 const sort = ref<AlbumPageSort>("artist");
 const page = ref(1);
 const pageSize = 24;
@@ -31,14 +42,15 @@ const {
     invoke<AlbumPage>("get_album_page", {
       query: query.value,
       albumTypes: selectedAlbumTypes.value,
+      filters: filters.value,
       sort: sort.value,
       pagination: { offset: (page.value - 1) * pageSize, limit: pageSize },
     }),
-  { items: [], albumTypes: [], total: 0 },
+  { items: [], albumTypes: [], genres: [], total: 0 },
 );
 
-watch([query, albumTypeKey, sort, page], (values, previousValues, onCleanup) => {
-  const filtersChanged = values.slice(0, 3).some((value, index) => value !== previousValues[index]);
+watch([query, albumTypeKey, filterKey, sort, page], (values, previousValues, onCleanup) => {
+  const filtersChanged = values.slice(0, 4).some((value, index) => value !== previousValues[index]);
   if (filtersChanged && page.value !== 1) {
     page.value = 1;
     return;
@@ -61,8 +73,10 @@ watch([query, albumTypeKey, sort, page], (values, previousValues, onCleanup) => 
         <AlbumFiltersAside
           v-model:query="query"
           v-model:selected-album-types="selectedAlbumTypes"
+          v-model:filters="filters"
           v-model:sort="sort"
           :album-types="albumPage.albumTypes"
+          :genres="albumPage.genres"
         />
 
         <PaginatedResults
@@ -77,7 +91,7 @@ watch([query, albumTypeKey, sort, page], (values, previousValues, onCleanup) => 
           </LibraryCardGrid>
           <div v-else class="rounded-lg border border-dashed border-zinc-800 px-6 py-16 text-center">
             <p class="font-bold text-zinc-200">No matching albums</p>
-            <p class="mt-1 font-sans text-sm text-zinc-500">Try changing the title, artist, or album type filter.</p>
+            <p class="mt-1 font-sans text-sm text-zinc-500">Try changing one of the album filters.</p>
           </div>
         </PaginatedResults>
       </div>
