@@ -526,6 +526,8 @@ mod tests {
                     release_date: None,
                     original_release_date: None,
                     server_added_at: None,
+                    play_count: 0,
+                    last_played_at: None,
                     song_count: 1,
                     duration_seconds: 180,
                     cover_art_id: None,

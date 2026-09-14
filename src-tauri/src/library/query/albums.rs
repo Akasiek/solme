@@ -13,7 +13,8 @@ use crate::database::SqliteRepository;
 const SQLITE_BIND_LIMIT: usize = 999;
 pub(super) const ALBUM_SELECT_FROM_ACTIVE_GENERATION: &str = "
     SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-           a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+           a.release_date, a.original_release_date, a.server_added_at, a.play_count,
+           a.last_played_at, a.song_count,
            a.duration_seconds, art.local_path AS artwork_path, a.favorite, a.rating
     FROM albums a
     JOIN library_sync_state s
@@ -31,12 +32,12 @@ pub(crate) async fn insert_albums(
     generation: &str,
     albums: &[AlbumWithSongs],
 ) -> Result<(), String> {
-    for albums in albums.chunks(SQLITE_BIND_LIMIT / 16) {
+    for albums in albums.chunks(SQLITE_BIND_LIMIT / 18) {
         let mut query = QueryBuilder::new(
             "INSERT INTO albums
              (profile_id, generation, remote_id, name, album_type, artist_id, artist_name,
-              year, release_date, original_release_date, server_added_at, song_count,
-              duration_seconds, cover_art_id, favorite, rating) ",
+              year, release_date, original_release_date, server_added_at, play_count,
+              last_played_at, song_count, duration_seconds, cover_art_id, favorite, rating) ",
         );
         query.push_values(albums, |mut row, details| {
             let album = &details.album;
@@ -51,6 +52,8 @@ pub(crate) async fn insert_albums(
                 .push_bind(&album.release_date)
                 .push_bind(&album.original_release_date)
                 .push_bind(&album.server_added_at)
+                .push_bind(album.play_count)
+                .push_bind(&album.last_played_at)
                 .push_bind(album.song_count)
                 .push_bind(album.duration_seconds)
                 .push_bind(&album.cover_art_id)
@@ -476,7 +479,8 @@ pub(crate) async fn search_albums(
     let limit = limit.clamp(1, 500);
     let results = sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                a.release_date, a.original_release_date, a.server_added_at, a.play_count,
+                a.last_played_at, a.song_count,
                 a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM album_search
          JOIN library_sync_state state

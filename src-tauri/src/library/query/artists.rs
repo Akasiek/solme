@@ -42,7 +42,8 @@ pub(crate) async fn artist_albums(
 ) -> Result<Vec<CachedAlbum>, String> {
     sqlx::query_as::<_, CachedAlbum>(
         "SELECT a.remote_id, a.name, a.album_type, a.artist_name, a.artist_id, a.year,
-                a.release_date, a.original_release_date, a.server_added_at, a.song_count,
+                a.release_date, a.original_release_date, a.server_added_at, a.play_count,
+                a.last_played_at, a.song_count,
                 a.duration_seconds, artwork.local_path AS artwork_path, a.favorite, a.rating
          FROM albums a
          JOIN library_sync_state state

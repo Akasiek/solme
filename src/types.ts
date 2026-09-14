@@ -57,6 +57,8 @@ export interface CachedAlbum {
   releaseDate?: string;
   originalReleaseDate?: string;
   serverAddedAt?: string;
+  playCount: number;
+  lastPlayedAt?: string;
   songCount: number;
   durationSeconds: number;
   artworkPath?: string;

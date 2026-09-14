@@ -703,6 +703,8 @@ mod tests {
                     "coverArt": "cover-1",
                     "starred": "2026-08-10T10:00:00Z",
                     "userRating": 4,
+                    "playCount": 12,
+                    "played": "2026-08-11T10:00:00Z",
                     "musicBrainzReleaseGroupType": "album;live",
                     "releaseDate": {"year": 2026, "month": 7, "day": 4},
                     "originalReleaseDate": {"year": 2025, "month": 12, "day": 31}
@@ -730,6 +732,8 @@ mod tests {
             .album;
         assert_eq!(albums[0].id, "album-1");
         assert_eq!(albums[0].song_count, 4);
+        assert_eq!(albums[0].play_count, 12);
+        assert_eq!(albums[0].played.as_deref(), Some("2026-08-11T10:00:00Z"));
         assert_eq!(albums[0].release_date.as_deref(), Some("2026-07-04"));
         assert_eq!(
             albums[0].original_release_date.as_deref(),

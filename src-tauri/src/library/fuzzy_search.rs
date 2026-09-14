@@ -353,6 +353,8 @@ mod tests {
             release_date: Some("2026-01-01".to_string()),
             original_release_date: Some("2025-12-31".to_string()),
             server_added_at: Some("2026-01-02T00:00:00Z".to_string()),
+            play_count: 0,
+            last_played_at: None,
             song_count: 1,
             duration_seconds: 180,
             artwork_path: None,
