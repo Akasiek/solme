@@ -1,18 +1,19 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { computed, onMounted, onUnmounted, ref, watch } from "vue";
+import { computed, ref } from "vue";
 import { PlayerStatus } from "@/types.ts";
 import { formatTime } from "@/utils/format.ts";
 
-const { playerStatus } = defineProps<{
+const { playerStatus, playbackPositionSeconds } = defineProps<{
   playerStatus: PlayerStatus;
+  playbackPositionSeconds: number;
 }>();
 
-const currentPosition = ref(Math.round(playerStatus.positionSeconds));
+const seekPosition = ref(0);
 const isSeeking = ref(false);
-let progressTimer: number | undefined;
 
 const duration = computed(() => Math.max(0, Math.round(playerStatus.durationSeconds)));
+const currentPosition = computed(() => (isSeeking.value ? seekPosition.value : Math.round(playbackPositionSeconds)));
 const progressPercent = computed(() => {
   if (duration.value === 0) {
     return 0;
@@ -24,45 +25,19 @@ const seekTrackStyle = computed(() => ({
   background: `linear-gradient(to right, var(--color-zinc-200) 0%, var(--color-zinc-200) ${progressPercent.value}%, var(--color-zinc-600) ${progressPercent.value}%, var(--color-zinc-600) 100%)`,
 }));
 
-watch(
-  () => [playerStatus.positionSeconds, playerStatus.durationSeconds],
-  () => {
-    if (!isSeeking.value) {
-      currentPosition.value = Math.round(playerStatus.positionSeconds);
-    }
-  },
-);
-
-onMounted(() => {
-  progressTimer = window.setInterval(() => {
-    if (playerStatus.state !== "playing" || isSeeking.value || duration.value === 0) {
-      return;
-    }
-
-    currentPosition.value = Math.min(duration.value, currentPosition.value + 1);
-  }, 1000);
-});
-
-onUnmounted(() => {
-  if (progressTimer !== undefined) {
-    window.clearInterval(progressTimer);
-  }
-});
-
 const onSeekInput = (event: Event) => {
   isSeeking.value = true;
-  currentPosition.value = parseInt((event.target as HTMLInputElement).value);
+  seekPosition.value = parseInt((event.target as HTMLInputElement).value);
 };
 
 const onSeekChange = async (event: Event) => {
   const positionSeconds = parseInt((event.target as HTMLInputElement).value);
-  currentPosition.value = positionSeconds;
+  seekPosition.value = positionSeconds;
 
   try {
     await invoke("player_seek", { positionSeconds });
   } catch (error) {
     console.error("Failed to seek player:", error);
-    currentPosition.value = Math.round(playerStatus.positionSeconds);
   } finally {
     isSeeking.value = false;
   }

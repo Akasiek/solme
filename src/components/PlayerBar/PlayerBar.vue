@@ -13,6 +13,7 @@ import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 const playerStore = usePlayerStore();
 const playerStatus = computed(() => playerStore.status);
 const currentSong = computed(() => playerStore.currentSong);
+const playbackPositionSeconds = computed(() => playerStore.playbackPositionSeconds);
 
 const togglePlayback = () => {
   const status = playerStatus.value;
@@ -55,8 +56,8 @@ onMounted(async () => {
       </div>
 
       <div class="grid w-full min-w-0 items-center justify-items-center gap-2">
-        <PlayerBarPlaybackControl :playerStatus="playerStatus" />
-        <PlayerBarSeekBar :playerStatus="playerStatus" />
+        <PlayerBarPlaybackControl :playerStatus="playerStatus" :playbackPositionSeconds="playbackPositionSeconds" />
+        <PlayerBarSeekBar :playerStatus="playerStatus" :playbackPositionSeconds="playbackPositionSeconds" />
       </div>
 
       <div class="flex h-16 min-w-0 items-center justify-end gap-3">
