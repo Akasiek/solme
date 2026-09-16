@@ -4,7 +4,7 @@ use crate::library::models::{
     Album, AlbumWithSongs, Artist, BinaryArtwork, Genre, LibraryItemKind,
 };
 
-use super::models::{AlbumQuery, ScrobbleEvent, ServerInfo};
+use super::models::{AlbumQuery, ScrobbleEvent, ServerInfo, SongLyrics};
 
 #[async_trait]
 pub trait MusicServer: Send + Sync {
@@ -14,6 +14,9 @@ pub trait MusicServer: Send + Sync {
     async fn albums(&self, query: AlbumQuery) -> Result<Vec<Album>, String>;
     async fn album(&self, id: &str) -> Result<AlbumWithSongs, String>;
     async fn genres(&self) -> Result<Vec<Genre>, String>;
+    async fn lyrics(&self, _song_id: &str) -> Result<Vec<SongLyrics>, String> {
+        Err("Lyrics are not supported by this music server".to_string())
+    }
     async fn playback_uri(&self, song_id: &str) -> Result<String, String>;
     async fn scrobble(
         &self,

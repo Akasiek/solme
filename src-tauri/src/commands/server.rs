@@ -3,7 +3,8 @@ use std::sync::Arc;
 use tauri::State;
 
 use crate::server::{
-    MusicServerService, SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig, ServerInfo,
+    MusicServerService, SavedServerEndpoint, SavedServerProfile, ServerConnectionConfig,
+    ServerInfo, SongLyrics,
 };
 use crate::{
     audio::{PlaybackSessionService, PlayerService},
@@ -41,6 +42,14 @@ pub async fn ping_music_server(
     server: State<'_, Arc<MusicServerService>>,
 ) -> Result<ServerInfo, String> {
     server.ping().await
+}
+
+#[tauri::command]
+pub async fn get_song_lyrics(
+    song_id: String,
+    server: State<'_, Arc<MusicServerService>>,
+) -> Result<Vec<SongLyrics>, String> {
+    server.lyrics(&song_id).await
 }
 
 #[tauri::command]

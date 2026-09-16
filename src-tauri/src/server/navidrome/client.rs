@@ -14,14 +14,14 @@ use crate::library::models::{
 };
 
 use super::models::{
-    AlbumDto, AlbumListPayload, AlbumPayload, ArtistsPayload, GenresPayload, PingPayload,
-    ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
+    AlbumDto, AlbumListPayload, AlbumPayload, ArtistsPayload, GenresPayload, LyricsPayload,
+    PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
 };
 
 pub(crate) const ARTWORK_TRANSPORT_ERROR_PREFIX: &str = "Artwork transport error";
 use crate::server::{
     backend::MusicServer,
-    models::{AlbumQuery, ScrobbleEvent, ServerInfo},
+    models::{AlbumQuery, ScrobbleEvent, ServerInfo, SongLyrics},
 };
 
 const API_VERSION: &str = "1.16.1";
@@ -352,6 +352,17 @@ impl MusicServer for NavidromeBackend {
             .collect())
     }
 
+    async fn lyrics(&self, song_id: &str) -> Result<Vec<SongLyrics>, String> {
+        if song_id.trim().is_empty() {
+            return Err("Song ID cannot be empty".to_string());
+        }
+
+        let payload: LyricsPayload = self
+            .request_payload("getLyricsBySongId", &[("id", song_id.to_string())])
+            .await?;
+        Ok(payload.lyrics_list.structured_lyrics)
+    }
+
     async fn playback_uri(&self, song_id: &str) -> Result<String, String> {
         if song_id.is_empty() {
             return Err("Song ID cannot be empty".to_string());
@@ -538,7 +549,8 @@ mod tests {
 
     use super::{
         favorite_parameter, is_retryable_artwork_error, scrobble_parameters, AlbumListPayload,
-        AlbumPayload, ArtistsPayload, NavidromeBackend, PingPayload, SubsonicEnvelope,
+        AlbumPayload, ArtistsPayload, LyricsPayload, NavidromeBackend, PingPayload,
+        SubsonicEnvelope,
     };
 
     #[test]
@@ -815,6 +827,57 @@ mod tests {
             .into_album_with_songs();
         assert!(details.songs[0].favorite);
         assert_eq!(details.songs[0].rating, None);
+    }
+
+    #[test]
+    fn parses_structured_song_lyrics() {
+        let response: SubsonicEnvelope = serde_json::from_str(
+            r#"{
+              "subsonic-response": {
+                "status": "ok",
+                "version": "1.16.1",
+                "lyricsList": {
+                  "structuredLyrics": [{
+                    "displayArtist": "Artist",
+                    "displayTitle": "Song",
+                    "lang": "eng",
+                    "offset": -100,
+                    "synced": true,
+                    "line": [
+                      {"start": 0, "value": "First line"},
+                      {"start": 2000, "value": "Second line"}
+                    ]
+                  }, {
+                    "lang": "und",
+                    "offset": 0,
+                    "synced": false,
+                    "line": [{"value": "Plain lyrics"}]
+                  }]
+                }
+              }
+            }"#,
+        )
+        .unwrap();
+
+        let lyrics = response
+            .subsonic_response
+            .into_payload::<LyricsPayload>()
+            .unwrap()
+            .lyrics_list
+            .structured_lyrics;
+
+        assert_eq!(lyrics.len(), 2);
+        assert_eq!(lyrics[0].display_artist.as_deref(), Some("Artist"));
+        assert!(lyrics[0].synced);
+        assert_eq!(lyrics[0].line[1].start, Some(2000));
+        assert_eq!(lyrics[1].line[0].value, "Plain lyrics");
+        assert_eq!(lyrics[1].line[0].start, None);
+    }
+
+    #[test]
+    fn rejects_empty_song_id_for_lyrics() {
+        let result = tauri::async_runtime::block_on(backend("https://example.com").lyrics(" "));
+        assert_eq!(result.err().as_deref(), Some("Song ID cannot be empty"));
     }
 
     fn backend(url: &str) -> NavidromeBackend {
