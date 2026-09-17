@@ -3,6 +3,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+  vue-demi: true
 
 minimumReleaseAgeExclude:
   - "@lucide/vue@1.43.0"

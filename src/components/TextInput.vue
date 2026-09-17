@@ -5,11 +5,20 @@ defineOptions({
   inheritAttrs: false,
 });
 
-defineProps<{
-  fieldLabel?: string;
-  type?: string;
-  placeholder?: string;
-}>();
+withDefaults(
+  defineProps<{
+    fieldLabel?: string;
+    type?: string;
+    placeholder?: string;
+    labelFont?: "sans" | "serif";
+  }>(),
+  {
+    fieldLabel: undefined,
+    type: undefined,
+    placeholder: undefined,
+    labelFont: "sans",
+  },
+);
 
 const model = defineModel<string>({ required: true });
 const attrs = useAttrs();
@@ -25,8 +34,17 @@ const inputAttrs = computed(() => {
 
 <template>
   <div class="space-y-2" :class="$attrs.class">
-    <label v-if="fieldLabel" :for="inputId" class="block font-sans text-sm font-medium text-zinc-300">
-      {{ fieldLabel }}
+    <label
+      v-if="fieldLabel"
+      :for="inputId"
+      class="block text-sm"
+      :class="
+        labelFont === 'serif'
+          ? 'flex items-center gap-1.5 font-serif font-bold text-zinc-300'
+          : 'font-sans font-medium text-zinc-300'
+      "
+    >
+      <slot name="label-icon" />{{ fieldLabel }}
     </label>
     <div class="relative">
       <span v-if="slots.leading" class="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-zinc-500">
