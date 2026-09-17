@@ -2,6 +2,7 @@
 import { storeToRefs } from "pinia";
 import AppTitleBar from "@/components/AppTitleBar.vue";
 import LeftAsideMenu from "@/components/LeftAsideMenu";
+import MainContainer from "@/components/MainContainer.vue";
 import RightAsideMenu from "@/components/RightAsideMenu";
 import PlayerBar from "@/components/PlayerBar";
 import SearchModal from "@/components/Search/SearchModal";
@@ -19,13 +20,7 @@ const { isSearchModalOpen } = storeToRefs(layoutStore);
     <AppTitleBar />
     <div class="flex min-h-0 flex-1">
       <LeftAsideMenu />
-      <main class="min-w-0 flex-1 overflow-y-auto">
-        <RouterView v-slot="{ Component }">
-          <KeepAlive include="AlbumsView,ArtistsView">
-            <component :is="Component" />
-          </KeepAlive>
-        </RouterView>
-      </main>
+      <MainContainer />
       <RightAsideMenu />
     </div>
     <PlayerBar />

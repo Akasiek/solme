@@ -7,6 +7,7 @@ import PlayerBarTrackInfo from "@/components/PlayerBar/PlayerBarTrackInfo.vue";
 import PlayerBarVolumeControl from "@/components/PlayerBar/PlayerBarVolumeControl.vue";
 import PlayerBarPlaybackControl from "@/components/PlayerBar/PlayerBarPlaybackControl.vue";
 import PlayerBarSeekBar from "@/components/PlayerBar/PlayerBarSeekBar.vue";
+import PlayerBarLyricsButton from "@/components/PlayerBar/PlayerBarLyricsButton.vue";
 import PlayerBarRightAsideMenuToggleButton from "@/components/PlayerBar/PlayerBarRightAsideMenuToggleButton.vue";
 import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 
@@ -61,7 +62,10 @@ onMounted(async () => {
       </div>
 
       <div class="flex h-16 min-w-0 items-center justify-end gap-3">
-        <PlayerBarRightAsideMenuToggleButton />
+        <div class="flex items-center justify-end gap-1">
+          <PlayerBarLyricsButton />
+          <PlayerBarRightAsideMenuToggleButton />
+        </div>
         <PlayerBarVolumeControl :volume="playerStatus.volume" />
       </div>
     </nav>

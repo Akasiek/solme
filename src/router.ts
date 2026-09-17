@@ -9,6 +9,7 @@ import ArtistsView from "@/views/ArtistsView.vue";
 import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/settings/SettingsView.vue";
 import SettingsAccountView from "@/views/settings/SettingsAccountView.vue";
+import LyricsView from "@/views/LyricsView.vue";
 
 const serverAuthorizationRoute = "settings-account";
 
@@ -51,6 +52,12 @@ export const router = createRouter({
       name: "artist",
       component: ArtistView,
       props: true,
+      meta: { requiresLibraryProfile: true },
+    },
+    {
+      path: "/lyrics",
+      name: "lyrics",
+      component: LyricsView,
       meta: { requiresLibraryProfile: true },
     },
     {
