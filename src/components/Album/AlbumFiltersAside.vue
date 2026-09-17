@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Search, SlidersHorizontal } from "@lucide/vue";
+import { Check, Disc3, Search, SlidersHorizontal } from "@lucide/vue";
 import FormSelect from "@/components/FormSelect.vue";
 import CatalogFilters from "@/components/CatalogFilters.vue";
 import TextInput from "@/components/TextInput.vue";
@@ -10,6 +10,16 @@ const query = defineModel<string>("query", { required: true });
 const selectedAlbumTypes = defineModel<string[]>("selectedAlbumTypes", { required: true });
 const filters = defineModel<CatalogFilter>("filters", { required: true });
 const sort = defineModel<AlbumPageSort>("sort", { required: true });
+
+const sortOptions = [
+  { value: "artist", label: "Artist" },
+  { value: "title", label: "Album title" },
+  { value: "newest", label: "Newest release" },
+  { value: "oldest", label: "Oldest release" },
+  { value: "recently-added", label: "Recently added" },
+  { value: "recently-played", label: "Recently played" },
+  { value: "most-played", label: "Most played" },
+] as const;
 </script>
 
 <template>
@@ -18,23 +28,21 @@ const sort = defineModel<AlbumPageSort>("sort", { required: true });
       id="album-filter"
       v-model="query"
       field-label="Filter albums"
+      label-font="serif"
       type="search"
       placeholder="Album or artist"
     >
-      <template #leading><Search class="size-4" /></template>
+      <template #label-icon><Search class="mt-0.5 size-4 shrink-0" aria-hidden="true" /></template>
     </TextInput>
-    <FormSelect v-model="sort" label="Sort by">
-      <template #icon><SlidersHorizontal class="size-4" /></template>
-      <option value="artist">Artist</option>
-      <option value="title">Album title</option>
-      <option value="newest">Newest release</option>
-      <option value="oldest">Oldest release</option>
-      <option value="recently-added">Recently added</option>
-      <option value="recently-played">Recently played</option>
-      <option value="most-played">Most played</option>
+    <FormSelect v-model="sort" label="Sort by" :options="sortOptions">
+      <template #icon><SlidersHorizontal class="mt-0.5 size-4 shrink-0" aria-hidden="true" /></template>
     </FormSelect>
     <fieldset>
-      <legend class="mb-2 font-sans text-sm font-bold text-zinc-200">Album type</legend>
+      <legend class="mb-2 font-serif text-sm font-bold text-zinc-300">
+        <span class="flex items-center gap-1.5">
+          <Disc3 class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Album type
+        </span>
+      </legend>
       <div class="max-h-44 space-y-1 overflow-y-auto pr-1">
         <label
           v-for="type in albumTypes"
