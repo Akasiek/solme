@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { Check, Heart, Star } from "@lucide/vue";
+import { Calendar, Check, Heart, Library, Play, Star, Tag } from "@lucide/vue";
+import NumberInput from "@/components/NumberInput.vue";
 import type { CatalogFilter } from "@/types";
 
 defineProps<{ genres: string[] }>();
@@ -20,16 +21,15 @@ function toggleNeverPlayed() {
   filters.value.neverPlayed = !filters.value.neverPlayed;
   if (filters.value.neverPlayed) filters.value.minimumPlayCount = null;
 }
-
-function optionalNumber(event: Event) {
-  const value = (event.target as HTMLInputElement).valueAsNumber;
-  return Number.isFinite(value) ? value : null;
-}
 </script>
 
 <template>
   <fieldset class="space-y-2">
-    <legend class="mb-2 font-sans text-sm font-bold text-zinc-200">Library status</legend>
+    <legend class="mb-2 font-serif text-sm font-bold text-zinc-300">
+      <span class="flex items-center gap-1.5">
+        <Library class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Library status
+      </span>
+    </legend>
     <button
       type="button"
       class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md border px-2 font-sans text-sm transition-colors focus:ring-2 focus:ring-zinc-500 focus:outline-none"
@@ -87,35 +87,21 @@ function optionalNumber(event: Event) {
   </fieldset>
 
   <fieldset class="space-y-2">
-    <legend class="font-sans text-sm font-bold text-zinc-200">Release year</legend>
+    <legend class="font-serif text-sm font-bold text-zinc-300">
+      <span class="flex items-center gap-1.5">
+        <Calendar class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Release year
+      </span>
+    </legend>
     <div class="grid grid-cols-2 gap-2">
-      <label class="space-y-1 font-sans text-xs text-zinc-400">
-        From
-        <input
-          :value="filters.fromYear ?? ''"
-          type="number"
-          min="1"
-          placeholder="1960"
-          class="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none"
-          @input="filters.fromYear = optionalNumber($event)"
-        />
-      </label>
-      <label class="space-y-1 font-sans text-xs text-zinc-400">
-        To
-        <input
-          :value="filters.toYear ?? ''"
-          type="number"
-          min="1"
-          placeholder="2026"
-          class="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 focus:border-zinc-500 focus:outline-none"
-          @input="filters.toYear = optionalNumber($event)"
-        />
-      </label>
+      <NumberInput v-model="filters.fromYear" label="From" :min="1" placeholder="1960" />
+      <NumberInput v-model="filters.toYear" label="To" :min="1" placeholder="2026" />
     </div>
   </fieldset>
 
   <fieldset v-if="genres.length" class="min-w-0">
-    <legend class="mb-2 font-sans text-sm font-bold text-zinc-200">Genre</legend>
+    <legend class="mb-2 font-serif text-sm font-bold text-zinc-300">
+      <span class="flex items-center gap-1.5"><Tag class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Genre</span>
+    </legend>
     <div class="max-h-44 min-w-0 space-y-1 overflow-y-auto pr-1">
       <label
         v-for="genre in genres"
@@ -139,8 +125,10 @@ function optionalNumber(event: Event) {
     </div>
   </fieldset>
 
-  <fieldset class="space-y-2">
-    <legend class="font-sans text-sm font-bold text-zinc-200">Playback</legend>
+  <fieldset class="min-w-0 space-y-2">
+    <legend class="font-serif text-sm font-bold text-zinc-300">
+      <span class="flex items-center gap-1.5"><Play class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Playback</span>
+    </legend>
     <button
       type="button"
       class="flex h-8 w-full cursor-pointer items-center gap-2 rounded-md border px-2 font-sans text-sm transition-colors focus:ring-2 focus:ring-zinc-500 focus:outline-none"
@@ -150,20 +138,13 @@ function optionalNumber(event: Event) {
     >
       Never played
     </button>
-    <label class="block space-y-1 font-sans text-xs text-zinc-400">
-      Minimum play count
-      <input
-        :value="filters.minimumPlayCount ?? ''"
-        type="number"
-        min="1"
-        :disabled="filters.neverPlayed"
-        placeholder="1"
-        class="w-full rounded border border-zinc-700 bg-zinc-950 px-2 py-1.5 text-sm text-zinc-100 disabled:cursor-not-allowed disabled:opacity-50"
-        @input="
-          filters.minimumPlayCount = optionalNumber($event);
-          filters.neverPlayed = false;
-        "
-      />
-    </label>
+    <NumberInput
+      v-model="filters.minimumPlayCount"
+      label="Minimum play count"
+      :min="1"
+      :disabled="filters.neverPlayed"
+      placeholder="1"
+      @update:model-value="filters.neverPlayed = false"
+    />
   </fieldset>
 </template>
