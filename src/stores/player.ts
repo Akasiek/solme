@@ -1,27 +1,20 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { defineStore } from "pinia";
-import { computed, onScopeDispose, ref } from "vue";
-import type { CachedSong, PlayerStatus } from "@/types.ts";
+import { ref } from "vue";
+import { createPlayerLyrics } from "@/stores/player/lyrics.ts";
+import { createPlayerPlayback } from "@/stores/player/playback.ts";
+import { createPlayerQueue } from "@/stores/player/queue.ts";
+import type { PlayerStatus } from "@/types.ts";
 
 export const usePlayerStore = defineStore("player", () => {
-  const status = ref<PlayerStatus | null>(null);
-  const playbackPositionSeconds = ref(0);
-  const queue = ref<CachedSong[]>([]);
-  const isQueueLoading = ref(false);
-  const queueError = ref<string | null>(null);
+  const { updateStatus, ...playbackState } = createPlayerPlayback();
+  const { refreshQueue, ...queueState } = createPlayerQueue();
   const isListening = ref(false);
   let startPromise: Promise<void> | null = null;
-  let queueRefreshPromise: Promise<void> | null = null;
-  let queueRefreshRequested = false;
-  let lastPositionUpdate = performance.now();
 
-  const currentSong = computed(() => status.value?.currentSong ?? null);
-
-  const updateStatus = (playerStatus: PlayerStatus) => {
-    status.value = playerStatus;
-    playbackPositionSeconds.value = playerStatus.positionSeconds;
-    lastPositionUpdate = performance.now();
+  const applyStatus = (playerStatus: PlayerStatus) => {
+    updateStatus(playerStatus);
   };
 
   const progressTimer = window.setInterval(() => {
@@ -42,37 +35,7 @@ export const usePlayerStore = defineStore("player", () => {
   onScopeDispose(() => window.clearInterval(progressTimer));
 
   const load = async () => {
-    updateStatus(await invoke<PlayerStatus>("get_player_status"));
-  };
-
-  const refreshQueue = async () => {
-    queueRefreshRequested = true;
-
-    if (queueRefreshPromise) {
-      return queueRefreshPromise;
-    }
-
-    queueRefreshPromise = (async () => {
-      isQueueLoading.value = true;
-
-      try {
-        while (queueRefreshRequested) {
-          queueRefreshRequested = false;
-
-          try {
-            queue.value = await invoke<CachedSong[]>("get_player_queue");
-            queueError.value = null;
-          } catch (error) {
-            queueError.value = String(error);
-          }
-        }
-      } finally {
-        isQueueLoading.value = false;
-        queueRefreshPromise = null;
-      }
-    })();
-
-    return queueRefreshPromise;
+    applyStatus(await invoke<PlayerStatus>("get_player_status"));
   };
 
   const startListening = async () => {
@@ -87,7 +50,7 @@ export const usePlayerStore = defineStore("player", () => {
     startPromise = (async () => {
       await Promise.all([
         listen<PlayerStatus>("player-status-changed", (event) => {
-          updateStatus(event.payload);
+          applyStatus(event.payload);
         }),
         listen("player-queue-changed", () => {
           void refreshQueue();
@@ -105,12 +68,8 @@ export const usePlayerStore = defineStore("player", () => {
   };
 
   return {
-    status,
-    playbackPositionSeconds,
-    queue,
-    isQueueLoading,
-    queueError,
-    currentSong,
+    ...playbackState,
+    ...queueState,
     refreshQueue,
     startListening,
   };
