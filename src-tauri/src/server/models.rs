@@ -62,6 +62,26 @@ pub struct ServerInfo {
     pub username: String,
 }
 
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongLyrics {
+    pub display_artist: Option<String>,
+    pub display_title: Option<String>,
+    pub lang: Option<String>,
+    #[serde(default)]
+    pub offset: i64,
+    pub synced: bool,
+    #[serde(default)]
+    pub line: Vec<LyricsLine>,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LyricsLine {
+    pub start: Option<i64>,
+    pub value: String,
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScrobbleEvent {
     NowPlaying,

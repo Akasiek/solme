@@ -141,6 +141,16 @@ impl MusicServerService {
         Ok((current.profile_id, current.backend))
     }
 
+    pub async fn lyrics(&self, song_id: &str) -> Result<Vec<super::models::SongLyrics>, String> {
+        let song_id = song_id.trim();
+        if song_id.is_empty() {
+            return Err("Song ID cannot be empty".to_string());
+        }
+
+        let (_, server) = self.current_server()?;
+        server.lyrics(song_id).await
+    }
+
     pub async fn cache_profile_id(&self) -> Result<Option<String>, String> {
         if let Some(current) = self
             .server
@@ -571,6 +581,11 @@ impl MusicServer for FailoverMusicServer {
 
     async fn genres(&self) -> Result<Vec<crate::library::models::Genre>, String> {
         self.with_failover(|server| async move { server.genres().await })
+            .await
+    }
+
+    async fn lyrics(&self, song_id: &str) -> Result<Vec<super::models::SongLyrics>, String> {
+        self.with_failover(|server| async move { server.lyrics(song_id).await })
             .await
     }
 

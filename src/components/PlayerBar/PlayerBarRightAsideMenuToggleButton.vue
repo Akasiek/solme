@@ -8,7 +8,7 @@ const layoutStore = useLayoutStore();
 <template>
   <button
     type="button"
-    class="flex cursor-pointer items-center rounded p-2.5 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+    class="flex cursor-pointer items-center rounded p-2 text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
     :title="layoutStore.isRightAsideCollapsed ? 'Show queue' : 'Hide queue'"
     :aria-label="layoutStore.isRightAsideCollapsed ? 'Show queue' : 'Hide queue'"
     @click="layoutStore.toggleRightAside"

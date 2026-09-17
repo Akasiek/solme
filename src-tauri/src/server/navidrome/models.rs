@@ -1,6 +1,7 @@
 use serde::{de::DeserializeOwned, Deserialize, Deserializer};
 
 use crate::library::models::{Album, AlbumWithSongs, Song};
+use crate::server::models::SongLyrics;
 
 #[derive(Deserialize)]
 pub(super) struct SubsonicEnvelope {
@@ -240,6 +241,19 @@ impl AlbumDto {
 #[derive(Deserialize)]
 pub(super) struct AlbumPayload {
     pub album: AlbumDto,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct LyricsPayload {
+    pub lyrics_list: LyricsListDto,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct LyricsListDto {
+    #[serde(default)]
+    pub structured_lyrics: Vec<SongLyrics>,
 }
 
 #[derive(Deserialize)]

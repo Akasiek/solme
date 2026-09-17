@@ -5,6 +5,20 @@ export interface ServerInfo {
   username: string;
 }
 
+export interface SongLyrics {
+  displayArtist?: string;
+  displayTitle?: string;
+  lang?: string;
+  offset: number;
+  synced: boolean;
+  line: LyricsLine[];
+}
+
+export interface LyricsLine {
+  start?: number;
+  value: string;
+}
+
 export interface SavedServerProfile {
   id: string;
   serverType: string;
