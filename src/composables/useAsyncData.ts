@@ -5,19 +5,37 @@ export function useAsyncData<T>(loader: () => Promise<T>, initialValue: T) {
   const isLoading = ref(true);
   const hasLoaded = ref(false);
   const error = ref<string | null>(null);
+  let latestRequestId = 0;
 
   async function reload() {
+    const requestId = ++latestRequestId;
+
     isLoading.value = true;
     error.value = null;
 
+    let outcome: { status: "success"; data: T } | { status: "error"; message: string };
+
     try {
-      data.value = await loader();
+      outcome = { status: "success", data: await loader() };
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : "Unexpected error.";
-    } finally {
-      isLoading.value = false;
-      hasLoaded.value = true;
+      outcome = {
+        status: "error",
+        message: cause instanceof Error ? cause.message : "Unexpected error.",
+      };
     }
+
+    if (requestId !== latestRequestId) {
+      return;
+    }
+
+    if (outcome.status === "success") {
+      data.value = outcome.data;
+    } else {
+      error.value = outcome.message;
+    }
+
+    isLoading.value = false;
+    hasLoaded.value = true;
   }
 
   onMounted(() => {
