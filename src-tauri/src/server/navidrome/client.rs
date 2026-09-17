@@ -43,11 +43,41 @@ pub struct NavidromeBackend {
 
 impl NavidromeBackend {
     pub fn new(url: &str, username: String, password: String) -> Result<Self, String> {
+        Self::new_with_http_policy(url, username, password, false)
+    }
+
+    #[allow(dead_code)]
+    pub fn new_insecure_http(
+        url: &str,
+        username: String,
+        password: String,
+    ) -> Result<Self, String> {
+        Self::new_with_http_policy(url, username, password, true)
+    }
+
+    fn new_with_http_policy(
+        url: &str,
+        username: String,
+        password: String,
+        allow_insecure_http: bool,
+    ) -> Result<Self, String> {
         let base_url =
             Url::parse(url.trim()).map_err(|error| format!("Invalid server URL: {error}"))?;
 
-        if !matches!(base_url.scheme(), "http" | "https") {
-            return Err("Server URL must use HTTP or HTTPS".to_string());
+        match base_url.scheme() {
+            "https" => {}
+            "http" if allow_insecure_http => {
+                log::warn!(
+                    "Using insecure HTTP for Navidrome server {base_url}; authenticated requests can be intercepted"
+                );
+            }
+            "http" => {
+                return Err(
+                    "Server URL must use HTTPS; insecure HTTP requires an explicit opt-in"
+                        .to_string(),
+                );
+            }
+            _ => return Err("Server URL must use HTTPS".to_string()),
         }
         if username.trim().is_empty() {
             return Err("Username cannot be empty".to_string());
@@ -572,12 +602,37 @@ mod tests {
     }
 
     #[test]
-    fn rejects_non_http_url() {
+    fn rejects_non_https_url() {
         let result =
             NavidromeBackend::new("file:///music", "user".to_string(), "password".to_string());
+        assert_eq!(result.err().as_deref(), Some("Server URL must use HTTPS"));
+    }
+
+    #[test]
+    fn rejects_http_by_default() {
+        let result = NavidromeBackend::new(
+            "http://music.example.com",
+            "user".to_string(),
+            "password".to_string(),
+        );
         assert_eq!(
             result.err().as_deref(),
-            Some("Server URL must use HTTP or HTTPS")
+            Some("Server URL must use HTTPS; insecure HTTP requires an explicit opt-in")
+        );
+    }
+
+    #[test]
+    fn allows_http_with_explicit_insecure_opt_in() {
+        let backend = NavidromeBackend::new_insecure_http(
+            "http://music.example.com",
+            "user".to_string(),
+            "password".to_string(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            backend.endpoint_url("ping").as_str(),
+            "http://music.example.com/rest/ping.view"
         );
     }
 
