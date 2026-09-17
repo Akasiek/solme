@@ -33,7 +33,7 @@ watch(
     const nextLineIndex = timedLyricsLines.value.findIndex((line) => line.startSeconds > props.playbackPositionSeconds);
 
     if (nextLineIndex === 0 || timedLyricsLines.value.length === 0) {
-      currentLyricsIndex.value = 0;
+      currentLyricsIndex.value = -1;
       return;
     }
 
