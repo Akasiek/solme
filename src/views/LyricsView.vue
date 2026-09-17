@@ -9,8 +9,12 @@ const playerStore = usePlayerStore();
 const { currentSong, hasLyrics, isLyricsLoading, lyrics, lyricsError, playbackPositionSeconds } =
   storeToRefs(playerStore);
 
-onMounted(() => {
-  void playerStore.startListening();
+onMounted(async () => {
+  try {
+    await playerStore.startListening();
+  } catch (error) {
+    lyricsError.value = error instanceof Error ? error.message : String(error);
+  }
 });
 </script>
 
