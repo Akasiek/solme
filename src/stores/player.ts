@@ -10,29 +10,16 @@ import type { PlayerStatus } from "@/types.ts";
 export const usePlayerStore = defineStore("player", () => {
   const { updateStatus, ...playbackState } = createPlayerPlayback();
   const { refreshQueue, ...queueState } = createPlayerQueue();
+  const { loadLyrics, ...lyricsState } = createPlayerLyrics();
   const isListening = ref(false);
   let startPromise: Promise<void> | null = null;
 
   const applyStatus = (playerStatus: PlayerStatus) => {
     updateStatus(playerStatus);
+    void loadLyrics(playerStatus.currentSong?.remoteId ?? null);
   };
 
-  const progressTimer = window.setInterval(() => {
-    const now = performance.now();
-    const elapsedSeconds = (now - lastPositionUpdate) / 1000;
-    lastPositionUpdate = now;
-
-    if (status.value?.state !== "playing") {
-      return;
-    }
-
-    playbackPositionSeconds.value = Math.min(
-      status.value.durationSeconds,
-      playbackPositionSeconds.value + elapsedSeconds,
-    );
-  }, 250);
-
-  onScopeDispose(() => window.clearInterval(progressTimer));
+  const ensureCurrentLyrics = () => loadLyrics(playbackState.currentSong.value?.remoteId ?? null);
 
   const load = async () => {
     applyStatus(await invoke<PlayerStatus>("get_player_status"));
@@ -70,6 +57,8 @@ export const usePlayerStore = defineStore("player", () => {
   return {
     ...playbackState,
     ...queueState,
+    ...lyricsState,
+    ensureCurrentLyrics,
     refreshQueue,
     startListening,
   };
