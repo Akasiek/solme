@@ -3,11 +3,16 @@ import NormalLyricsDisplay from "@/components/Lyrics/NormalLyricsDisplay.vue";
 import SyncedLyricsDisplay from "@/components/Lyrics/SyncedLyricsDisplay.vue";
 import type { SongLyrics } from "@/types.ts";
 
-defineProps<{
-  lyrics: SongLyrics;
-  playbackPositionSeconds: number;
-  allowSeek?: boolean;
-}>();
+withDefaults(
+  defineProps<{
+    lyrics: SongLyrics;
+    playbackPositionSeconds: number;
+    allowSeek?: boolean;
+  }>(),
+  {
+    allowSeek: true,
+  },
+);
 </script>
 
 <template>
