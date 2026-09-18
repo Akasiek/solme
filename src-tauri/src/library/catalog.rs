@@ -8,8 +8,8 @@ use super::{
     models::{
         Album, AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, CachedAlbum,
         CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter,
-        HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary, Paginated,
-        Pagination,
+        GenreSummary, HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
+        Paginated, Pagination,
     },
     repository::LibraryCatalogRepository,
 };
@@ -38,6 +38,13 @@ impl LibraryCatalogService {
             });
         };
         self.repository.summary(&profile_id).await
+    }
+
+    pub async fn genres(&self) -> Result<Vec<GenreSummary>, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(Vec::new());
+        };
+        self.repository.genres(&profile_id).await
     }
 
     pub async fn set_favorite(

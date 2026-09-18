@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Disc3, House, Search, Settings, UserGroup } from "@lucide/vue";
+import { Disc3, House, Search, Settings, Tags, UserGroup } from "@lucide/vue";
 import { RouterLink, useRouter } from "vue-router";
 
 import { useLayoutStore } from "@/stores/layout";
@@ -32,6 +32,12 @@ const items = [
     animation: "group-hover:scale-110",
   },
   {
+    name: "Genres",
+    icon: Tags,
+    route: "/genres",
+    animation: "group-hover:rotate-12 group-hover:scale-110",
+  },
+  {
     name: "Search",
     icon: Search,
     onClick: openSearchModal,
@@ -62,7 +68,7 @@ const isActiveRoute = (route: string) => {
       :is="item.route ? RouterLink : 'button'"
       v-bind="item.route ? { to: item.route } : { type: 'button' }"
       :title="item.name"
-      class="group flex items-center rounded px-4 py-2 font-medium text-zinc-100 hover:bg-zinc-800"
+      class="group flex items-center rounded px-3 py-1.5 font-bold text-zinc-100 hover:bg-zinc-800"
       :class="{
         'bg-zinc-800': item.route && isActiveRoute(item.route),
         'justify-center': isCollapsed,

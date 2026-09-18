@@ -10,7 +10,7 @@ mod time;
 pub use catalog::LibraryCatalogService;
 pub use models::{
     AlbumPage, AlbumPageSort, ArtistPage, ArtistPageSort, CachedAlbum, CachedAlbumDetails,
-    CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, HomeAlbumSections,
+    CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, GenreSummary, HomeAlbumSections,
     LibraryItemAnnotation, LibraryItemKind, LibrarySummary, LibrarySyncStatus, Pagination,
 };
 pub(crate) use repository::LibraryCatalogRepository;

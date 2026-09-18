@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
 import { computed, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 
 import AlbumCard from "@/components/Album/AlbumCard";
 import AlbumFiltersAside from "@/components/Album/AlbumFiltersAside.vue";
@@ -11,19 +12,23 @@ import { useAsyncData } from "@/composables/useAsyncData";
 import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
 import type { AlbumPage, AlbumPageSort, CatalogFilter } from "@/types";
 
-const query = ref("");
-const selectedAlbumTypes = ref<string[]>([]);
-const albumTypeKey = computed(() => selectedAlbumTypes.value.join("\0"));
-const filters = ref<CatalogFilter>({
+const route = useRoute();
+const routeGenre = () => (typeof route.query.genre === "string" ? route.query.genre.trim() : "");
+const createDefaultFilters = (genre = ""): CatalogFilter => ({
   favoriteOnly: false,
   minimumRating: null,
   unratedOnly: false,
   fromYear: null,
   toYear: null,
-  genres: [],
+  genres: genre ? [genre] : [],
   neverPlayed: false,
   minimumPlayCount: null,
 });
+
+const query = ref("");
+const selectedAlbumTypes = ref<string[]>([]);
+const albumTypeKey = computed(() => selectedAlbumTypes.value.join("\0"));
+const filters = ref<CatalogFilter>(createDefaultFilters(routeGenre()));
 const filterKey = computed(() => JSON.stringify(filters.value));
 const sort = ref<AlbumPageSort>("artist");
 const page = ref(1);
@@ -59,6 +64,22 @@ watch([query, albumTypeKey, filterKey, sort, page], (values, previousValues, onC
   const timeout = window.setTimeout(() => void reload(), 200);
   onCleanup(() => window.clearTimeout(timeout));
 });
+
+watch(
+  () => route.query.genre,
+  () => {
+    const genre = routeGenre();
+    if (route.name !== "albums") {
+      return;
+    }
+
+    query.value = "";
+    selectedAlbumTypes.value = [];
+    filters.value = createDefaultFilters(genre);
+    sort.value = "artist";
+    page.value = 1;
+  },
+);
 </script>
 
 <template>

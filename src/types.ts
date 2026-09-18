@@ -47,6 +47,11 @@ export interface LibrarySummary {
   lastSuccessAt?: number;
 }
 
+export interface GenreSummary {
+  name: string;
+  albumCount: number;
+}
+
 export interface CachedArtist {
   remoteId: string;
   name: string;

@@ -6,6 +6,7 @@ import AlbumsView from "@/views/AlbumsView.vue";
 import AlbumView from "@/views/AlbumView.vue";
 import ArtistView from "@/views/ArtistView.vue";
 import ArtistsView from "@/views/ArtistsView.vue";
+import GenresView from "@/views/GenresView.vue";
 import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/settings/SettingsView.vue";
 import SettingsAccountView from "@/views/settings/SettingsAccountView.vue";
@@ -45,6 +46,12 @@ export const router = createRouter({
       path: "/artists",
       name: "artists",
       component: ArtistsView,
+      meta: { requiresLibraryProfile: true },
+    },
+    {
+      path: "/genres",
+      name: "genres",
+      component: GenresView,
       meta: { requiresLibraryProfile: true },
     },
     {

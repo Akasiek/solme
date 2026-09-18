@@ -2,6 +2,7 @@ mod albums;
 mod annotations;
 mod artists;
 mod artwork;
+mod genres;
 mod library;
 mod search;
 mod songs;
@@ -16,6 +17,7 @@ pub(crate) use artists::{
     search_artists,
 };
 pub(crate) use artwork::{artwork_candidates, artwork_is_fresh, save_artwork};
+pub(crate) use genres::genres;
 pub(crate) use library::{activate_snapshot, server_revision, summary};
 pub(crate) use search::search_query;
 pub(crate) use songs::{insert_song_genres, insert_song_search, insert_songs, search_songs, songs};

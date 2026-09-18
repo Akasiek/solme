@@ -6,7 +6,7 @@ use tauri::State;
 
 use crate::library::{
     AlbumPage, AlbumPageSort, ArtistPage, ArtistPageSort, CachedAlbum, CachedAlbumDetails,
-    CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, HomeAlbumSections,
+    CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, GenreSummary, HomeAlbumSections,
     LibraryCatalogService, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
     LibrarySyncService, LibrarySyncStatus, Pagination,
 };
@@ -31,6 +31,13 @@ pub async fn get_library_summary(
     library: State<'_, Arc<LibraryCatalogService>>,
 ) -> Result<LibrarySummary, String> {
     library.summary().await
+}
+
+#[tauri::command]
+pub async fn get_genres(
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<Vec<GenreSummary>, String> {
+    library.genres().await
 }
 
 #[tauri::command]
