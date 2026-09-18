@@ -69,7 +69,7 @@ watch(
   () => route.query.genre,
   () => {
     const genre = routeGenre();
-    if (route.name !== "albums" || !genre) {
+    if (route.name !== "albums") {
       return;
     }
 
