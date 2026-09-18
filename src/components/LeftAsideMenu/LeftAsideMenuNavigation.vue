@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Disc3, House, Search, Settings, UserGroup } from "@lucide/vue";
+import { Disc3, House, Search, Settings, Tags, UserGroup } from "@lucide/vue";
 import { RouterLink, useRouter } from "vue-router";
 
 import { useLayoutStore } from "@/stores/layout";
@@ -30,6 +30,12 @@ const items = [
     icon: UserGroup,
     route: "/artists",
     animation: "group-hover:scale-110",
+  },
+  {
+    name: "Genres",
+    icon: Tags,
+    route: "/genres",
+    animation: "group-hover:rotate-12 group-hover:scale-110",
   },
   {
     name: "Search",

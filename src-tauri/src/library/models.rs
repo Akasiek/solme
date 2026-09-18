@@ -178,6 +178,13 @@ pub struct Genre {
     pub album_count: i64,
 }
 
+#[derive(Debug, PartialEq, Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct GenreSummary {
+    pub name: String,
+    pub album_count: i64,
+}
+
 pub struct LibrarySnapshot {
     pub artists: Vec<Artist>,
     pub albums: Vec<AlbumWithSongs>,

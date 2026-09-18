@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use super::{
     models::{
         AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, ArtworkCacheRecord,
-        ArtworkCandidate, CachedAlbum, CachedArtist, CachedSong, CatalogFilter,
+        ArtworkCandidate, CachedAlbum, CachedArtist, CachedSong, CatalogFilter, GenreSummary,
         LibraryItemAnnotation, LibraryItemKind, LibrarySnapshot, LibrarySummary, Pagination,
     },
     query,
@@ -17,6 +17,9 @@ pub trait LibraryStateRepository: Send + Sync {
 
 #[async_trait]
 pub trait LibraryCatalogRepository: LibraryStateRepository {
+    async fn genres(&self, _profile_id: &str) -> Result<Vec<GenreSummary>, String> {
+        Err("Genre listing is not implemented".to_string())
+    }
     async fn annotation(
         &self,
         profile_id: &str,
@@ -179,6 +182,10 @@ impl LibrarySnapshotRepository for SqliteRepository {
 
 #[async_trait]
 impl LibraryCatalogRepository for SqliteRepository {
+    async fn genres(&self, profile_id: &str) -> Result<Vec<GenreSummary>, String> {
+        query::genres(self, profile_id).await
+    }
+
     async fn annotation(
         &self,
         profile_id: &str,
@@ -405,6 +412,71 @@ mod tests {
             assert_eq!(
                 repository.album_genres("profile", "album-1").await.unwrap(),
                 vec!["Jazz".to_string()]
+            );
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn lists_active_album_genres_with_album_counts() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut current = snapshot(false);
+            current.albums = vec![
+                album_with_dates("album-1", "Alpha", None, None),
+                album_with_dates("album-2", "Beta", None, None),
+                album_with_dates("album-3", "Gamma", None, None),
+            ];
+            current.albums[0].album.genres =
+                vec!["Jazz".to_string(), "Fusion".to_string(), "  ".to_string()];
+            current.albums[1].album.genres = vec!["Jazz".to_string()];
+            current.albums[2].album.genres = vec!["Rock".to_string()];
+
+            repository
+                .activate_snapshot("profile", "generation-1", None, &current, 123)
+                .await
+                .unwrap();
+
+            let mut other_profile = snapshot(false);
+            other_profile.albums[0].album.genres = vec!["Classical".to_string()];
+            repository
+                .activate_snapshot("other-profile", "generation-1", None, &other_profile, 123)
+                .await
+                .unwrap();
+
+            let genres = repository.genres("profile").await.unwrap();
+            assert_eq!(
+                genres,
+                vec![
+                    crate::library::models::GenreSummary {
+                        name: "Jazz".to_string(),
+                        album_count: 2,
+                    },
+                    crate::library::models::GenreSummary {
+                        name: "Fusion".to_string(),
+                        album_count: 1,
+                    },
+                    crate::library::models::GenreSummary {
+                        name: "Rock".to_string(),
+                        album_count: 1,
+                    },
+                ]
+            );
+
+            let mut next_generation = snapshot(false);
+            next_generation.albums[0].album.genres = vec!["Ambient".to_string()];
+            repository
+                .activate_snapshot("profile", "generation-2", None, &next_generation, 456)
+                .await
+                .unwrap();
+            assert_eq!(
+                repository.genres("profile").await.unwrap(),
+                vec![crate::library::models::GenreSummary {
+                    name: "Ambient".to_string(),
+                    album_count: 1,
+                }]
             );
 
             repository.close().await;
