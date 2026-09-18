@@ -62,7 +62,7 @@ const isActiveRoute = (route: string) => {
       :is="item.route ? RouterLink : 'button'"
       v-bind="item.route ? { to: item.route } : { type: 'button' }"
       :title="item.name"
-      class="group flex items-center rounded px-4 py-2 font-medium text-zinc-100 hover:bg-zinc-800"
+      class="group flex items-center rounded px-3 py-1.5 font-bold text-zinc-100 hover:bg-zinc-800"
       :class="{
         'bg-zinc-800': item.route && isActiveRoute(item.route),
         'justify-center': isCollapsed,
