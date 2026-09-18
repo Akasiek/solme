@@ -4,14 +4,17 @@ import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import LyricsDisplay from "@/components/Lyrics/LyricsDisplay.vue";
 import { usePlayerStore } from "@/stores/player.ts";
+import { useRouter } from "vue-router";
 
 const AWAY_DELAY_MS = 3_000;
 
+const router = useRouter();
 const playerStore = usePlayerStore();
 const { lyrics, playbackPositionSeconds } = storeToRefs(playerStore);
 const syncedLyrics = computed(() => lyrics.value.find((lyricsVariant) => lyricsVariant.synced) ?? null);
 
 const isWindowFocused = useWindowFocus();
+const isInLyricsView = computed(() => router.currentRoute.value.name === "lyrics");
 const show = ref(false);
 
 const { start: startAwayTimer, stop: stopAwayTimer } = useTimeoutFn(
@@ -44,7 +47,7 @@ watch(
     leave-to-class="opacity-0"
   >
     <section
-      v-if="show && syncedLyrics"
+      v-if="show && syncedLyrics && !isInLyricsView"
       role="dialog"
       aria-modal="true"
       aria-label="Lyrics"
