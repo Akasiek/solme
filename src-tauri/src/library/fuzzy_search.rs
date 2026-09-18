@@ -260,7 +260,8 @@ mod tests {
 
     #[test]
     fn enables_fuzzy_only_for_long_enough_queries_with_few_results() {
-        assert_eq!(should_use_fuzzy("ni", 0, 20), None);
+        assert_eq!(should_use_fuzzy("  ", 0, 20), None);
+        assert_eq!(should_use_fuzzy("ni", 0, 20).as_deref(), Some("ni"));
         assert_eq!(should_use_fuzzy("nibana", 5, 20), None);
         assert_eq!(should_use_fuzzy("nibana", 0, 20).as_deref(), Some("nibana"));
     }
