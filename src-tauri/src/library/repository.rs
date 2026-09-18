@@ -447,6 +447,8 @@ mod tests {
                 .unwrap();
 
             let genres = repository.genres("profile").await.unwrap();
+            let summary = repository.summary("profile").await.unwrap();
+            assert_eq!(summary.genre_count, genres.len() as i64);
             assert_eq!(
                 genres,
                 vec![
@@ -471,8 +473,11 @@ mod tests {
                 .activate_snapshot("profile", "generation-2", None, &next_generation, 456)
                 .await
                 .unwrap();
+            let genres = repository.genres("profile").await.unwrap();
+            let summary = repository.summary("profile").await.unwrap();
+            assert_eq!(summary.genre_count, genres.len() as i64);
             assert_eq!(
-                repository.genres("profile").await.unwrap(),
+                genres,
                 vec![crate::library::models::GenreSummary {
                     name: "Ambient".to_string(),
                     album_count: 1,

@@ -51,8 +51,23 @@ pub(crate) async fn activate_snapshot(
         .map_err(|_| "Library contains too many artists".to_string())?;
     let album_count = i64::try_from(snapshot.albums.len())
         .map_err(|_| "Library contains too many albums".to_string())?;
-    let genre_count = i64::try_from(snapshot.genres.len())
-        .map_err(|_| "Library contains too many genres".to_string())?;
+    let genre_count = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*)
+         FROM (
+             SELECT ag.genre
+             FROM album_genres ag
+             WHERE ag.profile_id = ?
+               AND ag.generation = ?
+               AND TRIM(ag.genre) != ''
+             GROUP BY ag.genre
+             HAVING COUNT(DISTINCT ag.album_id) > 0
+         )",
+    )
+    .bind(profile_id)
+    .bind(generation)
+    .fetch_one(&mut *transaction)
+    .await
+    .map_err(|error| format!("Failed to count cached genres: {error}"))?;
 
     sqlx::query(
         "INSERT INTO library_sync_state
