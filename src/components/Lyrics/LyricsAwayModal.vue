@@ -10,8 +10,10 @@ const AWAY_DELAY_MS = 3_000;
 
 const router = useRouter();
 const playerStore = usePlayerStore();
-const { lyrics, playbackPositionSeconds } = storeToRefs(playerStore);
+const { lyrics, isLyricsLoading, playbackPositionSeconds } = storeToRefs(playerStore);
 const syncedLyrics = computed(() => lyrics.value.find((lyricsVariant) => lyricsVariant.synced) ?? null);
+const previousSyncedLyrics = ref(syncedLyrics.value);
+const modalLyrics = computed(() => syncedLyrics.value ?? (isLyricsLoading.value ? previousSyncedLyrics.value : null));
 
 const isWindowFocused = useWindowFocus();
 const isInLyricsView = computed(() => router.currentRoute.value.name === "lyrics");
@@ -19,24 +21,39 @@ const show = ref(false);
 
 const { start: startAwayTimer, stop: stopAwayTimer } = useTimeoutFn(
   () => {
-    show.value = !isWindowFocused.value && syncedLyrics.value !== null;
+    show.value = !isWindowFocused.value && modalLyrics.value !== null;
   },
   AWAY_DELAY_MS,
   { immediate: false },
 );
 
+watch(syncedLyrics, (lyricsVariant) => {
+  if (lyricsVariant) {
+    previousSyncedLyrics.value = lyricsVariant;
+  }
+});
+
 watch(
-  [isWindowFocused, syncedLyrics],
-  ([focused, lyricsVariant]) => {
+  isWindowFocused,
+  (focused) => {
     stopAwayTimer();
     show.value = false;
 
-    if (!focused && lyricsVariant) {
+    if (!focused && modalLyrics.value) {
       startAwayTimer();
     }
   },
   { immediate: true },
 );
+
+watch(modalLyrics, (lyricsVariant) => {
+  if (!lyricsVariant) {
+    stopAwayTimer();
+    show.value = false;
+  } else if (!isWindowFocused.value && !show.value) {
+    startAwayTimer();
+  }
+});
 </script>
 
 <template>
@@ -47,13 +64,13 @@ watch(
     leave-to-class="opacity-0"
   >
     <section
-      v-if="show && syncedLyrics && !isInLyricsView"
+      v-if="show && modalLyrics && !isInLyricsView"
       role="dialog"
       aria-modal="true"
       aria-label="Lyrics"
       class="lyrics-away-modal absolute inset-0 z-50 overflow-y-auto bg-zinc-950/95 p-8 font-serif text-zinc-100 backdrop-blur-sm"
     >
-      <LyricsDisplay :lyrics="syncedLyrics" :playback-position-seconds="playbackPositionSeconds" :allow-seek="false" />
+      <LyricsDisplay :lyrics="modalLyrics" :playback-position-seconds="playbackPositionSeconds" :allow-seek="false" />
     </section>
   </Transition>
 </template>
