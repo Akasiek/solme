@@ -19,6 +19,12 @@ const items = [
     animation: "group-hover:-translate-y-0.25 group-hover:scale-110 group-hover:-rotate-3",
   },
   {
+    name: "Search",
+    icon: Search,
+    onClick: openSearchModal,
+    animation: "group-hover:rotate-12 group-hover:scale-110",
+  },
+  {
     name: "Albums",
     icon: Disc3,
     route: "/albums",
@@ -35,12 +41,6 @@ const items = [
     name: "Genres",
     icon: Tags,
     route: "/genres",
-    animation: "group-hover:rotate-12 group-hover:scale-110",
-  },
-  {
-    name: "Search",
-    icon: Search,
-    onClick: openSearchModal,
     animation: "group-hover:rotate-12 group-hover:scale-110",
   },
   {
