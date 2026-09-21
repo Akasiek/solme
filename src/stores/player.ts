@@ -10,7 +10,7 @@ import type { PlayerStatus } from "@/types.ts";
 export const usePlayerStore = defineStore("player", () => {
   const { updateStatus, ...playbackState } = createPlayerPlayback();
   const { refreshQueue, ...queueState } = createPlayerQueue();
-  const { loadLyrics, ...lyricsState } = createPlayerLyrics();
+  const { loadLyrics, prefetchLyrics, ...lyricsState } = createPlayerLyrics();
   const isListening = ref(false);
   let startPromise: Promise<void> | null = null;
 
@@ -20,6 +20,12 @@ export const usePlayerStore = defineStore("player", () => {
   };
 
   const ensureCurrentLyrics = () => loadLyrics(playbackState.currentSong.value?.remoteId ?? null);
+
+  const prefetchNextLyrics = () => {
+    const queuePosition = playbackState.status.value?.queuePosition;
+    const nextSong = queuePosition === undefined ? undefined : queueState.queue.value[queuePosition];
+    void prefetchLyrics(nextSong?.remoteId ?? null);
+  };
 
   const load = async () => {
     applyStatus(await invoke<PlayerStatus>("get_player_status"));
@@ -38,13 +44,15 @@ export const usePlayerStore = defineStore("player", () => {
       await Promise.all([
         listen<PlayerStatus>("player-status-changed", (event) => {
           applyStatus(event.payload);
+          prefetchNextLyrics();
         }),
         listen("player-queue-changed", () => {
-          void refreshQueue();
+          void refreshQueue().then(prefetchNextLyrics);
         }),
       ]);
       isListening.value = true;
       await Promise.all([load(), refreshQueue()]);
+      prefetchNextLyrics();
     })();
 
     try {

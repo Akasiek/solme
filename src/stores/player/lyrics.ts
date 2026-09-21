@@ -8,8 +8,45 @@ export function createPlayerLyrics() {
   const lyricsError = ref<string | null>(null);
   const hasLyrics = computed(() => lyrics.value.length > 0);
   const lyricsCache = new Map<string, SongLyrics[]>();
+  const lyricsRequests = new Map<string, Promise<SongLyrics[]>>();
   let lyricsSongId: string | null = null;
   let latestRequestId = 0;
+
+  const fetchLyrics = (songId: string) => {
+    const cachedLyrics = lyricsCache.get(songId);
+    if (cachedLyrics) {
+      return Promise.resolve(cachedLyrics);
+    }
+
+    const existingRequest = lyricsRequests.get(songId);
+    if (existingRequest) {
+      return existingRequest;
+    }
+
+    const request = invoke<SongLyrics[]>("get_song_lyrics", { songId })
+      .then((songLyrics) => {
+        lyricsCache.set(songId, songLyrics);
+        return songLyrics;
+      })
+      .finally(() => {
+        lyricsRequests.delete(songId);
+      });
+
+    lyricsRequests.set(songId, request);
+    return request;
+  };
+
+  const prefetchLyrics = async (songId: string | null) => {
+    if (!songId || lyricsCache.has(songId)) {
+      return;
+    }
+
+    try {
+      await fetchLyrics(songId);
+    } catch {
+      // Prefetch failures are retried when the song becomes current.
+    }
+  };
 
   const loadLyrics = async (songId: string | null) => {
     const isCurrentSongAlreadyHandled =
@@ -29,8 +66,8 @@ export function createPlayerLyrics() {
       return;
     }
 
-    const cachedLyrics = lyricsCache.get(songId);
-    if (cachedLyrics) {
+    if (lyricsCache.has(songId)) {
+      const cachedLyrics = lyricsCache.get(songId) ?? [];
       lyrics.value = cachedLyrics;
       isLyricsLoading.value = false;
       return;
@@ -42,17 +79,13 @@ export function createPlayerLyrics() {
     try {
       outcome = {
         status: "success",
-        lyrics: await invoke<SongLyrics[]>("get_song_lyrics", { songId }),
+        lyrics: await fetchLyrics(songId),
       };
     } catch (error) {
       outcome = {
         status: "error",
         message: error instanceof Error ? error.message : String(error),
       };
-    }
-
-    if (outcome.status === "success") {
-      lyricsCache.set(songId, outcome.lyrics);
     }
 
     if (requestId !== latestRequestId) {
@@ -74,5 +107,6 @@ export function createPlayerLyrics() {
     lyricsError,
     hasLyrics,
     loadLyrics,
+    prefetchLyrics,
   };
 }
