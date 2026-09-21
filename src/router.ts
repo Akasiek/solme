@@ -10,6 +10,7 @@ import GenresView from "@/views/GenresView.vue";
 import SearchView from "@/views/SearchView.vue";
 import SettingsView from "@/views/settings/SettingsView.vue";
 import SettingsAccountView from "@/views/settings/SettingsAccountView.vue";
+import SettingsLyricsView from "@/views/settings/SettingsLyricsView.vue";
 import LyricsView from "@/views/LyricsView.vue";
 
 const serverAuthorizationRoute = "settings-account";
@@ -79,6 +80,11 @@ export const router = createRouter({
           path: "account",
           name: serverAuthorizationRoute,
           component: SettingsAccountView,
+        },
+        {
+          path: "lyrics",
+          name: "settings-lyrics",
+          component: SettingsLyricsView,
         },
       ],
     },

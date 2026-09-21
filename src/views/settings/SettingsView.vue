@@ -1,5 +1,8 @@
 <script setup lang="ts">
-const sections = [{ name: "Servers", route: { name: "settings-account" } }];
+const sections = [
+  { name: "Servers", route: { name: "settings-account" } },
+  { name: "Lyrics", route: { name: "settings-lyrics" } },
+];
 </script>
 
 <template>

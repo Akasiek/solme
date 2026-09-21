@@ -14,6 +14,10 @@ export interface SongLyrics {
   line: LyricsLine[];
 }
 
+export interface AppSettings {
+  awayLyricsEnabled: boolean;
+}
+
 export interface LyricsLine {
   start?: number;
   value: string;

@@ -8,6 +8,7 @@ use std::{
 use tauri::Manager;
 
 use crate::{
+    app_settings::AppSettingsService,
     audio::{MpvBackend, PlaybackSessionService, PlayerService, ScrobbleService},
     credentials::SystemCredentialStore,
     database::{SqliteRepository, DATABASE_FILE_NAME},
@@ -34,6 +35,7 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     let player = create_player(&server, &repository, event_bus)?;
     let scrobble_service = create_scrobble_service(&player, &server, &repository);
     let session_service = create_session_service(&player, &server, &repository);
+    let app_settings = create_app_settings(&repository);
 
     app.manage(Arc::clone(&server));
     app.manage(library_catalog);
@@ -41,6 +43,7 @@ pub fn setup_app(app: &mut tauri::App) -> SetupResult<()> {
     app.manage(Arc::clone(&player));
     app.manage(Arc::clone(&scrobble_service));
     app.manage(Arc::clone(&session_service));
+    app.manage(app_settings);
     scrobble_service.start();
     library_sync.start_periodic();
     #[cfg(target_os = "linux")]
@@ -115,6 +118,10 @@ fn create_repository(database_path: &Path) -> SetupResult<Arc<SqliteRepository>>
     let repository = tauri::async_runtime::block_on(SqliteRepository::open(database_path))
         .map_err(std::io::Error::other)?;
     Ok(Arc::new(repository))
+}
+
+fn create_app_settings(repository: &Arc<SqliteRepository>) -> Arc<AppSettingsService> {
+    Arc::new(AppSettingsService::new(repository.clone()))
 }
 
 fn create_event_bus(app: &tauri::App) -> Arc<EventBus> {

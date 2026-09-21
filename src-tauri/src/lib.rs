@@ -14,10 +14,12 @@ use crate::commands::server::{
     forget_saved_server_profile, get_saved_server_profile, get_saved_server_profiles,
     get_song_lyrics, ping_music_server,
 };
+use crate::commands::settings::{get_app_settings, update_app_setting};
 use crate::setup::setup_app;
 use log::LevelFilter;
 use tauri_plugin_log::{Target, TargetKind};
 
+mod app_settings;
 mod audio;
 mod commands;
 mod credentials;
@@ -81,7 +83,9 @@ pub fn run() {
             get_cached_songs,
             search_cached_albums,
             search_cached_artists,
-            search_cached_songs
+            search_cached_songs,
+            get_app_settings,
+            update_app_setting
         ])
         .run(tauri::generate_context!())
     {
