@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ArrowLeft, ArrowRight } from "@lucide/vue";
+import { ArrowLeft, ArrowRight, Search } from "@lucide/vue";
 import { computed } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { useLayoutStore } from "@/stores/layout";
 
 defineProps<{
   isCollapsed: boolean;
@@ -14,6 +15,7 @@ interface NavigationHistoryState {
 
 const route = useRoute();
 const router = useRouter();
+const { openSearchModal } = useLayoutStore();
 
 const historyState = () => window.history.state as NavigationHistoryState | null;
 
@@ -22,7 +24,7 @@ const canGoForward = computed(() => route.fullPath.length > 0 && historyState()?
 </script>
 
 <template>
-  <nav class="mb-4 flex gap-2" :class="isCollapsed ? 'flex-col' : 'flex-row'" aria-label="Page history">
+  <nav class="mb-4 flex gap-2" :class="isCollapsed ? 'flex-col' : 'flex-row'" aria-label="Navigation controls">
     <button
       type="button"
       class="nav-button"
@@ -44,6 +46,16 @@ const canGoForward = computed(() => route.fullPath.length > 0 && historyState()?
       @click="router.forward()"
     >
       <ArrowRight class="size-5 shrink-0" aria-hidden="true" />
+    </button>
+    <button
+      type="button"
+      class="nav-button"
+      :class="isCollapsed ? 'w-full justify-center px-4' : 'min-w-0 flex-1 justify-center gap-2 px-2 text-sm'"
+      title="Search"
+      aria-label="Search"
+      @click="openSearchModal"
+    >
+      <Search class="size-5 shrink-0" aria-hidden="true" />
     </button>
   </nav>
 </template>

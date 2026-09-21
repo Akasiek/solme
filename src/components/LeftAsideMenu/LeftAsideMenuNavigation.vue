@@ -1,15 +1,12 @@
 <script setup lang="ts">
-import { Disc3, House, Search, Settings, Tags, UserGroup } from "@lucide/vue";
+import { Disc3, House, Settings, Tags, UserGroup } from "@lucide/vue";
 import { RouterLink, useRouter } from "vue-router";
-
-import { useLayoutStore } from "@/stores/layout";
 
 defineProps<{
   isCollapsed: boolean;
 }>();
 
 const router = useRouter();
-const { openSearchModal } = useLayoutStore();
 
 const items = [
   {
@@ -17,12 +14,6 @@ const items = [
     icon: House,
     route: "/",
     animation: "group-hover:-translate-y-0.25 group-hover:scale-110 group-hover:-rotate-3",
-  },
-  {
-    name: "Search",
-    icon: Search,
-    onClick: openSearchModal,
-    animation: "group-hover:rotate-12 group-hover:scale-110",
   },
   {
     name: "Albums",
@@ -74,7 +65,6 @@ const isActiveRoute = (route: string) => {
         'justify-center': isCollapsed,
         'gap-3': !isCollapsed,
       }"
-      @click="item.onClick?.()"
     >
       <component
         :is="item.icon"
