@@ -91,8 +91,6 @@ pub enum ScrobbleEvent {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum AlbumQuery {
     Library,
-    RecentlyPlayed { limit: usize },
-    MostPlayed { limit: usize },
 }
 
 #[derive(Clone, Deserialize, Serialize)]

@@ -745,13 +745,8 @@ mod tests {
 
         async fn albums(&self, query: AlbumQuery) -> Result<Vec<Album>, String> {
             self.album_calls.fetch_add(1, Ordering::SeqCst);
-            let mut album = album();
-            album.remote_id = match query {
-                AlbumQuery::Library => return Ok(vec![album]),
-                AlbumQuery::RecentlyPlayed { .. } => "recently-played".to_string(),
-                AlbumQuery::MostPlayed { .. } => "most-played".to_string(),
-            };
-            Ok(vec![album])
+            let AlbumQuery::Library = query;
+            Ok(vec![album()])
         }
 
         async fn album(&self, _id: &str) -> Result<AlbumWithSongs, String> {
@@ -949,6 +944,12 @@ mod tests {
             limit: i64,
             sort: AlbumSort,
         ) -> Result<Vec<CachedAlbum>, String> {
+            if sort == AlbumSort::RecentlyPlayed {
+                return Ok(vec![cached_album("recently-played")]);
+            }
+            if sort == AlbumSort::MostPlayed {
+                return Ok(vec![cached_album("most-played")]);
+            }
             if sort != AlbumSort::Random {
                 return Ok(Vec::new());
             }
@@ -969,17 +970,6 @@ mod tests {
             Ok(albums
                 .into_iter()
                 .take(usize::try_from(limit).unwrap_or(0))
-                .collect())
-        }
-
-        async fn albums_by_ids(
-            &self,
-            _profile_id: &str,
-            album_ids: &[String],
-        ) -> Result<Vec<CachedAlbum>, String> {
-            Ok(album_ids
-                .iter()
-                .map(|album_id| cached_album(album_id))
                 .collect())
         }
 

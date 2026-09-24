@@ -1,12 +1,10 @@
 use std::sync::Arc;
 
-use futures_util::future::join;
-
-use crate::server::{AlbumQuery, MusicServerService};
+use crate::server::MusicServerService;
 
 use super::{
     models::{
-        Album, AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, CachedAlbum,
+        AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, CachedAlbum,
         CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter,
         GenreSummary, HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
         Paginated, Pagination,
@@ -159,28 +157,25 @@ impl LibraryCatalogService {
             });
         };
         let limit = limit.clamp(1, 50);
-        let (recently_played_albums, most_played_albums) = self
-            .played_album_sections(
-                &profile_id,
-                usize::try_from(limit).map_err(|_| "Invalid album limit".to_string())?,
-            )
-            .await?;
-        let hero_random_albums = self
-            .repository
-            .albums(&profile_id, 0, 5, AlbumSort::Random)
-            .await?;
-        let random_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::Random)
-            .await?;
-        let newly_added_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::RecentlyAdded)
-            .await?;
-        let newly_released_albums = self
-            .repository
-            .albums(&profile_id, 0, limit, AlbumSort::RecentlyReleased)
-            .await?;
+        let (
+            hero_random_albums,
+            recently_played_albums,
+            random_albums,
+            newly_added_albums,
+            newly_released_albums,
+            most_played_albums,
+        ) = futures_util::try_join!(
+            self.repository.albums(&profile_id, 0, 5, AlbumSort::Random),
+            self.repository.albums(&profile_id, 0, limit, AlbumSort::RecentlyPlayed),
+            self.repository
+                .albums(&profile_id, 0, limit, AlbumSort::Random),
+            self.repository
+                .albums(&profile_id, 0, limit, AlbumSort::RecentlyAdded),
+            self.repository
+                .albums(&profile_id, 0, limit, AlbumSort::RecentlyReleased),
+            self.repository
+                .albums(&profile_id, 0, limit, AlbumSort::MostPlayed),
+        )?;
 
         Ok(HomeAlbumSections {
             hero_random_albums,
@@ -190,45 +185,6 @@ impl LibraryCatalogService {
             newly_added_albums,
             newly_released_albums,
         })
-    }
-
-    async fn played_album_sections(
-        &self,
-        profile_id: &str,
-        limit: usize,
-    ) -> Result<(Vec<CachedAlbum>, Vec<CachedAlbum>), String> {
-        let Ok((_, server)) = self.server.current_server() else {
-            return Ok((Vec::new(), Vec::new()));
-        };
-        let (recent, frequent) = join(
-            server.albums(AlbumQuery::RecentlyPlayed { limit }),
-            server.albums(AlbumQuery::MostPlayed { limit }),
-        )
-        .await;
-
-        Ok((
-            self.cached_server_albums(profile_id, recent).await?,
-            self.cached_server_albums(profile_id, frequent).await?,
-        ))
-    }
-
-    async fn cached_server_albums(
-        &self,
-        profile_id: &str,
-        albums: Result<Vec<Album>, String>,
-    ) -> Result<Vec<CachedAlbum>, String> {
-        let albums = match albums {
-            Ok(albums) => albums,
-            Err(error) => {
-                log::warn!("Failed to load a played albums section: {error}");
-                return Ok(Vec::new());
-            }
-        };
-        let album_ids = albums
-            .into_iter()
-            .map(|album| album.remote_id)
-            .collect::<Vec<_>>();
-        self.repository.albums_by_ids(profile_id, &album_ids).await
     }
 
     pub async fn artist(&self, artist_id: &str) -> Result<Option<CachedArtistDetails>, String> {

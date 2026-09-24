@@ -324,22 +324,13 @@ impl MusicServer for NavidromeBackend {
     }
 
     async fn albums(&self, query: AlbumQuery) -> Result<Vec<Album>, String> {
-        let (list_type, limit) = match query {
-            AlbumQuery::Library => ("alphabeticalByArtist", None),
-            AlbumQuery::RecentlyPlayed { limit } => ("recent", Some(limit)),
-            AlbumQuery::MostPlayed { limit } => ("frequent", Some(limit)),
-        };
+        let AlbumQuery::Library = query;
+        let list_type = "alphabeticalByArtist";
         let mut albums = Vec::new();
         let mut offset = 0_usize;
 
         loop {
-            let remaining = limit.map(|limit| limit.saturating_sub(albums.len()));
-            if remaining == Some(0) {
-                return Ok(albums);
-            }
-            let page_size = remaining
-                .unwrap_or(ALBUM_PAGE_SIZE as usize)
-                .min(ALBUM_PAGE_SIZE as usize);
+            let page_size = ALBUM_PAGE_SIZE as usize;
             let payload: AlbumListPayload = self
                 .request_payload(
                     "getAlbumList2",

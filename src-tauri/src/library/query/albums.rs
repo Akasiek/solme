@@ -1,4 +1,4 @@
-use std::collections::{BTreeSet, HashMap};
+use std::collections::BTreeSet;
 
 use sqlx::{QueryBuilder, Sqlite, Transaction};
 
@@ -356,39 +356,6 @@ async fn available_genres(
     .map_err(|error| format!("Failed to read album genres: {error}"))
 }
 
-pub(crate) async fn albums_by_ids(
-    repo: &SqliteRepository,
-    profile_id: &str,
-    album_ids: &[String],
-) -> Result<Vec<CachedAlbum>, String> {
-    if album_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let mut query = QueryBuilder::new(ALBUM_SELECT_FROM_ACTIVE_GENERATION);
-    query.push_bind(profile_id).push(" AND a.remote_id IN (");
-    let mut ids = query.separated(", ");
-    for album_id in album_ids {
-        ids.push_bind(album_id);
-    }
-    ids.push_unseparated(")");
-
-    let albums = query
-        .build_query_as::<CachedAlbum>()
-        .fetch_all(&repo.pool)
-        .await
-        .map_err(|error| format!("Failed to read cached albums by ID: {error}"))?;
-    let mut albums_by_id = albums
-        .into_iter()
-        .map(|album| (album.remote_id.clone(), album))
-        .collect::<HashMap<_, _>>();
-
-    Ok(album_ids
-        .iter()
-        .filter_map(|album_id| albums_by_id.remove(album_id))
-        .collect())
-}
-
 pub(crate) async fn album(
     repo: &SqliteRepository,
     profile_id: &str,
@@ -504,12 +471,20 @@ fn album_list_filter_and_order(sort: AlbumSort) -> (&'static str, &'static str) 
                       a.artist_name COLLATE NOCASE,
                       a.name COLLATE NOCASE",
         ),
+        AlbumSort::RecentlyPlayed => (
+            " AND a.last_played_at IS NOT NULL",
+            "ORDER BY a.last_played_at DESC, a.name COLLATE NOCASE",
+        ),
         AlbumSort::RecentlyReleased => (
             " AND COALESCE(a.original_release_date, a.release_date) IS NOT NULL",
             "ORDER BY COALESCE(a.original_release_date, a.release_date, CASE WHEN a.year IS NOT NULL THEN printf('%04d-12-31', a.year) END) IS NULL,
                       COALESCE(a.original_release_date, a.release_date, CASE WHEN a.year IS NOT NULL THEN printf('%04d-12-31', a.year) END) DESC,
                       a.artist_name COLLATE NOCASE,
                       a.name COLLATE NOCASE",
+        ),
+        AlbumSort::MostPlayed => (
+            " AND a.play_count > 0",
+            "ORDER BY a.play_count DESC, a.name COLLATE NOCASE",
         ),
     }
 }

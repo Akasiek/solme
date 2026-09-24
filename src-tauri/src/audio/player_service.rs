@@ -1208,14 +1208,6 @@ mod tests {
             unimplemented!()
         }
 
-        async fn albums_by_ids(
-            &self,
-            _profile_id: &str,
-            _album_ids: &[String],
-        ) -> Result<Vec<CachedAlbum>, String> {
-            unimplemented!()
-        }
-
         async fn album(
             &self,
             _profile_id: &str,

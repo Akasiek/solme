@@ -116,7 +116,9 @@ pub enum AlbumSort {
     Artist,
     Random,
     RecentlyAdded,
+    RecentlyPlayed,
     RecentlyReleased,
+    MostPlayed,
 }
 
 #[derive(Serialize)]

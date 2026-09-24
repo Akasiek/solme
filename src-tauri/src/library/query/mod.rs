@@ -8,7 +8,7 @@ mod search;
 mod songs;
 
 pub(crate) use albums::{
-    album, album_audio_formats, album_disc_count, album_genres, album_page, albums, albums_by_ids,
+    album, album_audio_formats, album_disc_count, album_genres, album_page, albums,
     insert_album_genres, insert_album_search, insert_albums, search_albums,
 };
 pub(crate) use annotations::{annotation, set_favorite, set_rating};
