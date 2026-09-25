@@ -29,7 +29,7 @@ const page = ref(1);
 const pageSize = 50;
 const emptyPage: SongPage = { items: [], genres: [], total: 0 };
 const playerStore = usePlayerStore();
-const { lastCompletedMutation } = storeToRefs(useLibraryAnnotationsStore());
+const { completedMutations } = storeToRefs(useLibraryAnnotationsStore());
 const currentSongId = computed(() => playerStore.currentSong?.remoteId);
 
 onMounted(async () => {
@@ -79,16 +79,17 @@ watch([filterKey, sort, page], (values, previous) => {
     void reload();
   }
 });
-watch(lastCompletedMutation, (mutation) => {
-  if (mutation?.itemKind !== "song") return;
-
-  const affectsActiveFilter =
-    (mutation.field === "favorite" && filters.value.favoriteOnly) ||
-    (mutation.field === "rating" && (filters.value.minimumRating !== null || filters.value.unratedOnly));
-  if (affectsActiveFilter && searchTimeout === undefined) {
-    void reload();
-  }
-});
+watch(
+  [() => completedMutations.value.song.favorite, () => completedMutations.value.song.rating],
+  (counts, previous) => {
+    const affectsActiveFilter =
+      (counts[0] !== previous[0] && filters.value.favoriteOnly) ||
+      (counts[1] !== previous[1] && (filters.value.minimumRating !== null || filters.value.unratedOnly));
+    if (affectsActiveFilter && searchTimeout === undefined) {
+      void reload();
+    }
+  },
+);
 </script>
 
 <template>
