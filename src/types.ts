@@ -103,6 +103,16 @@ export interface ArtistPage extends Paginated<CachedArtist> {
   genres: string[];
 }
 
+export interface SongPageItem extends CachedSong {
+  releaseDate?: string;
+  originalReleaseDate?: string;
+  year?: number;
+}
+
+export interface SongPage extends Paginated<SongPageItem> {
+  genres: string[];
+}
+
 export interface CatalogFilter {
   favoriteOnly: boolean;
   minimumRating: number | null;
@@ -129,6 +139,7 @@ export type ArtistPageSort =
   | "recently-played"
   | "most-played"
   | "recently-added";
+export type SongPageSort = "title" | "artist" | "album" | "newest" | "oldest";
 
 export interface CachedAlbumDetails {
   album: CachedAlbum;

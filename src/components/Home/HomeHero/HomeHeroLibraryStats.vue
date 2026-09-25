@@ -13,7 +13,7 @@ const countFormatter = new Intl.NumberFormat();
 const sections = computed(() => [
   { label: "Albums", count: props.summary.albumCount, icon: Library, route: "albums" },
   { label: "Artists", count: props.summary.artistCount, icon: Users, route: "artists" },
-  { label: "Songs", count: props.summary.songCount, icon: Music },
+  { label: "Songs", count: props.summary.songCount, icon: Music, route: "songs" },
   { label: "Genres", count: props.summary.genreCount, icon: Tags, route: "genres" },
 ]);
 const countLabel = (value: number) => (props.isLoading ? "..." : countFormatter.format(value));

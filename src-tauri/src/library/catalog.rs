@@ -7,7 +7,7 @@ use super::{
         AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, CachedAlbum,
         CachedAlbumDetails, CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter,
         GenreSummary, HomeAlbumSections, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
-        Paginated, Pagination,
+        Paginated, Pagination, SongPage, SongPageSort,
     },
     repository::LibraryCatalogRepository,
 };
@@ -145,6 +145,27 @@ impl LibraryCatalogService {
             .await
     }
 
+    pub async fn song_page(
+        &self,
+        query: &str,
+        filters: CatalogFilter,
+        sort: SongPageSort,
+        pagination: Pagination,
+    ) -> Result<SongPage, String> {
+        let Some(profile_id) = self.server.cache_profile_id().await? else {
+            return Ok(SongPage {
+                page: Paginated {
+                    items: Vec::new(),
+                    total: 0,
+                },
+                genres: Vec::new(),
+            });
+        };
+        self.repository
+            .song_page(&profile_id, query, filters, sort, pagination)
+            .await
+    }
+
     pub async fn home_album_sections(&self, limit: i64) -> Result<HomeAlbumSections, String> {
         let Some(profile_id) = self.server.cache_profile_id().await? else {
             return Ok(HomeAlbumSections {
@@ -166,7 +187,8 @@ impl LibraryCatalogService {
             most_played_albums,
         ) = futures_util::try_join!(
             self.repository.albums(&profile_id, 0, 5, AlbumSort::Random),
-            self.repository.albums(&profile_id, 0, limit, AlbumSort::RecentlyPlayed),
+            self.repository
+                .albums(&profile_id, 0, limit, AlbumSort::RecentlyPlayed),
             self.repository
                 .albums(&profile_id, 0, limit, AlbumSort::Random),
             self.repository

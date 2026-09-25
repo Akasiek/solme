@@ -12,6 +12,7 @@ pub use models::{
     AlbumPage, AlbumPageSort, ArtistPage, ArtistPageSort, CachedAlbum, CachedAlbumDetails,
     CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, GenreSummary, HomeAlbumSections,
     LibraryItemAnnotation, LibraryItemKind, LibrarySummary, LibrarySyncStatus, Pagination,
+    SongPage, SongPageSort,
 };
 pub(crate) use repository::LibraryCatalogRepository;
 #[cfg(test)]

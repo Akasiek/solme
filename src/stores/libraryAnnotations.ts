@@ -18,6 +18,11 @@ const mutationCommand: Record<keyof LibraryItemAnnotation, string> = {
 
 export const useLibraryAnnotationsStore = defineStore("library-annotations", () => {
   const annotations = ref<Record<string, LibraryItemAnnotation>>({});
+  const completedMutations = ref<Record<LibraryItemKind, Record<keyof LibraryItemAnnotation, number>>>({
+    artist: { favorite: 0, rating: 0 },
+    album: { favorite: 0, rating: 0 },
+    song: { favorite: 0, rating: 0 },
+  });
   const mutationQueues = new Map<string, Promise<void>>();
   const toastStore = useToastStore();
 
@@ -60,6 +65,7 @@ export const useLibraryAnnotationsStore = defineStore("library-annotations", () 
           itemId,
           [field]: nextValue,
         });
+        completedMutations.value[itemKind][field] += 1;
       } catch (cause) {
         const currentAnnotation = annotations.value[key];
         if (currentAnnotation[field] !== nextValue) return;
@@ -85,6 +91,7 @@ export const useLibraryAnnotationsStore = defineStore("library-annotations", () 
   };
 
   return {
+    completedMutations,
     seedAnnotation,
     ratingFor,
     favoriteFor,

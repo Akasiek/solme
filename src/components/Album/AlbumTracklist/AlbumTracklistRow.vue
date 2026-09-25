@@ -14,7 +14,7 @@ const { song, trackNumber, showArtist, isCurrent, isLoading } = defineProps<{
   isLoading: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   play: [song: CachedSong];
 }>();
 
@@ -23,17 +23,24 @@ const contextMenu = ref<{ x: number; y: number }>();
 const openContextMenu = (event: MouseEvent) => {
   contextMenu.value = { x: event.clientX, y: event.clientY };
 };
+
+const playFromRow = (event: MouseEvent) => {
+  if (!isLoading && event.target instanceof Element && !event.target.closest("button, a")) {
+    emit("play", song);
+  }
+};
 </script>
 
 <template>
   <div
-    class="relative grid w-full grid-cols-[3rem_minmax(0,1fr)_4rem] items-center gap-4 rounded-md px-4 py-2.5 font-sans focus-within:bg-zinc-800 hover:bg-zinc-800 @min-[48rem]:grid-cols-[3rem_minmax(0,1fr)_11rem_4rem]"
+    class="relative grid w-full cursor-pointer grid-cols-[3rem_minmax(0,1fr)_4rem] items-center gap-4 rounded-md px-4 py-2.5 font-sans focus-within:bg-zinc-800 hover:bg-zinc-800 @min-[48rem]:grid-cols-[3rem_minmax(0,1fr)_11rem_4rem]"
     :class="
       isCurrent
         ? 'bg-zinc-800/50 shadow-inner shadow-black/20 before:absolute before:top-2 before:bottom-2 before:left-0 before:w-1 before:rounded-r before:bg-accent'
         : ''
     "
     @contextmenu.prevent="openContextMenu"
+    @click="playFromRow"
   >
     <button
       type="button"
