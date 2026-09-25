@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { storeToRefs } from "pinia";
 import { computed, onMounted, ref, watch } from "vue";
 import AsyncViewState from "@/components/AsyncViewState.vue";
 import PaginatedResults from "@/components/PaginatedResults.vue";
@@ -7,6 +8,7 @@ import SongFiltersAside from "@/components/SongFiltersAside.vue";
 import SongListRow from "@/components/SongListRow.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
 import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
+import { useLibraryAnnotationsStore } from "@/stores/libraryAnnotations";
 import { usePlayerStore } from "@/stores/player";
 import type { CatalogFilter, SongPage, SongPageSort } from "@/types";
 
@@ -25,7 +27,9 @@ const filterKey = computed(() => JSON.stringify(filters.value));
 const sort = ref<SongPageSort>("title");
 const page = ref(1);
 const pageSize = 50;
+const emptyPage: SongPage = { items: [], genres: [], total: 0 };
 const playerStore = usePlayerStore();
+const { lastCompletedMutation } = storeToRefs(useLibraryAnnotationsStore());
 const currentSongId = computed(() => playerStore.currentSong?.remoteId);
 
 onMounted(async () => {
@@ -40,15 +44,19 @@ const {
   error: loadError,
   reload,
 } = useAsyncData(
-  () =>
-    invoke<SongPage>("get_song_page", {
-      query: query.value,
+  async () => {
+    const requestedQuery = query.value;
+    const result = await invoke<SongPage>("get_song_page", {
+      query: requestedQuery,
       filters: filters.value,
       sort: sort.value,
       pagination: { offset: (page.value - 1) * pageSize, limit: pageSize },
-    }),
-  { items: [], genres: [], total: 0 },
+    });
+    return { query: requestedQuery, result };
+  },
+  { query: "", result: emptyPage },
 );
+const matchingPage = computed(() => (data.value.query === query.value ? data.value.result : null));
 let searchTimeout: number | undefined;
 watch(query, (_, __, onCleanup) => {
   if (page.value !== 1) {
@@ -71,6 +79,16 @@ watch([filterKey, sort, page], (values, previous) => {
     void reload();
   }
 });
+watch(lastCompletedMutation, (mutation) => {
+  if (mutation?.itemKind !== "song") return;
+
+  const affectsActiveFilter =
+    (mutation.field === "favorite" && filters.value.favoriteOnly) ||
+    (mutation.field === "rating" && (filters.value.minimumRating !== null || filters.value.unratedOnly));
+  if (affectsActiveFilter && searchTimeout === undefined) {
+    void reload();
+  }
+});
 </script>
 
 <template>
@@ -81,20 +99,26 @@ watch([filterKey, sort, page], (values, previous) => {
     </header>
     <AsyncViewState :is-loading="isLoading && !hasLoaded" :error="loadError">
       <div class="grid grid-cols-1 gap-6 @min-[48rem]:grid-cols-[14rem_minmax(0,1fr)]">
-        <SongFiltersAside v-model:query="query" v-model:filters="filters" v-model:sort="sort" :genres="data.genres" />
+        <SongFiltersAside
+          v-model:query="query"
+          v-model:filters="filters"
+          v-model:sort="sort"
+          :genres="data.result.genres"
+        />
         <PaginatedResults
+          v-if="matchingPage"
           v-model:page="page"
-          :total="data.total"
+          :total="matchingPage.total"
           :page-size="pageSize"
           item-label="songs"
           navigation-label="Song pages"
         >
           <div
-            v-if="data.items.length"
+            v-if="matchingPage.items.length"
             class="divide-y divide-zinc-800 rounded-lg border border-zinc-800 bg-zinc-900/20"
           >
             <SongListRow
-              v-for="song in data.items"
+              v-for="song in matchingPage.items"
               :key="song.remoteId"
               :song="song"
               :is-current="currentSongId === song.remoteId"
