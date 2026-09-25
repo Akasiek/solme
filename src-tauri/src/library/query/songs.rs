@@ -43,8 +43,8 @@ pub(crate) async fn song_page(
         SongPageSort::Title => "ORDER BY song.title COLLATE NOCASE, song.artist_name COLLATE NOCASE, song.remote_id",
         SongPageSort::Artist => "ORDER BY song.artist_name COLLATE NOCASE, song.album_name COLLATE NOCASE, song.disc_number, song.track_number, song.remote_id",
         SongPageSort::Album => "ORDER BY song.album_name COLLATE NOCASE, song.disc_number, song.track_number, song.remote_id",
-        SongPageSort::Newest => "ORDER BY COALESCE(album.original_release_date, album.release_date, printf('%04d', song.year)) IS NULL, COALESCE(album.original_release_date, album.release_date, printf('%04d', song.year)) DESC, song.title COLLATE NOCASE, song.remote_id",
-        SongPageSort::Oldest => "ORDER BY COALESCE(album.original_release_date, album.release_date, printf('%04d', song.year)) IS NULL, COALESCE(album.original_release_date, album.release_date, printf('%04d', song.year)), song.title COLLATE NOCASE, song.remote_id",
+        SongPageSort::Newest => "ORDER BY COALESCE(album.original_release_date, album.release_date, CASE WHEN song.year IS NOT NULL THEN printf('%04d', song.year) END) IS NULL, COALESCE(album.original_release_date, album.release_date, CASE WHEN song.year IS NOT NULL THEN printf('%04d', song.year) END) DESC, song.title COLLATE NOCASE, song.remote_id",
+        SongPageSort::Oldest => "ORDER BY COALESCE(album.original_release_date, album.release_date, CASE WHEN song.year IS NOT NULL THEN printf('%04d', song.year) END) IS NULL, COALESCE(album.original_release_date, album.release_date, CASE WHEN song.year IS NOT NULL THEN printf('%04d', song.year) END), song.title COLLATE NOCASE, song.remote_id",
     });
     let pagination = pagination.normalized();
     items_query
