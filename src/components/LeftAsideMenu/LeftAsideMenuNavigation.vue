@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Disc3, House, Settings, Tags, UserGroup } from "@lucide/vue";
+import { Disc3, House, Music2, Settings, Tags, UserGroup } from "@lucide/vue";
 import { RouterLink, useRouter } from "vue-router";
 
 defineProps<{
@@ -27,6 +27,12 @@ const items = [
     icon: UserGroup,
     route: "/artists",
     animation: "group-hover:scale-110",
+  },
+  {
+    name: "Songs",
+    icon: Music2,
+    route: "/songs",
+    animation: "song-icon",
   },
   {
     name: "Genres",
@@ -80,3 +86,32 @@ const isActiveRoute = (route: string) => {
     </component>
   </nav>
 </template>
+
+<style scoped>
+.song-icon {
+  transform: rotate(12deg);
+  transform-origin: 50% 85%;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .group:hover .song-icon,
+  .group:focus-visible .song-icon {
+    animation: song-shake 900ms ease-in-out both;
+  }
+}
+
+@keyframes song-shake {
+  0%,
+  100% {
+    transform: rotate(12deg);
+  }
+  20%,
+  60% {
+    transform: rotate(2deg);
+  }
+  40%,
+  80% {
+    transform: rotate(20deg);
+  }
+}
+</style>

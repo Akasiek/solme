@@ -8,7 +8,7 @@ use crate::library::{
     AlbumPage, AlbumPageSort, ArtistPage, ArtistPageSort, CachedAlbum, CachedAlbumDetails,
     CachedArtist, CachedArtistDetails, CachedSong, CatalogFilter, GenreSummary, HomeAlbumSections,
     LibraryCatalogService, LibraryItemAnnotation, LibraryItemKind, LibrarySummary,
-    LibrarySyncService, LibrarySyncStatus, Pagination,
+    LibrarySyncService, LibrarySyncStatus, Pagination, SongPage, SongPageSort,
 };
 
 #[tauri::command]
@@ -100,6 +100,17 @@ pub async fn get_artist_page(
     library: State<'_, Arc<LibraryCatalogService>>,
 ) -> Result<ArtistPage, String> {
     library.artist_page(&query, filters, sort, pagination).await
+}
+
+#[tauri::command]
+pub async fn get_song_page(
+    query: String,
+    filters: CatalogFilter,
+    sort: SongPageSort,
+    pagination: Pagination,
+    library: State<'_, Arc<LibraryCatalogService>>,
+) -> Result<SongPage, String> {
+    library.song_page(&query, filters, sort, pagination).await
 }
 
 #[tauri::command]

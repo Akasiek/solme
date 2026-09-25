@@ -5,6 +5,7 @@ use super::{
         AlbumPage, AlbumPageSort, AlbumSort, ArtistPage, ArtistPageSort, ArtworkCacheRecord,
         ArtworkCandidate, CachedAlbum, CachedArtist, CachedSong, CatalogFilter, GenreSummary,
         LibraryItemAnnotation, LibraryItemKind, LibrarySnapshot, LibrarySummary, Pagination,
+        SongPage, SongPageSort,
     },
     query,
 };
@@ -83,6 +84,16 @@ pub trait LibraryCatalogRepository: LibraryStateRepository {
         _pagination: Pagination,
     ) -> Result<ArtistPage, String> {
         Err("Artist pagination is not implemented".to_string())
+    }
+    async fn song_page(
+        &self,
+        _profile_id: &str,
+        _query: &str,
+        _filters: CatalogFilter,
+        _sort: SongPageSort,
+        _pagination: Pagination,
+    ) -> Result<SongPage, String> {
+        Err("Song pagination is not implemented".to_string())
     }
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String>;
     async fn album_genres(&self, profile_id: &str, album_id: &str) -> Result<Vec<String>, String>;
@@ -277,6 +288,17 @@ impl LibraryCatalogRepository for SqliteRepository {
         query::artist_page(self, profile_id, search, filters, sort, pagination).await
     }
 
+    async fn song_page(
+        &self,
+        profile_id: &str,
+        search: &str,
+        filters: CatalogFilter,
+        sort: SongPageSort,
+        pagination: Pagination,
+    ) -> Result<SongPage, String> {
+        query::song_page(self, profile_id, search, filters, sort, pagination).await
+    }
+
     async fn album(&self, profile_id: &str, album_id: &str) -> Result<Option<CachedAlbum>, String> {
         query::album(self, profile_id, album_id).await
     }
@@ -361,7 +383,7 @@ mod tests {
     use crate::library::models::{
         Album, AlbumPageSort, AlbumSort, AlbumWithSongs, Artist, ArtistPageSort,
         ArtworkCacheRecord, CatalogFilter, Genre, LibraryItemKind, LibrarySnapshot, Pagination,
-        Song,
+        Song, SongPageSort,
     };
     #[test]
     fn activates_complete_generation() {
@@ -1170,6 +1192,110 @@ mod tests {
                 .map(|song| song.remote_id)
                 .collect::<Vec<_>>();
             assert_eq!(ids, ["song-1", "song-2", "song-3", "song-4"]);
+
+            repository.close().await;
+            fs::remove_dir_all(directory).unwrap();
+        });
+    }
+
+    #[test]
+    fn filters_and_paginates_song_page_in_sqlite() {
+        tauri::async_runtime::block_on(async {
+            let (repository, directory) = repository().await;
+            let mut snapshot = large_snapshot(3);
+            snapshot.albums[1].songs[0].favorite = true;
+            snapshot.albums[1].songs[0].rating = Some(5);
+            snapshot.albums[1].songs[0].genres = vec!["Rock".to_string()];
+            snapshot.albums[2].songs[0].year = Some(2020);
+            repository
+                .activate_snapshot("profile", "generation-1", None, &snapshot, 123)
+                .await
+                .unwrap();
+
+            let first = repository
+                .song_page(
+                    "profile",
+                    "song",
+                    CatalogFilter::default(),
+                    SongPageSort::Title,
+                    Pagination {
+                        offset: 0,
+                        limit: 2,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(first.page.total, 3);
+            assert_eq!(
+                first
+                    .page
+                    .items
+                    .iter()
+                    .map(|item| item.song.remote_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["song-0", "song-1"]
+            );
+            assert_eq!(first.genres, ["Jazz", "Rock"]);
+
+            let second = repository
+                .song_page(
+                    "profile",
+                    "album 2",
+                    CatalogFilter::default(),
+                    SongPageSort::Newest,
+                    Pagination {
+                        offset: 0,
+                        limit: 50,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(second.page.total, 1);
+            assert_eq!(second.page.items[0].song.remote_id, "song-2");
+            assert_eq!(
+                second.page.items[0].original_release_date.as_deref(),
+                Some("2025-12-31")
+            );
+
+            let filtered = repository
+                .song_page(
+                    "profile",
+                    "artist 1",
+                    CatalogFilter {
+                        favorite_only: true,
+                        minimum_rating: Some(4),
+                        from_year: Some(2025),
+                        genres: vec!["Rock".to_string()],
+                        ..CatalogFilter::default()
+                    },
+                    SongPageSort::Artist,
+                    Pagination {
+                        offset: 0,
+                        limit: 50,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(filtered.page.total, 1);
+            assert_eq!(filtered.page.items[0].song.remote_id, "song-1");
+
+            let outside_release_year = repository
+                .song_page(
+                    "profile",
+                    "song",
+                    CatalogFilter {
+                        from_year: Some(2026),
+                        ..CatalogFilter::default()
+                    },
+                    SongPageSort::Newest,
+                    Pagination {
+                        offset: 0,
+                        limit: 50,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(outside_release_year.page.total, 0);
 
             repository.close().await;
             fs::remove_dir_all(directory).unwrap();

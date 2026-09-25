@@ -138,6 +138,35 @@ pub struct ArtistPage {
     pub genres: Vec<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SongPage {
+    #[serde(flatten)]
+    pub page: Paginated<SongPageItem>,
+    pub genres: Vec<String>,
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SongPageItem {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    pub song: CachedSong,
+    pub release_date: Option<String>,
+    pub original_release_date: Option<String>,
+    pub year: Option<i64>,
+}
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "kebab-case")]
+pub enum SongPageSort {
+    Title,
+    Artist,
+    Album,
+    Newest,
+    Oldest,
+}
+
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum AlbumPageSort {

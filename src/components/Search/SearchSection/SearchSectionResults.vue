@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import AlbumCard from "@/components/Album/AlbumCard";
 import ArtistCard from "@/components/Artist/ArtistCard";
-import SearchTrackRow from "@/components/Search/SearchTrackRow";
+import SongListRow from "@/components/SongListRow.vue";
 import type { CachedAlbum, CachedArtist, CachedSong } from "@/types";
 
 defineProps<{
@@ -47,8 +47,8 @@ const fullGridClass =
 
     <section v-if="songs.length" class="space-y-3">
       <h2 class="font-serif text-2xl font-bold">Tracks</h2>
-      <div class="divide-y divide-zinc-800">
-        <SearchTrackRow v-for="song in songs" :key="song.remoteId" :song="song" @select="compact && $emit('select')" />
+      <div class="@container divide-y divide-zinc-800">
+        <SongListRow v-for="song in songs" :key="song.remoteId" :song="song" @select="compact && $emit('select')" />
       </div>
     </section>
   </div>

@@ -3,7 +3,7 @@ import { Calendar, Check, Heart, Library, Play, Star, Tag } from "@lucide/vue";
 import NumberInput from "@/components/NumberInput.vue";
 import type { CatalogFilter } from "@/types";
 
-defineProps<{ genres: string[] }>();
+withDefaults(defineProps<{ genres: string[]; showPlayback?: boolean }>(), { showPlayback: true });
 
 const filters = defineModel<CatalogFilter>({ required: true });
 
@@ -125,7 +125,7 @@ function toggleNeverPlayed() {
     </div>
   </fieldset>
 
-  <fieldset class="min-w-0 space-y-2">
+  <fieldset v-if="showPlayback" class="min-w-0 space-y-2">
     <legend class="font-serif text-sm font-bold text-zinc-300">
       <span class="flex items-center gap-1.5"><Play class="mt-0.5 size-4 shrink-0" aria-hidden="true" />Playback</span>
     </legend>
