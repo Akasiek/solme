@@ -58,9 +58,19 @@ pub(crate) async fn song_page(
         .await
         .map_err(|error| format!("Failed to read song page: {error}"))?;
 
-    let mut count_query = QueryBuilder::new("SELECT COUNT(*)");
+    let mut count_query = QueryBuilder::new(
+        "SELECT COUNT(*) FROM songs song
+         JOIN library_sync_state state ON state.profile_id = song.profile_id
+            AND state.active_generation = song.generation",
+    );
+    if filters.from_year.is_some() || filters.to_year.is_some() {
+        count_query.push(
+            " LEFT JOIN albums album ON album.profile_id = song.profile_id
+                AND album.generation = song.generation AND album.remote_id = song.album_id",
+        );
+    }
     count_query
-        .push(SONG_PAGE_FROM)
+        .push(" WHERE song.profile_id = ")
         .push_bind(profile_id.to_owned());
     push_song_page_filters(&mut count_query, search, filters);
     let total = count_query

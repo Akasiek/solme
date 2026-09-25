@@ -49,13 +49,27 @@ const {
     }),
   { items: [], genres: [], total: 0 },
 );
-watch([query, filterKey, sort, page], (values, previous, onCleanup) => {
-  if (values.slice(0, 3).some((value, index) => value !== previous[index]) && page.value !== 1) {
+let searchTimeout: number | undefined;
+watch(query, (_, __, onCleanup) => {
+  if (page.value !== 1) {
+    page.value = 1;
+  }
+  const timeout = window.setTimeout(() => {
+    searchTimeout = undefined;
+    void reload();
+  }, 200);
+  searchTimeout = timeout;
+  onCleanup(() => window.clearTimeout(timeout));
+});
+watch([filterKey, sort, page], (values, previous) => {
+  const filtersChanged = values.slice(0, 2).some((value, index) => value !== previous[index]);
+  if (filtersChanged && page.value !== 1) {
     page.value = 1;
     return;
   }
-  const timeout = window.setTimeout(() => void reload(), 200);
-  onCleanup(() => window.clearTimeout(timeout));
+  if (searchTimeout === undefined) {
+    void reload();
+  }
 });
 </script>
 
