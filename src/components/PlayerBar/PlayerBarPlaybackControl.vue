@@ -19,11 +19,7 @@ const onPlayPause = (playerState: PlayerStatus["state"]) => {
 };
 
 const canGoBack = computed(() => {
-  return (
-    playerStatus.state !== "loading" &&
-    playerStatus.queuePosition !== undefined &&
-    playerStatus.queuePosition > 0
-  );
+  return playerStatus.state !== "loading" && playerStatus.queuePosition !== undefined && playerStatus.queuePosition > 0;
 });
 
 const canGoNext = computed(
