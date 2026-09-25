@@ -57,7 +57,7 @@ onMounted(async () => {
       </div>
 
       <div class="grid w-full min-w-0 items-center justify-items-center gap-2">
-        <PlayerBarPlaybackControl :playerStatus="playerStatus" :playbackPositionSeconds="playbackPositionSeconds" />
+        <PlayerBarPlaybackControl :playerStatus="playerStatus" />
         <PlayerBarSeekBar :playerStatus="playerStatus" :playbackPositionSeconds="playbackPositionSeconds" />
       </div>
 

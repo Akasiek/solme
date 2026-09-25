@@ -355,7 +355,7 @@ fn can_go_next(status: &PlayerStatus) -> bool {
 }
 
 fn can_go_previous(status: &PlayerStatus) -> bool {
-    status.queue_position.is_some_and(|position| position > 1)
+    status.queue_position.is_some_and(|position| position > 0)
 }
 
 fn time_from_seconds(seconds: f64) -> Time {
@@ -402,6 +402,11 @@ mod tests {
         assert_eq!(playback_status(status.state), PlaybackStatus::Paused);
         assert!(can_go_next(&status));
         assert!(can_go_previous(&status));
+        assert!(can_go_previous(&self::status(
+            PlaybackState::Playing,
+            Some(1),
+            3
+        )));
     }
 
     #[test]

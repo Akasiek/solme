@@ -282,8 +282,10 @@ impl PlayerService {
     }
 
     pub fn previous(&self) -> Result<(), String> {
-        let position_seconds = self.audio.status().position_seconds;
-        if position_seconds > PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS {
+        let status = self.audio.status();
+        if status.playlist_position == Some(0)
+            || status.position_seconds > PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS
+        {
             self.seek(0.0)
         } else {
             self.audio.previous()?;
@@ -833,6 +835,7 @@ mod tests {
                 Arc::new(MockRepository { songs: Vec::new() });
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
+                start_index: 1,
                 position_seconds: 5.0,
                 ..Default::default()
             }));
@@ -851,6 +854,35 @@ mod tests {
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.position_seconds, 5.0);
             assert_eq!(audio.previous_calls, 1);
+        });
+    }
+
+    #[test]
+    fn previous_restarts_first_song_before_threshold() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let repository: Arc<dyn LibraryCatalogRepository> =
+                Arc::new(MockRepository { songs: Vec::new() });
+            let audio_state = Arc::new(Mutex::new(MockAudioState {
+                playing: true,
+                position_seconds: 2.0,
+                ..Default::default()
+            }));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.previous().unwrap();
+
+            let audio = audio_state.lock().unwrap();
+            assert_eq!(audio.position_seconds, 0.0);
+            assert_eq!(audio.previous_calls, 0);
         });
     }
 

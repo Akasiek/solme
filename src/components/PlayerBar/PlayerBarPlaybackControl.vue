@@ -4,11 +4,8 @@ import { LoaderCircle, Play, Pause, SkipBack, SkipForward } from "@lucide/vue";
 import { invoke } from "@tauri-apps/api/core";
 import { computed } from "vue";
 
-const previousSongRestartThresholdSeconds = 5;
-
-const { playerStatus, playbackPositionSeconds } = defineProps<{
+const { playerStatus } = defineProps<{
   playerStatus: PlayerStatus;
-  playbackPositionSeconds: number;
 }>();
 
 const onPlayPause = (playerState: PlayerStatus["state"]) => {
@@ -25,7 +22,7 @@ const canGoBack = computed(() => {
   return (
     playerStatus.state !== "loading" &&
     playerStatus.queuePosition !== undefined &&
-    (playerStatus.queuePosition > 1 || playbackPositionSeconds > previousSongRestartThresholdSeconds)
+    playerStatus.queuePosition > 0
   );
 });
 
