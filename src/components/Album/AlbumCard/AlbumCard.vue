@@ -14,18 +14,17 @@ const releaseYear = computed(
 </script>
 
 <template>
-  <RouterLink
-    class="group grid gap-2 transition-colors duration-300 ease-in-out"
-    :to="{ name: 'album', params: { albumId: album.remoteId } }"
-  >
+  <div class="group grid gap-2">
     <AlbumCardCoverArt :album="album" />
 
     <div
       class="space-y-0.5 gap-x-2.5 rounded-md border border-zinc-800 px-2 py-2.5 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
     >
-      <h3 class="line-clamp-1 font-serif text-md font-bold break-all hover:underline" :title="album.name">
-        {{ album.name }}
-      </h3>
+      <RouterLink :to="{ name: 'album', params: { albumId: album.remoteId } }">
+        <h3 class="line-clamp-1 font-serif text-md font-bold break-all hover:underline" :title="album.name">
+          {{ album.name }}
+        </h3>
+      </RouterLink>
       <p v-if="showReleaseYear" class="line-clamp-1 font-sans text-sm font-normal text-zinc-300">
         {{ releaseYear }}
       </p>
@@ -38,5 +37,5 @@ const releaseYear = computed(
         </h4>
       </RouterLink>
     </div>
-  </RouterLink>
+  </div>
 </template>

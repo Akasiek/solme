@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { storeToRefs } from "pinia";
 import { computed, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 
@@ -10,6 +11,7 @@ import LibraryCardGrid from "@/components/LibraryCardGrid.vue";
 import PaginatedResults from "@/components/PaginatedResults.vue";
 import { useAsyncData } from "@/composables/useAsyncData";
 import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
+import { useLibraryAnnotationsStore } from "@/stores/libraryAnnotations";
 import type { AlbumPage, AlbumPageSort, CatalogFilter } from "@/types";
 
 const route = useRoute();
@@ -33,6 +35,7 @@ const filterKey = computed(() => JSON.stringify(filters.value));
 const sort = ref<AlbumPageSort>("artist");
 const page = ref(1);
 const pageSize = 24;
+const { completedMutations } = storeToRefs(useLibraryAnnotationsStore());
 
 useKeepAliveScrollRestoration();
 
@@ -64,6 +67,13 @@ watch([query, albumTypeKey, filterKey, sort, page], (values, previousValues, onC
   const timeout = window.setTimeout(() => void reload(), 200);
   onCleanup(() => window.clearTimeout(timeout));
 });
+
+watch(
+  () => completedMutations.value.album.favorite,
+  (count, previousCount) => {
+    if (count !== previousCount && filters.value.favoriteOnly) void reload();
+  },
+);
 
 watch(
   () => route.query.genre,
