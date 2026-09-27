@@ -21,7 +21,7 @@ const updateValue = (event: Event) => {
     :class="disabled ? 'cursor-not-allowed opacity-60' : 'cursor-pointer hover:border-zinc-700'"
   >
     <span class="min-w-0 space-y-1">
-      <span class="block font-sans text-sm font-medium text-zinc-100">{{ label }}</span>
+      <span class="block font-serif text-base font-bold text-zinc-100">{{ label }}</span>
       <span v-if="description" class="block font-sans text-sm leading-5 text-zinc-400">{{ description }}</span>
     </span>
 
