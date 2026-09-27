@@ -51,7 +51,7 @@ const queueAlbumLast = () => {
       class="focus-reveal pointer-events-none absolute inset-0 flex flex-col justify-between p-2 opacity-0 transition-opacity duration-200 group-hover/image:opacity-100 [@media(hover:none)]:opacity-100"
     >
       <div
-        class="focus-actions pointer-events-none self-end group-hover/image:pointer-events-auto [@media(hover:none)]:pointer-events-auto"
+        class="focus-actions album-card-favorite pointer-events-none self-end group-hover/image:pointer-events-auto [@media(hover:none)]:pointer-events-auto"
         @click.stop
       >
         <FavoriteButton :item="album" variant="overlay" />
@@ -104,6 +104,20 @@ const queueAlbumLast = () => {
   pointer-events: auto;
 }
 
+.album-card-favorite {
+  opacity: 0;
+  transform: translateY(-0.75rem);
+  transition:
+    opacity 200ms ease-out,
+    transform 250ms ease-out;
+}
+
+.album-card-cover:hover .album-card-favorite,
+.album-card-cover:has(:focus-visible) .album-card-favorite {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .album-card-shadow {
   transform: translateY(2rem);
   transition:
@@ -135,6 +149,7 @@ const queueAlbumLast = () => {
 }
 
 @media (hover: none) {
+  .album-card-favorite,
   .album-card-actions,
   .album-card-shadow {
     opacity: 1;
@@ -143,6 +158,7 @@ const queueAlbumLast = () => {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .album-card-favorite,
   .album-card-actions,
   .album-card-shadow {
     transition: none;
