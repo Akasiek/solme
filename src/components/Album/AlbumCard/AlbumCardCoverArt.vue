@@ -44,7 +44,7 @@ const queueAlbumLast = () => {
     />
 
     <div
-      class="focus-reveal pointer-events-none absolute inset-0 bg-linear-to-t from-black/85 via-black/25 to-transparent opacity-0 transition-opacity duration-200 group-hover/image:opacity-100 [@media(hover:none)]:opacity-100"
+      class="focus-reveal album-card-shadow pointer-events-none absolute inset-0 bg-linear-to-t from-black/85 via-black/25 to-transparent opacity-0 group-hover/image:opacity-100 [@media(hover:none)]:opacity-100"
     />
 
     <div
@@ -58,7 +58,7 @@ const queueAlbumLast = () => {
       </div>
 
       <div
-        class="focus-actions pointer-events-none flex items-center justify-center gap-2 group-hover/image:pointer-events-auto [@media(hover:none)]:pointer-events-auto"
+        class="focus-actions album-card-actions pointer-events-none flex items-center justify-center gap-2 group-hover/image:pointer-events-auto [@media(hover:none)]:pointer-events-auto"
         @click.stop
       >
         <button
@@ -104,7 +104,49 @@ const queueAlbumLast = () => {
   pointer-events: auto;
 }
 
+.album-card-shadow {
+  transform: translateY(2rem);
+  transition:
+    opacity 200ms ease-out,
+    transform 250ms ease-out;
+}
+
+.album-card-cover:hover .album-card-shadow,
+.album-card-cover:has(:focus-visible) .album-card-shadow {
+  transform: translateY(0);
+}
+
+.album-card-actions {
+  opacity: 0;
+  transform: translateY(0.75rem);
+  transition:
+    opacity 200ms ease-out,
+    transform 250ms ease-out;
+}
+
+.album-card-cover:hover .album-card-actions,
+.album-card-cover:has(:focus-visible) .album-card-actions {
+  opacity: 1;
+  transform: translateY(0);
+}
+
 .cover-art-button {
   @apply grid cursor-pointer place-items-center rounded-full transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none active:scale-95;
+}
+
+@media (hover: none) {
+  .album-card-actions,
+  .album-card-shadow {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .album-card-actions,
+  .album-card-shadow {
+    transition: none;
+    transform: none;
+  }
 }
 </style>
