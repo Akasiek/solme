@@ -92,7 +92,7 @@ const playAll = async () => {
         </FormSelect>
         <button
           type="button"
-          class="inline-flex h-7 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent px-2 font-serif text-xs font-semibold text-white transition-colors hover:bg-accent/85 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
+          class="mt-0.5 inline-flex h-6.5 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent px-2 font-serif text-xs font-semibold text-white transition-colors hover:bg-accent/85 focus-visible:ring-2 focus-visible:ring-zinc-500 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
           :disabled="isPlaying"
           :title="`Play all in ${title}`"
           :aria-label="`Play all in ${title}`"
