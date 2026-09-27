@@ -6,6 +6,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use tokio::sync::Mutex;
 
 use super::{
     backend::AudioBackend,
@@ -45,6 +46,7 @@ pub struct PlayerService {
     event_bus: Arc<EventBus>,
     queue: PlayerQueue,
     queue_load_in_progress: Arc<AtomicBool>,
+    queue_load_lock: Mutex<()>,
 }
 
 impl PlayerService {
@@ -75,6 +77,7 @@ impl PlayerService {
             event_bus,
             queue,
             queue_load_in_progress,
+            queue_load_lock: Mutex::new(()),
         }
     }
 
@@ -134,6 +137,28 @@ impl PlayerService {
     ) -> Result<(), String> {
         let (server, songs) = self.album_songs(album_id).await?;
         let start_index = Self::album_start_index(&songs, start_song_id)?;
+        self.play_songs(&server, songs, start_index).await
+    }
+
+    pub async fn play_albums(&self, album_ids: &[String]) -> Result<(), String> {
+        let (profile_id, server) = self.server.current_server()?;
+        let mut songs = Vec::new();
+        for album_id in album_ids {
+            songs.extend(self.repository.songs(&profile_id, album_id).await?);
+        }
+        if songs.is_empty() {
+            return Err("No cached songs in selected albums".to_string());
+        }
+        self.play_songs(&server, songs, 0).await
+    }
+
+    async fn play_songs(
+        &self,
+        server: &Arc<MusicServerBackend>,
+        songs: Vec<CachedSong>,
+        start_index: usize,
+    ) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
         let current_song = songs
             .get(start_index)
             .cloned()
@@ -142,7 +167,7 @@ impl PlayerService {
 
         self.audio.pause_immediately()?;
         self.show_loading_queue(&songs, start_index)?;
-        let load_result = self.load_album_sources(&server, &songs, start_index).await;
+        let load_result = self.load_album_sources(server, &songs, start_index).await;
 
         drop(loading);
         self.finish_album_load(load_result, current_song, start_index, songs.len())
@@ -443,6 +468,7 @@ impl PlayerService {
 #[allow(clippy::float_cmp, clippy::unimplemented, clippy::unused_async)]
 mod tests {
     use std::{
+        collections::HashMap,
         sync::{mpsc, Arc, Condvar, Mutex},
         time::Duration,
     };
@@ -478,6 +504,7 @@ mod tests {
             let songs = vec![song("song-1"), song("song-2"), song("song-3")];
             let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
+                ..Default::default()
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
             let player = PlayerService::new(
@@ -534,11 +561,73 @@ mod tests {
     }
 
     #[test]
+    fn plays_albums_in_requested_order_and_skips_empty_albums() {
+        tauri::async_runtime::block_on(async {
+            let server_service = test_server_service().await;
+            let mut newest_song = song("newest-song");
+            newest_song.album_id = "newest".to_string();
+            let mut oldest_song = song("oldest-song");
+            oldest_song.album_id = "oldest".to_string();
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
+                songs_by_album: Some(HashMap::from([
+                    ("newest".to_string(), vec![newest_song]),
+                    ("oldest".to_string(), vec![oldest_song]),
+                ])),
+                ..Default::default()
+            });
+            let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+            let player = PlayerService::new(
+                Box::new(MockAudioBackend {
+                    state: Arc::clone(&audio_state),
+                }),
+                server_service,
+                repository,
+                Arc::new(MockPreferenceRepository::default()),
+                noop_event_bus(),
+            );
+
+            player.play_albums(&["oldest".to_string()]).await.unwrap();
+            player
+                .play_albums(&[
+                    "empty".to_string(),
+                    "newest".to_string(),
+                    "oldest".to_string(),
+                ])
+                .await
+                .unwrap();
+
+            let queue = player.queue().unwrap();
+            assert_eq!(
+                queue
+                    .iter()
+                    .map(|song| song.remote_id.as_str())
+                    .collect::<Vec<_>>(),
+                ["newest-song", "oldest-song"]
+            );
+            assert_eq!(player.status().unwrap().queue_position, Some(1));
+            assert_eq!(
+                audio_state.lock().unwrap().sources,
+                [
+                    "https://music.example.com/newest-song",
+                    "https://music.example.com/oldest-song"
+                ]
+            );
+
+            assert_eq!(
+                player.play_albums(&[]).await.unwrap_err(),
+                "No cached songs in selected albums"
+            );
+            assert_eq!(player.queue().unwrap(), queue);
+        });
+    }
+
+    #[test]
     fn exposes_queue_while_first_audio_source_is_loading() {
         let server_service = tauri::async_runtime::block_on(async { test_server_service().await });
         let songs = vec![song("song-1"), song("song-2"), song("song-3")];
         let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
             songs: songs.clone(),
+            ..Default::default()
         });
         let (load_started_tx, load_started_rx) = mpsc::sync_channel(0);
         let load_release = Arc::new((Mutex::new(false), Condvar::new()));
@@ -583,11 +672,84 @@ mod tests {
     }
 
     #[test]
+    fn serializes_single_and_multiple_album_playback() {
+        let server_service = tauri::async_runtime::block_on(async { test_server_service().await });
+        let first_song = song("first-song");
+        let second_song = song("second-song");
+        let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
+            songs_by_album: Some(HashMap::from([
+                ("first".to_string(), vec![first_song.clone()]),
+                ("second".to_string(), vec![second_song.clone()]),
+            ])),
+            ..Default::default()
+        });
+        let (load_started_tx, load_started_rx) = mpsc::sync_channel(0);
+        let load_release = Arc::new((Mutex::new(false), Condvar::new()));
+        let audio_state = Arc::new(Mutex::new(MockAudioState {
+            load_started: Some(load_started_tx),
+            load_release: Some(Arc::clone(&load_release)),
+            ..Default::default()
+        }));
+        let player = Arc::new(PlayerService::new(
+            Box::new(MockAudioBackend {
+                state: Arc::clone(&audio_state),
+            }),
+            server_service,
+            repository,
+            Arc::new(MockPreferenceRepository::default()),
+            noop_event_bus(),
+        ));
+
+        let first_player = Arc::clone(&player);
+        let first_thread = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async { first_player.play_album("first", None).await })
+        });
+        load_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("first audio load did not start");
+        let lock_held_during_load = player.queue_load_lock.try_lock().is_err();
+
+        let (second_started_tx, second_started_rx) = mpsc::sync_channel(0);
+        let second_player = Arc::clone(&player);
+        let second_thread = std::thread::spawn(move || {
+            second_started_tx.send(()).unwrap();
+            tauri::async_runtime::block_on(async {
+                second_player.play_albums(&["second".to_string()]).await
+            })
+        });
+        second_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("second playback request did not start");
+        std::thread::sleep(Duration::from_millis(100));
+        let queue_during_first_load = player.queue().unwrap();
+        let sources_during_first_load = audio_state.lock().unwrap().sources.clone();
+
+        let (released, release_signal) = &*load_release;
+        *released.lock().unwrap() = true;
+        release_signal.notify_all();
+        first_thread.join().unwrap().unwrap();
+        second_thread.join().unwrap().unwrap();
+
+        assert!(lock_held_during_load);
+        assert_eq!(queue_during_first_load, vec![first_song]);
+        assert_eq!(
+            sources_during_first_load,
+            ["https://music.example.com/first-song"]
+        );
+        assert_eq!(player.queue().unwrap(), vec![second_song]);
+        assert_eq!(
+            audio_state.lock().unwrap().sources,
+            ["https://music.example.com/second-song"]
+        );
+    }
+
+    #[test]
     fn rejects_song_outside_selected_album() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
             let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: vec![song("song-1")],
+                ..Default::default()
             });
             let player = PlayerService::new(
                 Box::new(MockAudioBackend {
@@ -617,6 +779,7 @@ mod tests {
             let songs = vec![song("song-1"), song("song-2")];
             let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
+                ..Default::default()
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
             let player = PlayerService::new(
@@ -658,6 +821,7 @@ mod tests {
             let songs = vec![song("song-1"), song("song-2")];
             let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
                 songs: songs.clone(),
+                ..Default::default()
             });
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
             let player = PlayerService::new(
@@ -696,8 +860,7 @@ mod tests {
     fn restores_paused_playback_session() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
             let player = PlayerService::new(
                 Box::new(MockAudioBackend {
@@ -744,8 +907,7 @@ mod tests {
     fn restores_saved_volume_preference() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let preferences = Arc::new(MockPreferenceRepository {
                 preference: Mutex::new(Some(Preference::volume(37.0))),
             });
@@ -771,8 +933,7 @@ mod tests {
     fn seek_event_reports_requested_position_when_backend_status_is_stale() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
                 position_seconds: 37.5,
@@ -802,8 +963,7 @@ mod tests {
     fn previous_restarts_current_song_after_threshold() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
                 position_seconds: 6.0,
@@ -831,8 +991,7 @@ mod tests {
     fn previous_moves_to_previous_song_before_threshold() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
                 start_index: 1,
@@ -861,8 +1020,7 @@ mod tests {
     fn previous_restarts_first_song_before_threshold() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> =
-                Arc::new(MockRepository { songs: Vec::new() });
+            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
             let audio_state = Arc::new(Mutex::new(MockAudioState {
                 playing: true,
                 position_seconds: 2.0,
@@ -1163,8 +1321,10 @@ mod tests {
         }
     }
 
+    #[derive(Default)]
     struct MockRepository {
         songs: Vec<CachedSong>,
+        songs_by_album: Option<HashMap<String, Vec<CachedSong>>>,
     }
 
     #[async_trait]
@@ -1293,9 +1453,12 @@ mod tests {
         async fn songs(
             &self,
             _profile_id: &str,
-            _album_id: &str,
+            album_id: &str,
         ) -> Result<Vec<CachedSong>, String> {
-            Ok(self.songs.clone())
+            Ok(self.songs_by_album.as_ref().map_or_else(
+                || self.songs.clone(),
+                |songs_by_album| songs_by_album.get(album_id).cloned().unwrap_or_default(),
+            ))
         }
     }
 
