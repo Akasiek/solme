@@ -6,6 +6,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
     Arc,
 };
+use tokio::sync::Mutex;
 
 use super::{
     backend::AudioBackend,
@@ -45,6 +46,7 @@ pub struct PlayerService {
     event_bus: Arc<EventBus>,
     queue: PlayerQueue,
     queue_load_in_progress: Arc<AtomicBool>,
+    queue_load_lock: Mutex<()>,
 }
 
 impl PlayerService {
@@ -75,6 +77,7 @@ impl PlayerService {
             event_bus,
             queue,
             queue_load_in_progress,
+            queue_load_lock: Mutex::new(()),
         }
     }
 
@@ -155,6 +158,7 @@ impl PlayerService {
         songs: Vec<CachedSong>,
         start_index: usize,
     ) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
         let current_song = songs
             .get(start_index)
             .cloned()
@@ -665,6 +669,78 @@ mod tests {
         release_signal.notify_one();
 
         play_thread.join().unwrap().unwrap();
+    }
+
+    #[test]
+    fn serializes_single_and_multiple_album_playback() {
+        let server_service = tauri::async_runtime::block_on(async { test_server_service().await });
+        let first_song = song("first-song");
+        let second_song = song("second-song");
+        let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository {
+            songs_by_album: Some(HashMap::from([
+                ("first".to_string(), vec![first_song.clone()]),
+                ("second".to_string(), vec![second_song.clone()]),
+            ])),
+            ..Default::default()
+        });
+        let (load_started_tx, load_started_rx) = mpsc::sync_channel(0);
+        let load_release = Arc::new((Mutex::new(false), Condvar::new()));
+        let audio_state = Arc::new(Mutex::new(MockAudioState {
+            load_started: Some(load_started_tx),
+            load_release: Some(Arc::clone(&load_release)),
+            ..Default::default()
+        }));
+        let player = Arc::new(PlayerService::new(
+            Box::new(MockAudioBackend {
+                state: Arc::clone(&audio_state),
+            }),
+            server_service,
+            repository,
+            Arc::new(MockPreferenceRepository::default()),
+            noop_event_bus(),
+        ));
+
+        let first_player = Arc::clone(&player);
+        let first_thread = std::thread::spawn(move || {
+            tauri::async_runtime::block_on(async { first_player.play_album("first", None).await })
+        });
+        load_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("first audio load did not start");
+        let lock_held_during_load = player.queue_load_lock.try_lock().is_err();
+
+        let (second_started_tx, second_started_rx) = mpsc::sync_channel(0);
+        let second_player = Arc::clone(&player);
+        let second_thread = std::thread::spawn(move || {
+            second_started_tx.send(()).unwrap();
+            tauri::async_runtime::block_on(async {
+                second_player.play_albums(&["second".to_string()]).await
+            })
+        });
+        second_started_rx
+            .recv_timeout(Duration::from_secs(2))
+            .expect("second playback request did not start");
+        std::thread::sleep(Duration::from_millis(100));
+        let queue_during_first_load = player.queue().unwrap();
+        let sources_during_first_load = audio_state.lock().unwrap().sources.clone();
+
+        let (released, release_signal) = &*load_release;
+        *released.lock().unwrap() = true;
+        release_signal.notify_all();
+        first_thread.join().unwrap().unwrap();
+        second_thread.join().unwrap().unwrap();
+
+        assert!(lock_held_during_load);
+        assert_eq!(queue_during_first_load, vec![first_song]);
+        assert_eq!(
+            sources_during_first_load,
+            ["https://music.example.com/first-song"]
+        );
+        assert_eq!(player.queue().unwrap(), vec![second_song]);
+        assert_eq!(
+            audio_state.lock().unwrap().sources,
+            ["https://music.example.com/second-song"]
+        );
     }
 
     #[test]
