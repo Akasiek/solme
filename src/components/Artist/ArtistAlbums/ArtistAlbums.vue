@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { CachedAlbum } from "@/types";
-import ArtistAlbumsGrid from "@/components/Artist/ArtistAlbums/ArtistAlbumsGrid.vue";
+import ArtistAlbumGroup from "@/components/Artist/ArtistAlbums/ArtistAlbumGroup.vue";
 
 const props = defineProps<{
   albums: CachedAlbum[];
@@ -89,17 +89,7 @@ const albumGroups = computed(() => {
 
       <p v-if="albums.length === 0" class="font-sans text-zinc-400">No albums to show.</p>
       <div v-else class="space-y-8">
-        <div v-for="group in albumGroups" :key="group.key" class="space-y-3">
-          <div class="flex items-center gap-3">
-            <h3 class="mb-1 font-serif text-xl font-bold text-white">{{ group.title }}</h3>
-            <p
-              class="border-lg flex items-center justify-between rounded bg-accent px-2 py-0.5 font-serif text-sm font-extrabold text-white"
-            >
-              {{ group.albums.length }}
-            </p>
-          </div>
-          <ArtistAlbumsGrid :albums="group.albums" />
-        </div>
+        <ArtistAlbumGroup v-for="group in albumGroups" :key="group.key" :title="group.title" :albums="group.albums" />
       </div>
     </div>
   </section>

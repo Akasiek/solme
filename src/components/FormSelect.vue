@@ -17,6 +17,7 @@ const props = defineProps<{
   label: string;
   options: ReadonlyArray<{ value: string; label: string }>;
   id?: string;
+  compact?: boolean;
 }>();
 
 const model = defineModel<string>({ required: true });
@@ -26,17 +27,22 @@ const selectedLabel = computed(() => props.options.find((option) => option.value
 </script>
 
 <template>
-  <div class="min-w-48 space-y-2">
-    <label :for="selectId" class="flex items-center gap-1.5 font-serif text-sm font-bold text-zinc-300">
-      <slot name="icon" />{{ label }}
+  <div :class="compact ? 'w-44' : 'min-w-48 space-y-2'">
+    <label
+      :for="selectId"
+      :class="compact ? 'sr-only' : 'flex items-center gap-1.5 font-serif text-sm font-bold text-zinc-300'"
+    >
+      <slot v-if="!compact" name="icon" />{{ label }}
     </label>
     <SelectRoot v-model="model">
       <SelectTrigger
         :id="selectId"
-        class="flex w-full cursor-pointer items-center justify-between rounded-md border border-zinc-700 bg-zinc-950 py-2 pr-3 pl-3 text-left text-zinc-100 transition-colors outline-none hover:border-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-700"
+        class="flex w-full cursor-pointer items-center justify-between rounded-md border border-zinc-700 bg-zinc-950 text-left text-zinc-100 transition-colors outline-none hover:border-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-700"
+        :class="compact ? 'gap-2 px-2.5 py-1.5 text-xs' : 'py-2 pr-3 pl-3'"
       >
-        <SelectValue>{{ selectedLabel }}</SelectValue>
-        <ChevronDown aria-hidden="true" class="size-4 shrink-0 text-zinc-400" />
+        <slot v-if="compact" name="icon" />
+        <SelectValue :class="compact ? 'min-w-0 flex-1 truncate' : undefined">{{ selectedLabel }}</SelectValue>
+        <ChevronDown aria-hidden="true" :class="compact ? 'size-3.5' : 'size-4'" class="shrink-0 text-zinc-400" />
       </SelectTrigger>
       <SelectPortal>
         <SelectContent
