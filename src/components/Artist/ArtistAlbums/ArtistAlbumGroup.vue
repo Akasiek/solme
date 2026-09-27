@@ -33,7 +33,9 @@ const compareMissingLast = (first?: string | null, second?: string | null, desce
 };
 
 const releaseDate = (album: CachedAlbum) =>
-  album.originalReleaseDate ?? album.releaseDate ?? album.year?.toString().padStart(4, "0");
+  album.originalReleaseDate ??
+  album.releaseDate ??
+  (album.year == null ? undefined : `${album.year.toString().padStart(4, "0")}-12-31`);
 
 const compareAlbums = (first: CachedAlbum, second: CachedAlbum) => {
   let order = 0;
