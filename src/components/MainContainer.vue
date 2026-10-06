@@ -5,9 +5,9 @@ import LyricsAwayModal from "@/components/Lyrics/LyricsAwayModal.vue";
 <template>
   <div class="relative min-h-0 min-w-0 flex-1">
     <main class="absolute inset-0 overflow-y-auto">
-      <RouterView v-slot="{ Component }">
-        <KeepAlive include="AlbumsView,ArtistsView">
-          <component :is="Component" />
+      <RouterView v-slot="{ Component, route }">
+        <KeepAlive include="AlbumsView,ArtistsView,ArtistView">
+          <component :is="Component" :key="route.name === 'artist' ? route.path : undefined" />
         </KeepAlive>
       </RouterView>
     </main>

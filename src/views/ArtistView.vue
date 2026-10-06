@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useAsyncData } from "@/composables/useAsyncData.ts";
+import { useKeepAliveScrollRestoration } from "@/composables/useKeepAliveScrollRestoration";
 import { invoke } from "@tauri-apps/api/core";
 import { watch } from "vue";
 import AsyncViewState from "@/components/AsyncViewState.vue";
@@ -8,6 +9,8 @@ import ArtistHero from "@/components/Artist/ArtistHero";
 import type { CachedArtistDetails } from "@/types";
 
 const { artistId } = defineProps<{ artistId: string }>();
+
+useKeepAliveScrollRestoration();
 
 const {
   data: artistDetails,
