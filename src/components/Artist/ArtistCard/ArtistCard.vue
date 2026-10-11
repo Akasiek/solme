@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import type { CachedArtist } from "@/types";
-import { artworkSource } from "@/utils/artwork";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 
 defineProps<{
   artist: CachedArtist;
@@ -21,9 +21,9 @@ defineEmits<{
     <div
       class="aspect-square w-full overflow-hidden rounded-full border border-zinc-800 bg-zinc-950 transition-colors duration-300 ease-in-out group-hover:border-zinc-600"
     >
-      <img
+      <ArtworkImage
         v-if="artist.artworkPath"
-        :src="artworkSource(artist.artworkPath)"
+        :path="artist.artworkPath"
         :alt="`${artist.name} artwork`"
         class="h-full w-full object-cover object-center"
       />

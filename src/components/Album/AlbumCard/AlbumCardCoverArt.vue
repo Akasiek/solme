@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import FavoriteButton from "@/components/LibraryItemAnnotations/FavoriteButton.vue";
 import { useLayoutStore } from "@/stores/layout.ts";
 import type { CachedAlbum } from "@/types.js";
-import { artworkSource } from "@/utils/artwork.js";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import MissingCoverImage from "../MissingCoverImage.vue";
 
 const { album } = defineProps<{ album: CachedAlbum }>();
@@ -29,9 +29,9 @@ const queueAlbumLast = () => {
   <div
     class="album-card-cover group/image relative aspect-square w-full overflow-hidden rounded-md border border-zinc-800 bg-zinc-900 transition-colors duration-300 group-hover:border-zinc-600"
   >
-    <img
+    <ArtworkImage
       v-if="album.artworkPath"
-      :src="artworkSource(album.artworkPath)"
+      :path="album.artworkPath"
       :alt="`${album.name} artwork`"
       class="h-full w-full object-cover object-center"
     />

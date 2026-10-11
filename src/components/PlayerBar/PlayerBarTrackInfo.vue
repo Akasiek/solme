@@ -2,7 +2,7 @@
 import { SquareArrowOutUpRight } from "@lucide/vue";
 import { storeToRefs } from "pinia";
 import { CachedSong } from "@/types.ts";
-import { artworkSource } from "@/utils/artwork.ts";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import { useLayoutStore } from "@/stores/layout.ts";
 
 defineProps<{ currentSong: CachedSong }>();
@@ -33,11 +33,7 @@ const { isBigArtworkShown, isLeftAsideCollapsed } = storeToRefs(layoutStore);
         >
           <SquareArrowOutUpRight />
         </div>
-        <img
-          :src="artworkSource(currentSong.artworkPath)"
-          alt="Artwork"
-          class="h-full w-full object-cover object-center"
-        />
+        <ArtworkImage :path="currentSong.artworkPath" alt="Artwork" class="h-full w-full object-cover object-center" />
       </div>
     </Transition>
     <div class="flex min-w-0 flex-col gap-1">

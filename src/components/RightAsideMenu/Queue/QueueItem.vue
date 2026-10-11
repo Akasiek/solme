@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import type { CachedSong } from "@/types";
-import { artworkSource } from "@/utils/artwork";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import { formatTime } from "@/utils/format";
 import { invoke } from "@tauri-apps/api/core";
 
@@ -26,9 +26,9 @@ defineProps<{
     :aria-current="isCurrent ? 'true' : undefined"
   >
     <span class="size-9 overflow-hidden rounded bg-zinc-900">
-      <img
+      <ArtworkImage
         v-if="song.artworkPath"
-        :src="artworkSource(song.artworkPath)"
+        :path="song.artworkPath"
         :alt="`${song.albumName} artwork`"
         class="size-full object-cover object-center"
       />

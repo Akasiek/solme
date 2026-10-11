@@ -7,7 +7,7 @@ import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import ContextMenu from "@/components/ContextMenu";
 import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 import type { CachedSong, SongPageItem } from "@/types";
-import { artworkSource } from "@/utils/artwork";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import { formatTime } from "@/utils/format";
 
 const props = withDefaults(
@@ -71,9 +71,9 @@ function playFromRow(event: MouseEvent) {
       :aria-label="`Play ${song.title}`"
       @click="playSong"
     >
-      <img
+      <ArtworkImage
         v-if="showCover && song.artworkPath"
-        :src="artworkSource(song.artworkPath)"
+        :path="song.artworkPath"
         :alt="`${song.albumName} artwork`"
         class="size-full object-cover"
       />

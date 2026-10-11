@@ -2,7 +2,7 @@
 import { computed, onMounted } from "vue";
 import { SquareArrowOutDownLeft } from "@lucide/vue";
 import { usePlayerStore } from "@/stores/player.ts";
-import { artworkSource } from "@/utils/artwork.ts";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import { useLayoutStore } from "@/stores/layout.ts";
 
 const playerStore = usePlayerStore();
@@ -39,7 +39,7 @@ onMounted(async () => {
       >
         <SquareArrowOutDownLeft class="size-5" />
       </div>
-      <img :src="artworkSource(artworkPath)" alt="Artwork" class="h-full w-full object-cover" />
+      <ArtworkImage :path="artworkPath" alt="Artwork" class="h-full w-full object-cover" />
     </div>
   </Transition>
 </template>

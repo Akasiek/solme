@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
-import { artworkSource } from "@/utils/artwork";
+import ArtworkImage from "@/components/ArtworkImage.vue";
 import type { CachedAlbum } from "@/types";
 
 const props = defineProps<{
@@ -25,9 +25,9 @@ const featuredAlbum = computed(() => coverAlbums.value[0]);
       <div
         class="relative aspect-square w-full overflow-hidden rounded border-2 border-zinc-800 transition delay-100 duration-300 ease-in-out group-hover:-translate-y-1 group-hover:border-zinc-600 hover:delay-0"
       >
-        <img
+        <ArtworkImage
           v-if="featuredAlbum.artworkPath"
-          :src="artworkSource(featuredAlbum.artworkPath)"
+          :path="featuredAlbum.artworkPath"
           :alt="`${featuredAlbum.name} artwork`"
           class="h-full w-full object-cover object-center"
         />
@@ -54,9 +54,9 @@ const featuredAlbum = computed(() => coverAlbums.value[0]);
         <div
           class="relative aspect-square w-full overflow-hidden rounded border-2 border-zinc-800 transition duration-300 ease-in-out group-hover:-translate-y-1 group-hover:border-zinc-600"
         >
-          <img
+          <ArtworkImage
             v-if="album.artworkPath"
-            :src="artworkSource(album.artworkPath)"
+            :path="album.artworkPath"
             :alt="`${album.name} artwork`"
             class="h-full w-full object-cover object-center"
           />
