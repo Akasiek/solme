@@ -18,6 +18,7 @@ const props = defineProps<{
   options: ReadonlyArray<{ value: string; label: string }>;
   id?: string;
   compact?: boolean;
+  disabled?: boolean;
 }>();
 
 const model = defineModel<string>({ required: true });
@@ -34,10 +35,10 @@ const selectedLabel = computed(() => props.options.find((option) => option.value
     >
       <slot v-if="!compact" name="icon" />{{ label }}
     </label>
-    <SelectRoot v-model="model">
+    <SelectRoot v-model="model" :disabled="disabled">
       <SelectTrigger
         :id="selectId"
-        class="flex w-full cursor-pointer items-center justify-between rounded-md border border-zinc-700 bg-zinc-950 text-left text-zinc-100 transition-colors outline-none hover:border-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-700"
+        class="flex w-full cursor-pointer items-center justify-between rounded-md border border-zinc-700 bg-zinc-950 text-left text-zinc-100 transition-colors outline-none hover:border-zinc-600 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-700 disabled:cursor-not-allowed disabled:opacity-50"
         :class="compact ? 'gap-2 px-2.5 py-1.5 text-xs' : 'py-2 pr-3 pl-3'"
       >
         <slot v-if="compact" name="icon" />
