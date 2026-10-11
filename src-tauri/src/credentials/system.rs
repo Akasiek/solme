@@ -14,7 +14,7 @@ impl SystemCredentialStore {
         Ok(Self)
     }
 
-    fn entry(id: &str) -> Result<Entry, String> {
+    pub(crate) fn entry(id: &str) -> Result<Entry, String> {
         Entry::new(KEYRING_SERVICE, id)
             .map_err(|error| format!("Failed to access the system keyring: {error}"))
     }

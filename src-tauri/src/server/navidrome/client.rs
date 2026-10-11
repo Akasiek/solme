@@ -14,8 +14,8 @@ use crate::library::models::{
 };
 
 use super::models::{
-    AlbumDto, AlbumListPayload, AlbumPayload, ArtistsPayload, GenresPayload, LyricsPayload,
-    PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
+    AlbumDto, AlbumInfoPayload, AlbumListPayload, AlbumPayload, ArtistsPayload, GenresPayload,
+    LyricsPayload, PingPayload, ScanStatusPayload, SubsonicEnvelope, SubsonicResponse,
 };
 
 pub(crate) const ARTWORK_TRANSPORT_ERROR_PREFIX: &str = "Artwork transport error";
@@ -465,6 +465,17 @@ impl MusicServer for NavidromeBackend {
         .await
     }
 
+    async fn public_album_artwork(&self, album_id: &str) -> Result<Option<String>, String> {
+        let payload: AlbumInfoPayload = self
+            .request_payload("getAlbumInfo2", &[("id", album_id.to_owned())])
+            .await?;
+        let info = payload.album_info;
+        Ok([info.large, info.medium, info.small]
+            .into_iter()
+            .flatten()
+            .find(|url| !url.trim().is_empty()))
+    }
+
     async fn artist_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String> {
         self.request_binary(
             self.endpoint_url("getCoverArt"),
@@ -573,6 +584,29 @@ mod tests {
         AlbumPayload, ArtistsPayload, LyricsPayload, NavidromeBackend, PingPayload,
         SubsonicEnvelope,
     };
+
+    #[test]
+    fn reads_optional_public_album_artwork_from_subsonic_response() {
+        let envelope: SubsonicEnvelope = serde_json::from_value(serde_json::json!({
+            "subsonic-response": {"status": "ok", "albumInfo": {
+                "largeImageUrl": "https://music.example.com/share/img/signed?size=1200"
+            }}
+        }))
+        .unwrap();
+        let info = envelope
+            .subsonic_response
+            .into_payload::<super::AlbumInfoPayload>()
+            .unwrap()
+            .album_info;
+        assert_eq!(
+            info.large.as_deref(),
+            Some("https://music.example.com/share/img/signed?size=1200")
+        );
+        assert!(info.medium.is_none() && info.small.is_none());
+        let payload: super::AlbumInfoPayload =
+            serde_json::from_value(serde_json::json!({"albumInfo": {}})).unwrap();
+        assert!(payload.album_info.large.is_none());
+    }
 
     #[test]
     fn builds_endpoint_for_server_root() {

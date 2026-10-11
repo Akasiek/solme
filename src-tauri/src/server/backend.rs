@@ -37,5 +37,8 @@ pub trait MusicServer: Send + Sync {
         rating: Option<i64>,
     ) -> Result<(), String>;
     async fn album_artwork(&self, cover_art_id: &str) -> Result<Option<BinaryArtwork>, String>;
+    async fn public_album_artwork(&self, _album_id: &str) -> Result<Option<String>, String> {
+        Ok(None)
+    }
     async fn artist_artwork(&self, artist_id: &str) -> Result<Option<BinaryArtwork>, String>;
 }

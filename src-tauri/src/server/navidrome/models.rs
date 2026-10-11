@@ -414,3 +414,20 @@ pub(super) struct GenreDto {
     #[serde(default)]
     pub album_count: i64,
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AlbumInfoPayload {
+    pub album_info: AlbumInfoDto,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AlbumInfoDto {
+    #[serde(rename = "largeImageUrl")]
+    pub large: Option<String>,
+    #[serde(rename = "mediumImageUrl")]
+    pub medium: Option<String>,
+    #[serde(rename = "smallImageUrl")]
+    pub small: Option<String>,
+}
