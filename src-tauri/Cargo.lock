@@ -2446,21 +2446,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "libmpv2"
-version = "6.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3f3d44c1c29b866d44453249d1d8b2822d891fdabd08359a5b85bb6944445e70"
-dependencies = [
- "libmpv2-sys",
-]
-
-[[package]]
-name = "libmpv2-sys"
-version = "4.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "edb32cabe7176b7d270b0dca6ff418b75187ae8d3854423e3d06fbff376841e4"
-
-[[package]]
 name = "libredox"
 version = "0.1.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3649,6 +3634,24 @@ dependencies = [
 ]
 
 [[package]]
+name = "rsmpv"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c43d845c72fe35aba06906f130c10e96665295b7fc948b8246c851c6f5811fec"
+dependencies = [
+ "rsmpv-sys",
+]
+
+[[package]]
+name = "rsmpv-sys"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd7d3d6bf8c3f290a357ef8782b7fd9ce6aa841ceb8a63da239f49e4dc5efc37"
+dependencies = [
+ "pkg-config",
+]
+
+[[package]]
 name = "rust_decimal"
 version = "1.42.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4207,12 +4210,12 @@ dependencies = [
  "futures-util",
  "keyring-core",
  "libc",
- "libmpv2",
  "log",
  "md5",
  "mpris-server",
  "rand 0.10.1",
  "reqwest",
+ "rsmpv",
  "serde",
  "serde_json",
  "sqlx",

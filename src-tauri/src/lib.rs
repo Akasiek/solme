@@ -5,9 +5,10 @@ use crate::commands::library::{
     search_cached_songs, set_library_item_favorite, set_library_item_rating, sync_library,
 };
 use crate::commands::player::{
-    get_player_queue, get_player_status, player_next, player_pause, player_play_album,
-    player_play_albums, player_previous, player_queue_album_last, player_queue_album_next,
-    player_resume, player_seek, player_set_volume, player_skip_to_queue_position, player_stop,
+    get_player_queue, get_player_status, player_move_queue_entry, player_next, player_pause,
+    player_play_album, player_play_albums, player_previous, player_queue_album_last,
+    player_queue_album_next, player_resume, player_seek, player_set_volume,
+    player_skip_to_queue_position, player_stop,
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, connect_saved_music_server_endpoint,
@@ -57,6 +58,7 @@ pub fn run() {
             player_next,
             player_previous,
             player_skip_to_queue_position,
+            player_move_queue_entry,
             player_seek,
             player_set_volume,
             get_player_status,

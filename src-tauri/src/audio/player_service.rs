@@ -2,50 +2,28 @@ use crate::{
     library::{CachedSong, LibraryCatalogRepository},
     server::MusicServerService,
 };
-use std::sync::{
-    atomic::{AtomicBool, Ordering},
-    Arc,
-};
+use std::sync::Arc;
 use tokio::sync::Mutex;
 
 use super::{
     backend::AudioBackend,
     fader::FadingAudioBackend,
-    models::{PlaybackState, PlayerStatus},
+    models::PlayerStatus,
+    playback::{Audio, WeakAudio},
     preference::{PreferenceRepository, PreferenceService},
-    queue::{PlayerQueue, PreparedQueue},
+    queue::{PreparedQueue, QueueSnapshot},
     session::PlaybackSession,
 };
 use crate::events::EventBus;
 
-const PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS: f64 = 5.0;
 type MusicServerBackend = dyn crate::server::backend::MusicServer;
 
-struct QueueLoadGuard {
-    in_progress: Arc<AtomicBool>,
-}
-
-impl QueueLoadGuard {
-    fn begin(in_progress: Arc<AtomicBool>) -> Self {
-        in_progress.store(true, Ordering::Release);
-        Self { in_progress }
-    }
-}
-
-impl Drop for QueueLoadGuard {
-    fn drop(&mut self) {
-        self.in_progress.store(false, Ordering::Release);
-    }
-}
-
 pub struct PlayerService {
-    audio: Arc<dyn AudioBackend>,
     server: Arc<MusicServerService>,
     repository: Arc<dyn LibraryCatalogRepository>,
     preference: PreferenceService,
     event_bus: Arc<EventBus>,
-    queue: PlayerQueue,
-    queue_load_in_progress: Arc<AtomicBool>,
+    audio: Audio,
     queue_load_lock: Mutex<()>,
 }
 
@@ -57,26 +35,20 @@ impl PlayerService {
         preference: Arc<dyn PreferenceRepository>,
         event_bus: Arc<EventBus>,
     ) -> Self {
-        let audio: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
+        let backend: Arc<dyn AudioBackend> = Arc::new(FadingAudioBackend::new(audio.into()));
         let preference = PreferenceService::new(Arc::clone(&server), preference);
-        let queue = PlayerQueue::default();
-        let queue_load_in_progress = Arc::new(AtomicBool::new(false));
-
+        let audio = Audio::new(backend);
         audio.set_status_change_callback(Self::status_change_callback(
-            Arc::clone(&audio),
-            queue.clone(),
-            Arc::clone(&queue_load_in_progress),
+            audio.downgrade(),
             Arc::clone(&event_bus),
         ));
 
         Self {
-            audio,
             server,
             repository,
             preference,
             event_bus,
-            queue,
-            queue_load_in_progress,
+            audio,
             queue_load_lock: Mutex::new(()),
         }
     }
@@ -104,26 +76,12 @@ impl PlayerService {
         Ok(())
     }
 
-    fn notify_queue_item_status(
-        &self,
-        state: PlaybackState,
-        current_song: CachedSong,
-        queue_position: usize,
-        queue_length: usize,
-    ) {
-        let audio_status = self.audio.status();
-        let status = PlayerStatus {
-            state,
-            current_song: Some(current_song),
-            position_seconds: 0.0,
-            duration_seconds: 0.0,
-            queue_position: Some(queue_position + 1),
-            queue_length,
-            volume: audio_status.volume,
-        };
-        if let Err(error) = self.event_bus.publish_player_status(status) {
-            log::error!("Failed to emit player queue item status: {error}");
-        }
+    fn finish_queue_change(&self, result: Result<(), String>) -> Result<(), String> {
+        // A failed native command can still leave a partial playlist. Always
+        // publish the actual view, including on the error path.
+        self.notify_queue_changed();
+        let status = self.notify_status_changed();
+        result.and(status)
     }
 
     pub fn subscribe_status(&self) -> tokio::sync::broadcast::Receiver<PlayerStatus> {
@@ -159,18 +117,22 @@ impl PlayerService {
         start_index: usize,
     ) -> Result<(), String> {
         let _queue_load = self.queue_load_lock.lock().await;
-        let current_song = songs
-            .get(start_index)
-            .cloned()
-            .ok_or_else(|| "Queue start index is out of bounds".to_string())?;
-        let loading = QueueLoadGuard::begin(Arc::clone(&self.queue_load_in_progress));
-
-        self.audio.pause_immediately()?;
-        self.show_loading_queue(&songs, start_index)?;
-        let load_result = self.load_album_sources(server, &songs, start_index).await;
-
-        drop(loading);
-        self.finish_album_load(load_result, current_song, start_index, songs.len())
+        let generation = self.audio.begin_loading(songs.clone(), start_index)?;
+        self.notify_queue_changed();
+        self.notify_status_changed()?;
+        let result = match Self::playback_sources(server, &songs).await {
+            Ok(sources) => self.audio.load(
+                generation,
+                &PreparedQueue::new(songs, sources)?,
+                start_index,
+                None,
+            ),
+            Err(error) => {
+                self.audio.cancel_loading(generation)?;
+                Err(error)
+            }
+        };
+        self.finish_queue_change(result)
     }
 
     async fn album_songs(
@@ -198,79 +160,16 @@ impl PlayerService {
         }
     }
 
-    fn show_loading_queue(&self, songs: &[CachedSong], start_index: usize) -> Result<(), String> {
-        self.queue.replace(songs.to_vec())?;
-        self.notify_queue_changed();
-        self.notify_queue_item_status(
-            PlaybackState::Loading,
-            songs
-                .get(start_index)
-                .cloned()
-                .ok_or_else(|| "Queue start index is out of bounds".to_string())?,
-            start_index,
-            songs.len(),
-        );
-        Ok(())
-    }
-
-    async fn load_album_sources(
-        &self,
-        server: &Arc<MusicServerBackend>,
-        songs: &[CachedSong],
-        start_index: usize,
-    ) -> Result<(), String> {
-        let sources = Self::playback_sources(server, songs).await?;
-        self.audio.load_sources(&sources, start_index)
-    }
-
-    fn finish_album_load(
-        &self,
-        result: Result<(), String>,
-        current_song: CachedSong,
-        start_index: usize,
-        queue_length: usize,
-    ) -> Result<(), String> {
-        match result {
-            Ok(()) => self.notify_status_changed(),
-            Err(error) => {
-                self.notify_queue_item_status(
-                    PlaybackState::Stopped,
-                    current_song,
-                    start_index,
-                    queue_length,
-                );
-                Err(error)
-            }
-        }
-    }
-
     pub async fn queue_album_next(&self, album_id: &str) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
         let prepared = self.prepare_album_queue(album_id).await?;
-        let insertion_position = self
-            .audio
-            .status()
-            .playlist_position
-            .map_or(0, |position| position + 1);
-
-        if insertion_position > self.queue.len()? {
-            return Err("Active queue position is out of bounds".to_string());
-        }
-
-        self.audio
-            .insert_sources(prepared.sources(), insertion_position)?;
-        self.queue
-            .insert(insertion_position, prepared.into_songs())?;
-        self.notify_queue_changed();
-        self.notify_status_changed()
+        self.finish_queue_change(self.audio.enqueue(prepared, true))
     }
 
     pub async fn queue_album_last(&self, album_id: &str) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
         let prepared = self.prepare_album_queue(album_id).await?;
-
-        self.audio.append_sources(prepared.sources())?;
-        self.queue.append(prepared.into_songs())?;
-        self.notify_queue_changed();
-        self.notify_status_changed()
+        self.finish_queue_change(self.audio.enqueue(prepared, false))
     }
 
     async fn prepare_album_queue(&self, album_id: &str) -> Result<PreparedQueue, String> {
@@ -295,10 +194,7 @@ impl PlayerService {
     }
 
     pub fn stop(&self) -> Result<(), String> {
-        self.audio.stop()?;
-        self.queue.clear()?;
-        self.notify_queue_changed();
-        self.notify_status_changed()
+        self.finish_queue_change(self.audio.stop())
     }
 
     pub fn next(&self) -> Result<(), String> {
@@ -307,23 +203,32 @@ impl PlayerService {
     }
 
     pub fn previous(&self) -> Result<(), String> {
-        let status = self.audio.status();
-        if status.playlist_position == Some(0)
-            || status.position_seconds > PREVIOUS_SONG_RESTART_THRESHOLD_SECONDS
-        {
-            self.seek(0.0)
+        if self.audio.previous()? {
+            self.notify_status_changed_with_position(0.0)
         } else {
-            self.audio.previous()?;
             self.notify_status_changed()
         }
     }
 
     pub fn skip_to_queue_position(&self, queue_position: usize) -> Result<(), String> {
-        if queue_position >= self.queue.len()? {
-            return Err("Queue position is out of bounds".to_string());
-        }
-        self.audio.skip_to_queue_position(queue_position)?;
+        self.audio.skip(queue_position)?;
         self.notify_status_changed()
+    }
+
+    pub async fn move_queue_entry(
+        &self,
+        from: usize,
+        to: usize,
+        expected_revision: &str,
+        expected_current_index: Option<usize>,
+    ) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
+        self.finish_queue_change(self.audio.move_entry(
+            from,
+            to,
+            expected_revision,
+            expected_current_index,
+        ))
     }
 
     pub fn seek(&self, position_seconds: f64) -> Result<(), String> {
@@ -339,47 +244,39 @@ impl PlayerService {
     }
 
     pub fn status(&self) -> Result<PlayerStatus, String> {
-        Self::build_status(&self.audio, &self.queue)
+        self.audio.status()
     }
 
+    pub fn queue_snapshot(&self) -> Result<QueueSnapshot, String> {
+        self.audio.queue_snapshot()
+    }
+
+    #[cfg(test)]
     pub fn queue(&self) -> Result<Vec<CachedSong>, String> {
-        self.queue.snapshot()
+        Ok(self.audio.queue_snapshot()?.songs)
     }
 
     pub(crate) fn session_snapshot(&self) -> Result<Option<PlaybackSession>, String> {
-        let audio_status = self.audio.status();
-        let queue = self.queue.snapshot()?;
-        let Some(active_index) = audio_status.playlist_position else {
-            return Ok(None);
-        };
-        if queue.is_empty() || active_index >= queue.len() {
-            return Ok(None);
-        }
-
-        Ok(Some(PlaybackSession {
-            queue,
-            active_index,
-            position_seconds: audio_status.position_seconds.max(0.0),
-        }))
+        self.audio.session_snapshot()
     }
 
     pub(crate) async fn restore_session(&self, session: PlaybackSession) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
         if session.queue.is_empty() || session.active_index >= session.queue.len() {
             return Err("Stored playback session has an invalid queue".to_string());
         }
-
         let (_, server) = self.server.current_server()?;
         let sources = Self::playback_sources(&server, &session.queue).await?;
+        let generation = self
+            .audio
+            .begin_loading(session.queue.clone(), session.active_index)?;
         let prepared = PreparedQueue::new(session.queue, sources)?;
-
-        self.audio.load_sources_paused(
-            prepared.sources(),
+        self.finish_queue_change(self.audio.load(
+            generation,
+            &prepared,
             session.active_index,
             Some(session.position_seconds),
-        )?;
-        self.queue.replace(prepared.into_songs())?;
-        self.notify_queue_changed();
-        self.notify_status_changed()
+        ))
     }
 
     async fn playback_sources(
@@ -403,63 +300,25 @@ impl PlayerService {
     }
 
     fn status_change_callback(
-        audio: Arc<dyn AudioBackend>,
-        queue: PlayerQueue,
-        queue_load_in_progress: Arc<AtomicBool>,
+        audio: WeakAudio,
         event_bus: Arc<EventBus>,
     ) -> super::backend::AudioStatusChangeCallback {
-        Arc::new(move || {
-            if queue_load_in_progress.load(Ordering::Acquire) {
+        Arc::new(move |change| {
+            let Some(audio) = audio.upgrade() else {
                 return;
-            }
-
-            if !audio.status().playing {
-                match queue.len() {
-                    Ok(0) => {}
-                    Ok(_) => {
-                        if let Err(error) = queue.clear() {
-                            log::error!("Failed to clear completed player queue: {error}");
-                        } else if let Err(error) = event_bus.publish_player_queue_changed() {
-                            log::error!("Failed to emit player queue change: {error}");
-                        }
+            };
+            match audio.backend_changed(change) {
+                Ok(Some(snapshot)) => {
+                    if let Err(error) = event_bus.publish_player_queue_changed() {
+                        log::error!("Failed to emit player queue change: {error}");
                     }
-                    Err(error) => log::error!("Failed to inspect completed player queue: {error}"),
-                }
-            }
-
-            match Self::build_status(&audio, &queue) {
-                Ok(status) => {
-                    if let Err(error) = event_bus.publish_player_status(status) {
+                    if let Err(error) = event_bus.publish_player_status(snapshot.status) {
                         log::error!("Failed to emit player status change: {error}");
                     }
                 }
-                Err(error) => log::error!("Failed to build player status change: {error}"),
+                Ok(None) => {}
+                Err(error) => log::error!("Failed to read player state change: {error}"),
             }
-        })
-    }
-
-    fn build_status(
-        audio: &Arc<dyn AudioBackend>,
-        queue: &PlayerQueue,
-    ) -> Result<PlayerStatus, String> {
-        let audio_status = audio.status();
-        let (current_song, queue_length) = queue.current_and_len(audio_status.playlist_position)?;
-        let state = if !audio_status.playing {
-            PlaybackState::Stopped
-        } else if audio_status.paused {
-            PlaybackState::Paused
-        } else {
-            PlaybackState::Playing
-        };
-
-        Ok(PlayerStatus {
-            state,
-            current_song,
-            position_seconds: audio_status.position_seconds,
-            duration_seconds: audio_status.duration_seconds,
-            queue_position: audio_status.playlist_position.map(|position| position + 1),
-            queue_length,
-            volume: audio_status.volume,
         })
     }
 }
@@ -480,7 +339,7 @@ mod tests {
     use crate::events::EventBus;
     use crate::{
         audio::{
-            backend::{AudioBackend, AudioBackendStatus},
+            backend::{AudioBackend, AudioBackendStatus, AudioPlaylist, AudioPlaylistEntry},
             models::PlaybackState,
             preference::{Preference, PreferenceKey, PreferenceRepository},
             session::PlaybackSession,
@@ -638,7 +497,9 @@ mod tests {
             ..Default::default()
         }));
         let player = Arc::new(PlayerService::new(
-            Box::new(MockAudioBackend { state: audio_state }),
+            Box::new(MockAudioBackend {
+                state: Arc::clone(&audio_state),
+            }),
             server_service,
             repository,
             Arc::new(MockPreferenceRepository::default()),
@@ -662,7 +523,7 @@ mod tests {
         assert_eq!(loading_status.state, PlaybackState::Loading);
         assert_eq!(loading_status.current_song.unwrap().remote_id, "song-1");
         assert_eq!(loading_status.queue_position, Some(1));
-        assert!(player.audio.status().paused);
+        assert!(audio_state.lock().unwrap().paused);
 
         let (released, release_signal) = &*load_release;
         *released.lock().unwrap() = true;
@@ -904,6 +765,213 @@ mod tests {
     }
 
     #[test]
+    fn moves_queue_entries_preserving_active_occurrence_progress_and_session() {
+        tauri::async_runtime::block_on(async {
+            for paused in [true, false] {
+                for (from, to, expected_active) in [
+                    (2, 0, 0),
+                    (2, 3, 3),
+                    (3, 0, 3),
+                    (0, 3, 1),
+                    (0, 1, 2),
+                    (2, 2, 2),
+                ] {
+                    let (player, audio_state) = queue_move_player().await;
+                    if !paused {
+                        player.resume().unwrap();
+                    }
+                    let snapshot = player.queue_snapshot().unwrap();
+                    let mut expected = snapshot.songs.clone();
+                    let entry = expected.remove(from);
+                    expected.insert(to, entry);
+
+                    player
+                        .move_queue_entry(from, to, &snapshot.revision, Some(2))
+                        .await
+                        .unwrap();
+
+                    let status = player.status().unwrap();
+                    assert_eq!(status.queue_position, Some(expected_active + 1));
+                    assert_eq!(status.current_song.unwrap().remote_id, "song-1");
+                    assert_eq!(status.position_seconds, 37.5);
+                    assert_eq!(
+                        status.state,
+                        if paused {
+                            PlaybackState::Paused
+                        } else {
+                            PlaybackState::Playing
+                        }
+                    );
+                    let session = player.session_snapshot().unwrap().unwrap();
+                    assert_eq!(session.queue, expected);
+                    assert_eq!(session.active_index, expected_active);
+                    assert_eq!(session.position_seconds, 37.5);
+                    let audio = audio_state.lock().unwrap();
+                    assert_eq!(audio.start_index, expected_active);
+                    assert_eq!(
+                        audio.sources,
+                        expected
+                            .iter()
+                            .map(|song| format!("https://music.example.com/{}", song.remote_id))
+                            .collect::<Vec<_>>()
+                    );
+                }
+            }
+        });
+    }
+
+    #[test]
+    fn rejects_stale_or_invalid_queue_moves_and_leaves_failed_moves_unchanged() {
+        tauri::async_runtime::block_on(async {
+            for reason in ["revision", "current", "source", "target", "backend"] {
+                let (player, audio_state) = queue_move_player().await;
+                let snapshot = player.queue_snapshot().unwrap();
+                let (mut from, mut to) = (0, 3);
+                match reason {
+                    "revision" => player
+                        .move_queue_entry(0, 1, &snapshot.revision, Some(2))
+                        .await
+                        .unwrap(),
+                    "current" => audio_state.lock().unwrap().start_index = 1,
+                    "source" => from = 4,
+                    "target" => to = 4,
+                    "backend" => {
+                        audio_state.lock().unwrap().move_error = Some("Move failed".to_string());
+                    }
+                    _ => unreachable!(),
+                }
+                let before = player.queue_snapshot().unwrap();
+                let revision = before.revision;
+                let sources = audio_state.lock().unwrap().sources.clone();
+                assert!(
+                    player
+                        .move_queue_entry(from, to, &snapshot.revision, Some(2))
+                        .await
+                        .is_err(),
+                    "{reason}"
+                );
+                assert_eq!(player.queue().unwrap(), before.songs, "{reason}");
+                assert_eq!(
+                    player.queue_snapshot().unwrap().revision,
+                    revision,
+                    "{reason}"
+                );
+                assert_eq!(audio_state.lock().unwrap().sources, sources, "{reason}");
+            }
+        });
+    }
+
+    async fn queue_move_player() -> (PlayerService, Arc<Mutex<MockAudioState>>) {
+        let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
+        let player = PlayerService::new(
+            Box::new(MockAudioBackend {
+                state: Arc::clone(&audio_state),
+            }),
+            test_server_service().await,
+            Arc::new(MockRepository {
+                songs: vec![song("new-1"), song("new-2"), song("new-3")],
+                ..Default::default()
+            }),
+            Arc::new(MockPreferenceRepository::default()),
+            noop_event_bus(),
+        );
+        player
+            .restore_session(PlaybackSession {
+                queue: vec![
+                    song("song-1"),
+                    song("song-2"),
+                    song("song-1"),
+                    song("song-3"),
+                ],
+                active_index: 2,
+                position_seconds: 37.5,
+            })
+            .await
+            .unwrap();
+        (player, audio_state)
+    }
+
+    #[test]
+    fn publishes_actual_partial_playlist_when_appending_or_inserting_fails() {
+        tauri::async_runtime::block_on(async {
+            for insert in [true, false] {
+                let (player, state) = queue_move_player().await;
+                let before = player.queue_snapshot().unwrap();
+                {
+                    let mut audio = state.lock().unwrap();
+                    if insert {
+                        audio.insert_error_after_append =
+                            Some("Insert failed after append".to_string());
+                    } else {
+                        audio.append_failure_after = Some(audio.appended_sources.len() + 1);
+                    }
+                }
+                let songs = [song("new-1"), song("new-2"), song("new-3")];
+                let mut statuses = player.subscribe_status();
+                let result = if insert {
+                    player.queue_album_next("new-album").await
+                } else {
+                    player.queue_album_last("new-album").await
+                };
+                assert!(result.is_err());
+                let snapshot = player.queue_snapshot().unwrap();
+                let mut expected = before.songs;
+                // The failed insert left its accepted entry at the end in MPV.
+                expected.push(songs.first().unwrap().clone());
+                assert_eq!(snapshot.songs, expected);
+                assert_ne!(snapshot.revision, before.revision);
+                assert_eq!(snapshot.status.current_song.unwrap().remote_id, "song-1");
+                assert_eq!(statuses.recv().await.unwrap().queue_length, 5);
+                assert_eq!(player.session_snapshot().unwrap().unwrap().queue, expected);
+            }
+        });
+    }
+
+    #[test]
+    fn retries_metadata_binding_after_a_native_playlist_read_fails() {
+        tauri::async_runtime::block_on(async {
+            let (player, state) = queue_move_player().await;
+            {
+                let mut state = state.lock().unwrap();
+                state.read_failure_after_append = Some(state.appended_sources.len() + 1);
+            }
+            assert!(player.queue_album_last("new-album").await.is_err());
+            let snapshot = player.queue_snapshot().unwrap();
+            assert_eq!(snapshot.songs.last().unwrap().remote_id, "new-1");
+            assert_eq!(snapshot.songs.len(), 5);
+            assert_eq!(snapshot.entry_ids.len(), 5);
+        });
+    }
+
+    #[test]
+    fn reflects_the_native_prefix_after_queue_replacement_fails() {
+        tauri::async_runtime::block_on(async {
+            let (player, state) = queue_move_player().await;
+            let previous_ids = player.queue_snapshot().unwrap().entry_ids;
+            {
+                let mut state = state.lock().unwrap();
+                state.append_failure_after = Some(state.appended_sources.len() + 1);
+            }
+            let songs = [song("new-1"), song("new-2"), song("new-3")];
+            assert!(player.play_album("new-album", None).await.is_err());
+            let snapshot = player.queue_snapshot().unwrap();
+            assert_eq!(
+                snapshot.songs,
+                songs.into_iter().take(2).collect::<Vec<_>>()
+            );
+            assert!(snapshot
+                .entry_ids
+                .iter()
+                .all(|id| !previous_ids.contains(id)));
+            assert_ne!(snapshot.status.state, PlaybackState::Loading);
+            assert_eq!(
+                player.session_snapshot().unwrap().unwrap().queue,
+                snapshot.songs
+            );
+        });
+    }
+
+    #[test]
     fn restores_saved_volume_preference() {
         tauri::async_runtime::block_on(async {
             let server_service = test_server_service().await;
@@ -962,25 +1030,9 @@ mod tests {
     #[test]
     fn previous_restarts_current_song_after_threshold() {
         tauri::async_runtime::block_on(async {
-            let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
-            let audio_state = Arc::new(Mutex::new(MockAudioState {
-                playing: true,
-                position_seconds: 6.0,
-                ..Default::default()
-            }));
-            let player = PlayerService::new(
-                Box::new(MockAudioBackend {
-                    state: Arc::clone(&audio_state),
-                }),
-                server_service,
-                repository,
-                Arc::new(MockPreferenceRepository::default()),
-                noop_event_bus(),
-            );
-
+            let (player, audio_state) = queue_move_player().await;
+            audio_state.lock().unwrap().position_seconds = 6.0;
             player.previous().unwrap();
-
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.position_seconds, 0.0);
             assert_eq!(audio.previous_calls, 0);
@@ -990,26 +1042,9 @@ mod tests {
     #[test]
     fn previous_moves_to_previous_song_before_threshold() {
         tauri::async_runtime::block_on(async {
-            let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
-            let audio_state = Arc::new(Mutex::new(MockAudioState {
-                playing: true,
-                start_index: 1,
-                position_seconds: 5.0,
-                ..Default::default()
-            }));
-            let player = PlayerService::new(
-                Box::new(MockAudioBackend {
-                    state: Arc::clone(&audio_state),
-                }),
-                server_service,
-                repository,
-                Arc::new(MockPreferenceRepository::default()),
-                noop_event_bus(),
-            );
-
+            let (player, audio_state) = queue_move_player().await;
+            audio_state.lock().unwrap().position_seconds = 5.0;
             player.previous().unwrap();
-
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.position_seconds, 5.0);
             assert_eq!(audio.previous_calls, 1);
@@ -1019,25 +1054,13 @@ mod tests {
     #[test]
     fn previous_restarts_first_song_before_threshold() {
         tauri::async_runtime::block_on(async {
-            let server_service = test_server_service().await;
-            let repository: Arc<dyn LibraryCatalogRepository> = Arc::new(MockRepository::default());
-            let audio_state = Arc::new(Mutex::new(MockAudioState {
-                playing: true,
-                position_seconds: 2.0,
-                ..Default::default()
-            }));
-            let player = PlayerService::new(
-                Box::new(MockAudioBackend {
-                    state: Arc::clone(&audio_state),
-                }),
-                server_service,
-                repository,
-                Arc::new(MockPreferenceRepository::default()),
-                noop_event_bus(),
-            );
-
+            let (player, audio_state) = queue_move_player().await;
+            {
+                let mut audio = audio_state.lock().unwrap();
+                audio.start_index = 0;
+                audio.position_seconds = 2.0;
+            }
             player.previous().unwrap();
-
             let audio = audio_state.lock().unwrap();
             assert_eq!(audio.position_seconds, 0.0);
             assert_eq!(audio.previous_calls, 0);
@@ -1080,6 +1103,12 @@ mod tests {
     #[derive(Default)]
     struct MockAudioState {
         sources: Vec<String>,
+        ids: Vec<i64>,
+        next_id: i64,
+        append_failure_after: Option<usize>,
+        read_failure_after_append: Option<usize>,
+        playlist_read_failures: usize,
+        insert_error_after_append: Option<String>,
         inserted_sources: Vec<String>,
         insertion_position: Option<usize>,
         appended_sources: Vec<String>,
@@ -1090,6 +1119,7 @@ mod tests {
         volume: f64,
         previous_calls: usize,
         keep_stale_position_after_seek: bool,
+        move_error: Option<String>,
         load_started: Option<mpsc::SyncSender<()>>,
         load_release: Option<Arc<(Mutex<bool>, Condvar)>>,
     }
@@ -1099,20 +1129,42 @@ mod tests {
     }
 
     impl AudioBackend for MockAudioBackend {
+        fn playlist(&self) -> Result<AudioPlaylist, String> {
+            let mut state = self.state.lock().unwrap();
+            if state.playlist_read_failures > 0 {
+                state.playlist_read_failures -= 1;
+                return Err("Playlist read failed".to_string());
+            }
+            Ok(AudioPlaylist {
+                entries: state
+                    .sources
+                    .iter()
+                    .zip(&state.ids)
+                    .enumerate()
+                    .map(|(index, (source, id))| AudioPlaylistEntry {
+                        id: *id,
+                        source: source.clone(),
+                        current: state.playing && index == state.start_index,
+                        playing: state.playing && index == state.start_index,
+                    })
+                    .collect(),
+            })
+        }
         fn set_status_change_callback(
             &self,
             _callback: crate::audio::backend::AudioStatusChangeCallback,
         ) {
         }
 
-        fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+        fn load_source(&self, source: &str, paused_position: Option<f64>) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
-            state.sources = sources.to_vec();
-            state.start_index = start_index;
+            state.sources = vec![source.to_string()];
+            state.next_id += 1;
+            state.ids = vec![state.next_id];
+            state.start_index = 0;
             let load_started = state.load_started.take();
             let load_release = state.load_release.clone();
             drop(state);
-
             if let Some(load_started) = load_started {
                 load_started.send(()).unwrap();
             }
@@ -1123,43 +1175,67 @@ mod tests {
                     released = release_signal.wait(released).unwrap();
                 }
             }
-
             let mut state = self.state.lock().unwrap();
             state.playing = true;
-            state.paused = false;
+            state.paused = paused_position.is_some();
+            state.position_seconds = paused_position.unwrap_or(0.0);
             Ok(())
         }
 
-        fn load_sources_paused(
-            &self,
-            sources: &[String],
-            start_index: usize,
-            position_seconds: Option<f64>,
-        ) -> Result<(), String> {
+        fn append_source(&self, source: &str) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
-            state.sources = sources.to_vec();
-            state.start_index = start_index;
-            state.playing = true;
-            state.paused = true;
-            if let Some(position_seconds) = position_seconds {
-                state.position_seconds = position_seconds;
+            if state.append_failure_after == Some(state.appended_sources.len()) {
+                return Err("Append failed".to_string());
+            }
+            state.appended_sources.push(source.to_string());
+            if state.read_failure_after_append == Some(state.appended_sources.len()) {
+                state.playlist_read_failures = 1;
+            }
+            state.next_id += 1;
+            let id = state.next_id;
+            state.sources.push(source.to_string());
+            state.ids.push(id);
+            Ok(())
+        }
+
+        fn insert_source(&self, source: &str, position: usize) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.inserted_sources.push(source.to_string());
+            state.insertion_position.get_or_insert(position);
+            state.next_id += 1;
+            let id = state.next_id;
+            if let Some(error) = state.insert_error_after_append.clone() {
+                state.sources.push(source.to_string());
+                state.ids.push(id);
+                return Err(error);
+            }
+            state.sources.insert(position, source.to_string());
+            state.ids.insert(position, id);
+            if position <= state.start_index {
+                state.start_index += 1;
             }
             Ok(())
         }
 
-        fn append_sources(&self, sources: &[String]) -> Result<(), String> {
-            self.state
-                .lock()
-                .unwrap()
-                .appended_sources
-                .extend_from_slice(sources);
-            Ok(())
-        }
-
-        fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String> {
+        fn move_queue_entry(&self, from: usize, to: usize) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
-            state.inserted_sources.extend_from_slice(sources);
-            state.insertion_position = Some(position);
+            if let Some(error) = &state.move_error {
+                return Err(error.clone());
+            }
+            let source = state.sources.remove(from);
+            state.sources.insert(to, source);
+            let id = state.ids.remove(from);
+            state.ids.insert(to, id);
+            let current = state.start_index;
+            state.start_index = if current == from {
+                to
+            } else if from < current && current <= to {
+                current - 1
+            } else if to <= current && current < from {
+                current + 1
+            } else {
+                current
+            };
             Ok(())
         }
 
@@ -1179,7 +1255,10 @@ mod tests {
         }
 
         fn stop(&self) -> Result<(), String> {
-            self.state.lock().unwrap().playing = false;
+            let mut state = self.state.lock().unwrap();
+            state.playing = false;
+            state.sources.clear();
+            state.ids.clear();
             Ok(())
         }
 
@@ -1219,7 +1298,6 @@ mod tests {
                 paused: state.paused,
                 position_seconds: state.position_seconds,
                 duration_seconds: 180.0,
-                playlist_position: state.playing.then_some(state.start_index),
                 volume: state.volume,
             }
         }

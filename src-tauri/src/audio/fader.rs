@@ -143,28 +143,25 @@ impl FadingAudioBackend {
 }
 
 impl AudioBackend for FadingAudioBackend {
-    fn load_sources(&self, sources: &[String], start_index: usize) -> Result<(), String> {
+    fn playlist(&self) -> Result<super::backend::AudioPlaylist, String> {
+        self.inner.playlist()
+    }
+
+    fn load_source(&self, source: &str, paused_position: Option<f64>) -> Result<(), String> {
         self.cancel()?;
-        self.inner.load_sources(sources, start_index)
+        self.inner.load_source(source, paused_position)
     }
 
-    fn load_sources_paused(
-        &self,
-        sources: &[String],
-        start_index: usize,
-        position_seconds: Option<f64>,
-    ) -> Result<(), String> {
-        self.cancel()?;
-        self.inner
-            .load_sources_paused(sources, start_index, position_seconds)
+    fn insert_source(&self, source: &str, position: usize) -> Result<(), String> {
+        self.inner.insert_source(source, position)
     }
 
-    fn insert_sources(&self, sources: &[String], position: usize) -> Result<(), String> {
-        self.inner.insert_sources(sources, position)
+    fn append_source(&self, source: &str) -> Result<(), String> {
+        self.inner.append_source(source)
     }
 
-    fn append_sources(&self, sources: &[String]) -> Result<(), String> {
-        self.inner.append_sources(sources)
+    fn move_queue_entry(&self, from: usize, to: usize) -> Result<(), String> {
+        self.inner.move_queue_entry(from, to)
     }
 
     fn pause_immediately(&self) -> Result<(), String> {
@@ -447,30 +444,26 @@ mod tests {
     }
 
     impl AudioBackend for MockBackend {
-        fn load_sources(&self, _sources: &[String], _start_index: usize) -> Result<(), String> {
-            self.state.lock().unwrap().playing = true;
-            Ok(())
+        fn playlist(&self) -> Result<crate::audio::backend::AudioPlaylist, String> {
+            Ok(crate::audio::backend::AudioPlaylist::default())
         }
 
-        fn set_status_change_callback(&self, _callback: AudioStatusChangeCallback) {}
-
-        fn load_sources_paused(
-            &self,
-            _sources: &[String],
-            _start_index: usize,
-            _position_seconds: Option<f64>,
-        ) -> Result<(), String> {
+        fn load_source(&self, _source: &str, paused_position: Option<f64>) -> Result<(), String> {
             let mut state = self.state.lock().unwrap();
             state.playing = true;
-            state.paused = true;
+            state.paused = paused_position.is_some();
             Ok(())
         }
 
-        fn append_sources(&self, _sources: &[String]) -> Result<(), String> {
+        fn insert_source(&self, _source: &str, _position: usize) -> Result<(), String> {
             Ok(())
         }
 
-        fn insert_sources(&self, _sources: &[String], _position: usize) -> Result<(), String> {
+        fn append_source(&self, _source: &str) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn move_queue_entry(&self, _from: usize, _to: usize) -> Result<(), String> {
             Ok(())
         }
 
@@ -522,9 +515,10 @@ mod tests {
                 paused: state.paused,
                 position_seconds: 0.0,
                 duration_seconds: 180.0,
-                playlist_position: Some(0),
                 volume: state.volume,
             }
         }
+
+        fn set_status_change_callback(&self, _callback: AudioStatusChangeCallback) {}
     }
 }
