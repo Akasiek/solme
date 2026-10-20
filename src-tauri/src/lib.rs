@@ -6,9 +6,9 @@ use crate::commands::library::{
 };
 use crate::commands::player::{
     get_player_queue, get_player_status, player_move_queue_entry, player_next, player_pause,
-    player_play_album, player_play_albums, player_previous, player_queue_album_last,
-    player_queue_album_next, player_resume, player_seek, player_set_volume,
-    player_skip_to_queue_position, player_stop,
+    player_play_album, player_play_albums, player_play_queue_entry, player_previous,
+    player_queue_album_last, player_queue_album_next, player_queue_song, player_remove_queue_entry,
+    player_resume, player_seek, player_set_volume, player_skip_to_queue_position, player_stop,
 };
 use crate::commands::server::{
     connect_music_server, connect_saved_music_server, connect_saved_music_server_endpoint,
@@ -63,6 +63,9 @@ pub fn run() {
             player_set_volume,
             get_player_status,
             get_player_queue,
+            player_queue_song,
+            player_play_queue_entry,
+            player_remove_queue_entry,
             connect_music_server,
             ping_music_server,
             get_song_lyrics,

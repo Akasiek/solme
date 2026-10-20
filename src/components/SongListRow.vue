@@ -4,7 +4,7 @@ import { Play } from "@lucide/vue";
 import dayjs from "dayjs";
 import { computed, ref } from "vue";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
-import ContextMenu from "@/components/ContextMenu";
+import SongContextMenu from "@/components/SongContextMenu/SongContextMenu.vue";
 import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 import type { CachedSong, SongPageItem } from "@/types";
 import ArtworkImage from "@/components/ArtworkImage.vue";
@@ -130,14 +130,14 @@ function playFromRow(event: MouseEvent) {
     >
       ···
     </button>
-    <ContextMenu
+    <SongContextMenu
+      variant="library"
+      :song="song"
       :open="Boolean(contextMenu)"
       :x="contextMenu?.x ?? 0"
       :y="contextMenu?.y ?? 0"
-      :aria-label="`${song.title} actions`"
+      :disabled="isPlaying"
       @close="contextMenu = undefined"
-    >
-      <div class="w-52 p-2"><LibraryItemAnnotations :item="song" /></div>
-    </ContextMenu>
+    />
   </div>
 </template>

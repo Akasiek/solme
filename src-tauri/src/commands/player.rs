@@ -107,3 +107,29 @@ pub async fn player_move_queue_entry(
         .move_queue_entry(from, to, &expected_revision, expected_current_index)
         .await
 }
+
+#[tauri::command]
+pub async fn player_queue_song(
+    album_id: String,
+    song_id: String,
+    next: bool,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.queue_song(&album_id, &song_id, next).await
+}
+
+#[tauri::command]
+pub async fn player_play_queue_entry(
+    entry_id: String,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.play_queue_entry(&entry_id).await
+}
+
+#[tauri::command]
+pub async fn player_remove_queue_entry(
+    entry_id: String,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.remove_queue_entry(&entry_id).await
+}

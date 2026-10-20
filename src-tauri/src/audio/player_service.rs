@@ -172,6 +172,36 @@ impl PlayerService {
         self.finish_queue_change(self.audio.enqueue(prepared, false))
     }
 
+    pub async fn queue_song(
+        &self,
+        album_id: &str,
+        song_id: &str,
+        next: bool,
+    ) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
+
+        let (server, songs) = self.album_songs(album_id).await?;
+        let song = songs
+            .into_iter()
+            .find(|song| song.remote_id == song_id)
+            .ok_or_else(|| "Selected song does not belong to this album".to_string())?;
+
+        let source = server.playback_uri(&song.remote_id).await?;
+        let prepared = PreparedQueue::new(vec![song], vec![source])?;
+        self.finish_queue_change(self.audio.enqueue(prepared, next))
+    }
+
+    pub async fn play_queue_entry(&self, entry_id: &str) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
+        self.audio.play_entry(entry_id)?;
+        self.notify_status_changed()
+    }
+
+    pub async fn remove_queue_entry(&self, entry_id: &str) -> Result<(), String> {
+        let _queue_load = self.queue_load_lock.lock().await;
+        self.finish_queue_change(self.audio.remove_entry(entry_id))
+    }
+
     async fn prepare_album_queue(&self, album_id: &str) -> Result<PreparedQueue, String> {
         let (profile_id, server) = self.server.current_server()?;
         let songs = self.repository.songs(&profile_id, album_id).await?;
@@ -861,6 +891,66 @@ mod tests {
         });
     }
 
+    #[test]
+    fn queues_only_selected_song_next_or_last_and_rejects_unknown_song() {
+        tauri::async_runtime::block_on(async {
+            for next in [true, false] {
+                let (player, _) = queue_move_player().await;
+                let before = player.queue_snapshot().unwrap();
+                player.queue_song("album-1", "new-2", next).await.unwrap();
+                let after = player.queue_snapshot().unwrap();
+                let position = if next { 3 } else { 4 };
+                assert_eq!(after.songs.len(), before.songs.len() + 1);
+                assert_eq!(after.songs.get(position).unwrap().remote_id, "new-2");
+                assert_eq!(after.status.current_song, before.status.current_song);
+                assert_eq!(
+                    after.status.position_seconds,
+                    before.status.position_seconds
+                );
+                assert_eq!(after.status.state, before.status.state);
+                assert!(player.queue_song("album-1", "missing", next).await.is_err());
+                assert_eq!(player.queue_snapshot().unwrap().entry_ids, after.entry_ids);
+                player.stop().unwrap();
+                player.queue_song("album-1", "new-2", next).await.unwrap();
+                let idle = player.queue_snapshot().unwrap();
+                assert_eq!(idle.songs.len(), 1);
+                assert_eq!(idle.songs.first().unwrap().remote_id, "new-2");
+                assert_eq!(idle.status.state, PlaybackState::Stopped);
+            }
+        });
+    }
+
+    #[test]
+    fn queue_menu_actions_follow_entry_identity_after_reorder() {
+        tauri::async_runtime::block_on(async {
+            let (player, _) = queue_move_player().await;
+            let before = player.queue_snapshot().unwrap();
+            let first_occurrence = before.entry_ids.first().unwrap().clone();
+            let active_occurrence = before.entry_ids.get(2).unwrap().clone();
+            player
+                .move_queue_entry(0, 3, &before.revision, Some(2))
+                .await
+                .unwrap();
+            player.remove_queue_entry(&first_occurrence).await.unwrap();
+            let after = player.queue_snapshot().unwrap();
+            assert_eq!(after.songs.len(), 3);
+            assert!(!after.entry_ids.contains(&first_occurrence));
+            assert_eq!(
+                after
+                    .entry_ids
+                    .get(after.status.queue_position.unwrap() - 1),
+                Some(&active_occurrence)
+            );
+            assert_eq!(after.status.position_seconds, 37.5);
+            assert!(player.remove_queue_entry(&first_occurrence).await.is_err());
+            assert!(player.play_queue_entry(&first_occurrence).await.is_err());
+            assert_eq!(player.queue_snapshot().unwrap().entry_ids, after.entry_ids);
+            let selected = after.entry_ids.first().unwrap();
+            player.play_queue_entry(selected).await.unwrap();
+            assert_eq!(player.status().unwrap().queue_position, Some(1));
+        });
+    }
+
     async fn queue_move_player() -> (PlayerService, Arc<Mutex<MockAudioState>>) {
         let audio_state = Arc::new(Mutex::new(MockAudioState::default()));
         let player = PlayerService::new(
@@ -1236,6 +1326,19 @@ mod tests {
             } else {
                 current
             };
+            Ok(())
+        }
+
+        fn remove_queue_entry(&self, index: usize) -> Result<(), String> {
+            let mut state = self.state.lock().unwrap();
+            state.sources.remove(index);
+            state.ids.remove(index);
+            if index < state.start_index {
+                state.start_index -= 1;
+            } else if index == state.start_index {
+                state.position_seconds = 0.0;
+                state.playing = index < state.sources.len();
+            }
             Ok(())
         }
 

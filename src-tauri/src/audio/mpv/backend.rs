@@ -187,6 +187,14 @@ impl AudioBackend for MpvBackend {
         )
     }
 
+    fn remove_queue_entry(&self, index: usize) -> Result<(), String> {
+        self.execute_command(
+            "playlist-remove",
+            &[&index.to_string()],
+            "remove queue entry",
+        )
+    }
+
     fn pause_immediately(&self) -> Result<(), String> {
         self.set_paused(true, "pause playback immediately")
     }

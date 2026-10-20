@@ -164,6 +164,10 @@ impl AudioBackend for FadingAudioBackend {
         self.inner.move_queue_entry(from, to)
     }
 
+    fn remove_queue_entry(&self, index: usize) -> Result<(), String> {
+        self.inner.remove_queue_entry(index)
+    }
+
     fn pause_immediately(&self) -> Result<(), String> {
         self.cancel()?;
         self.inner.pause_immediately()
@@ -464,6 +468,10 @@ mod tests {
         }
 
         fn move_queue_entry(&self, _from: usize, _to: usize) -> Result<(), String> {
+            Ok(())
+        }
+
+        fn remove_queue_entry(&self, _index: usize) -> Result<(), String> {
             Ok(())
         }
 

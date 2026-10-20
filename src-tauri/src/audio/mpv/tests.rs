@@ -290,8 +290,61 @@ fn safe_wrapper_preserves_volume_pause_and_seek_commands() {
     assert!(backend.status().paused);
     playback.seek(12.5).unwrap();
     let deadline = Instant::now() + Duration::from_secs(2);
-    while backend.status().position_seconds != 12.5 && Instant::now() < deadline {
+    // MPV's audio clock can differ by one output buffer after resume/pause.
+    while (backend.status().position_seconds - 12.5).abs() > 0.25 && Instant::now() < deadline {
         std::thread::sleep(Duration::from_millis(5));
     }
-    assert_eq!(backend.status().position_seconds, 12.5);
+    assert!((backend.status().position_seconds - 12.5).abs() <= 0.25);
+}
+
+#[test]
+#[allow(clippy::float_cmp)]
+fn removing_native_entries_preserves_duplicates_and_advances_current_song() {
+    let audio = SilentAudio::new();
+    let (backend, playback) = player();
+    let songs = vec![song("duplicate one"), song("duplicate two"), song("next")];
+    let generation = playback.begin_loading(songs.clone(), 1).unwrap();
+    playback
+        .load(
+            generation,
+            &PreparedQueue::new(songs, vec![audio.source(); 3]).unwrap(),
+            1,
+            Some(12.5),
+        )
+        .unwrap();
+    let before = playback.queue_snapshot().unwrap();
+    let removed = before.entry_ids.first().unwrap();
+    playback.remove_entry(removed).unwrap();
+    let after = playback.queue_snapshot().unwrap();
+    assert_eq!(after.songs.len(), 2);
+    assert_eq!(after.status.current_song.unwrap().title, "duplicate two");
+    assert_eq!(after.entry_ids.first(), before.entry_ids.get(1));
+    assert!(playback.remove_entry(removed).is_err());
+    assert_eq!(backend.playlist().unwrap().entries.len(), 2);
+
+    playback
+        .remove_entry(after.entry_ids.first().unwrap())
+        .unwrap();
+    let deadline = Instant::now() + Duration::from_secs(3);
+    loop {
+        let snapshot = playback.queue_snapshot().unwrap();
+        if snapshot
+            .status
+            .current_song
+            .as_ref()
+            .is_some_and(|song| song.title == "next")
+        {
+            assert_eq!(snapshot.songs.len(), 1);
+            break;
+        }
+        assert!(
+            Instant::now() < deadline,
+            "MPV did not advance after removing current entry"
+        );
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    let remaining = playback.queue_snapshot().unwrap().entry_ids.remove(0);
+    playback.remove_entry(&remaining).unwrap();
+    assert!(playback.queue_snapshot().unwrap().songs.is_empty());
+    assert!(backend.playlist().unwrap().entries.is_empty());
 }

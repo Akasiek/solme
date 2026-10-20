@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { GripVertical } from "@lucide/vue";
+import { ref } from "vue";
+import SongContextMenu from "@/components/SongContextMenu/SongContextMenu.vue";
+import { GripVertical, Ellipsis } from "@lucide/vue";
 import { invoke } from "@tauri-apps/api/core";
 import MissingCoverImage from "@/components/Album/MissingCoverImage.vue";
 import ArtworkImage from "@/components/ArtworkImage.vue";
@@ -8,6 +10,7 @@ import { formatTime } from "@/utils/format";
 
 const props = defineProps<{
   song: CachedSong;
+  entryId: string;
   index: number;
   songCount: number;
   isCurrent: boolean;
@@ -16,6 +19,8 @@ const props = defineProps<{
   dropAfter: boolean;
   reorderDisabled: boolean;
 }>();
+
+const contextMenu = ref<{ x: number; y: number }>();
 
 const emit = defineEmits<{
   reorderStart: [event: PointerEvent, index: number];
@@ -34,6 +39,7 @@ const moveWithKeyboard = (event: KeyboardEvent) => {
 <template>
   <div
     :data-queue-index="index"
+    @contextmenu.prevent="contextMenu = { x: $event.clientX, y: $event.clientY }"
     class="relative flex w-full min-w-0 items-center rounded-md font-sans transition-colors"
     :class="[
       isCurrent
@@ -85,6 +91,24 @@ const moveWithKeyboard = (event: KeyboardEvent) => {
       </span>
       <span class="text-right text-xs text-zinc-500 tabular-nums">{{ formatTime(song.durationSeconds) }}</span>
     </button>
+    <button
+      type="button"
+      :aria-label="`${song.title} actions`"
+      class="mr-1 grid size-7 shrink-0 place-items-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+      @click="contextMenu = { x: $event.clientX, y: $event.clientY }"
+    >
+      <Ellipsis class="size-4" aria-hidden="true" />
+    </button>
+    <SongContextMenu
+      variant="queue"
+      :song="song"
+      :entry-id="entryId"
+      :open="Boolean(contextMenu)"
+      :x="contextMenu?.x ?? 0"
+      :y="contextMenu?.y ?? 0"
+      :disabled="reorderDisabled"
+      @close="contextMenu = undefined"
+    />
     <span v-if="dropAfter" class="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 rounded bg-accent" />
   </div>
 </template>

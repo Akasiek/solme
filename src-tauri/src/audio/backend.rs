@@ -15,6 +15,7 @@ pub trait AudioBackend: Send + Sync {
     fn append_source(&self, source: &str) -> Result<(), String>;
     /// Move an entry to its final zero-based index without restarting playback.
     fn move_queue_entry(&self, from: usize, to: usize) -> Result<(), String>;
+    fn remove_queue_entry(&self, index: usize) -> Result<(), String>;
     fn pause_immediately(&self) -> Result<(), String>;
     fn pause(&self) -> Result<(), String>;
     fn resume(&self) -> Result<(), String>;

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { Play } from "@lucide/vue";
 import { ref } from "vue";
-import ContextMenu from "@/components/ContextMenu";
+import SongContextMenu from "@/components/SongContextMenu/SongContextMenu.vue";
 import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 import { CachedSong } from "@/types.ts";
 import { formatTime } from "@/utils/format.ts";
@@ -74,17 +74,14 @@ const playFromRow = (event: MouseEvent) => {
       <LibraryItemAnnotations :item="song" />
     </div>
 
-    <ContextMenu
+    <SongContextMenu
+      variant="library"
+      :song="song"
       :open="Boolean(contextMenu)"
       :x="contextMenu?.x ?? 0"
       :y="contextMenu?.y ?? 0"
-      :aria-label="`${song.title} actions`"
+      :disabled="isLoading"
       @close="contextMenu = undefined"
-    >
-      <div class="w-52 p-1">
-        <p class="mb-2 truncate text-xs font-medium text-zinc-400" :title="song.title">{{ song.title }}</p>
-        <LibraryItemAnnotations :item="song" />
-      </div>
-    </ContextMenu>
+    />
   </div>
 </template>

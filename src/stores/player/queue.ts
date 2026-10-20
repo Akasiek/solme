@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { invoke, type InvokeArgs } from "@tauri-apps/api/core";
 import { ref } from "vue";
 import type { CachedSong, PlayerStatus } from "@/types.ts";
 
@@ -52,18 +52,28 @@ export function createPlayerQueue(applyStatus: (status: PlayerStatus) => void) {
     return refreshPromise;
   };
 
-  const moveQueueEntry = async (from: number, to: number, revision: string, currentIndex: number) => {
+  const invokeQueueCommand = async (command: string, args: InvokeArgs): Promise<void> => {
     try {
-      await invoke("player_move_queue_entry", {
-        from,
-        to,
-        expectedRevision: revision,
-        expectedCurrentIndex: currentIndex < 0 ? null : currentIndex,
-      });
+      await invoke(command, args);
     } finally {
       await refreshQueue();
     }
   };
+
+  const moveQueueEntry = (from: number, to: number, revision: string, currentIndex: number) =>
+    invokeQueueCommand("player_move_queue_entry", {
+      from,
+      to,
+      expectedRevision: revision,
+      expectedCurrentIndex: currentIndex < 0 ? null : currentIndex,
+    });
+
+  const queueSong = (song: CachedSong, next: boolean) =>
+    invokeQueueCommand("player_queue_song", { albumId: song.albumId, songId: song.remoteId, next });
+
+  const playQueueEntry = (entryId: string) => invokeQueueCommand("player_play_queue_entry", { entryId });
+
+  const removeQueueEntry = (entryId: string) => invokeQueueCommand("player_remove_queue_entry", { entryId });
 
   return {
     queue,
@@ -71,6 +81,9 @@ export function createPlayerQueue(applyStatus: (status: PlayerStatus) => void) {
     queueEntryIds,
     queueStatus,
     moveQueueEntry,
+    queueSong,
+    playQueueEntry,
+    removeQueueEntry,
     isQueueLoading,
     queueError,
     refreshQueue,

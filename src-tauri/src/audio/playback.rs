@@ -284,6 +284,36 @@ impl Audio {
         Ok(())
     }
 
+    fn entry_index(&self, queue: &mut PlayerQueue, entry_id: &str) -> Result<usize, String> {
+        if queue.pending().is_some() {
+            return Err("The queue is still loading".to_string());
+        }
+        self.native_snapshot(queue)?
+            .entry_ids
+            .iter()
+            .position(|id| id == entry_id)
+            .ok_or_else(|| "This song is no longer in the queue".to_string())
+    }
+
+    pub fn play_entry(&self, entry_id: &str) -> Result<(), String> {
+        let _mutation = self.mutation()?;
+        let mut queue = self.queue()?;
+        let index = self.entry_index(&mut queue, entry_id)?;
+
+        self.inner.backend.skip_to_queue_position(index)?;
+        self.inner.backend.resume()
+    }
+
+    pub fn remove_entry(&self, entry_id: &str) -> Result<(), String> {
+        let _mutation = self.mutation()?;
+        let mut queue = self.queue()?;
+        let index = self.entry_index(&mut queue, entry_id)?;
+        let result = self.inner.backend.remove_queue_entry(index);
+        let reconciled = self.native_snapshot(&mut queue);
+
+        result.and(reconciled.map(|_| ()))
+    }
+
     fn control(
         &self,
         command: impl FnOnce(&dyn AudioBackend) -> Result<(), String>,

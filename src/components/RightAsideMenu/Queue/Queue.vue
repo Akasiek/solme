@@ -97,6 +97,7 @@ onMounted(() => {
         v-for="(song, index) in queue"
         :key="playerStore.queueEntryIds[index]"
         :song="song"
+        :entry-id="playerStore.queueEntryIds[index]"
         :index="index"
         :isCurrent="index === currentIndex"
         :songCount="queue.length"
