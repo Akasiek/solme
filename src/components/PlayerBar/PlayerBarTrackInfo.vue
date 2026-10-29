@@ -1,19 +1,32 @@
 <script setup lang="ts">
 import { SquareArrowOutUpRight } from "@lucide/vue";
 import { storeToRefs } from "pinia";
+import { ref, watch } from "vue";
 import { CachedSong } from "@/types.ts";
 import ArtworkImage from "@/components/ArtworkImage.vue";
+import SongContextMenu from "@/components/SongContextMenu/SongContextMenu.vue";
 import { useLayoutStore } from "@/stores/layout.ts";
 
-defineProps<{ currentSong: CachedSong }>();
+const props = defineProps<{ currentSong: CachedSong }>();
+const contextMenu = ref<{ x: number; y: number }>();
 
 const layoutStore = useLayoutStore();
 const { toggleBigArtwork } = layoutStore;
 const { isBigArtworkShown, isLeftAsideCollapsed } = storeToRefs(layoutStore);
+
+watch(
+  () => props.currentSong.remoteId,
+  () => {
+    contextMenu.value = undefined;
+  },
+);
 </script>
 
 <template>
-  <div class="flex h-16 min-w-0 items-center gap-4">
+  <div
+    class="flex h-16 min-w-0 items-center gap-4"
+    @contextmenu.prevent="contextMenu = { x: $event.clientX, y: $event.clientY }"
+  >
     <Transition
       appear
       enter-active-class="transition duration-300 ease-out"
@@ -52,5 +65,13 @@ const { isBigArtworkShown, isLeftAsideCollapsed } = storeToRefs(layoutStore);
         {{ currentSong.artistName }}
       </RouterLink>
     </div>
+    <SongContextMenu
+      variant="library"
+      :song="currentSong"
+      :open="Boolean(contextMenu)"
+      :x="contextMenu?.x ?? 0"
+      :y="contextMenu?.y ?? 0"
+      @close="contextMenu = undefined"
+    />
   </div>
 </template>
