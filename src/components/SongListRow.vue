@@ -138,6 +138,7 @@ function playFromRow(event: MouseEvent) {
       :y="contextMenu?.y ?? 0"
       :disabled="isPlaying"
       @close="contextMenu = undefined"
+      @navigate="emit('select')"
     />
   </div>
 </template>

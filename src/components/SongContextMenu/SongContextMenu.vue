@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
-import { ListEnd, ListStart, Play, Trash2 } from "@lucide/vue";
+import { Disc3, ListEnd, ListStart, Play, Trash2, UserRound } from "@lucide/vue";
 import { computed, ref, watch, type Component } from "vue";
+import { isNavigationFailure, NavigationFailureType, useRouter, type RouteLocationRaw } from "vue-router";
 import ContextMenu from "@/components/ContextMenu";
 import { LibraryItemAnnotations } from "@/components/LibraryItemAnnotations";
 import type { CachedSong } from "@/types";
@@ -28,59 +29,102 @@ const props = defineProps<{
   y: number;
   disabled?: boolean;
 }>();
-const emit = defineEmits<{ close: [] }>();
+const emit = defineEmits<{ close: []; navigate: [] }>();
 const player = usePlayerStore();
+const router = useRouter();
 const busy = ref(false);
 const error = ref<string | null>(null);
 
 const queueEntryId = () => {
-  if (!props.entryId) throw new Error("This song is no longer in the queue");
+  if (!props.entryId) {
+    throw new Error("This song is no longer in the queue");
+  }
   return props.entryId;
 };
 
-const menuConfig = computed<Record<MenuVariant, MenuItem[]>>(() => ({
-  library: [
-    {
-      id: "play",
-      label: "Play now",
-      icon: Play,
-      action: () => invoke("player_play_album", { albumId: props.song.albumId, startSongId: props.song.remoteId }),
-      disabled: Boolean(props.disabled),
-    },
-    {
-      id: "queue-next",
-      label: "Queue next",
-      icon: ListStart,
-      action: () => player.queueSong(props.song, true),
-      disabled: player.status?.state === "loading",
-    },
-    {
-      id: "queue-last",
-      label: "Queue last",
-      icon: ListEnd,
-      action: () => player.queueSong(props.song, false),
-      disabled: player.status?.state === "loading",
-    },
-  ],
-  queue: [
-    {
-      id: "play",
-      label: "Play now",
-      icon: Play,
-      action: () => player.playQueueEntry(queueEntryId()),
-      disabled: Boolean(props.disabled) || !props.entryId,
-    },
-    {
-      id: "remove",
-      label: "Remove from queue",
-      icon: Trash2,
-      action: () => player.removeQueueEntry(queueEntryId()),
-      disabled: Boolean(props.disabled) || !props.entryId,
-      destructive: true,
+const menuConfig = computed<Record<MenuVariant, MenuItem[]>>(() => {
+  const navigationItems = getNavigationItems();
+
+  return {
+    library: [
+      {
+        id: "play",
+        label: "Play now",
+        icon: Play,
+        action: () => invoke("player_play_album", { albumId: props.song.albumId, startSongId: props.song.remoteId }),
+        disabled: Boolean(props.disabled),
+      },
+      {
+        id: "queue-next",
+        label: "Queue next",
+        icon: ListStart,
+        action: () => player.queueSong(props.song, true),
+        disabled: player.status?.state === "loading",
+      },
+      {
+        id: "queue-last",
+        label: "Queue last",
+        icon: ListEnd,
+        action: () => player.queueSong(props.song, false),
+        disabled: player.status?.state === "loading",
+      },
+      ...navigationItems,
+    ],
+    queue: [
+      {
+        id: "play",
+        label: "Play now",
+        icon: Play,
+        action: () => player.playQueueEntry(queueEntryId()),
+        disabled: Boolean(props.disabled) || !props.entryId,
+      },
+      {
+        id: "remove",
+        label: "Remove from queue",
+        icon: Trash2,
+        action: () => player.removeQueueEntry(queueEntryId()),
+        disabled: Boolean(props.disabled) || !props.entryId,
+        destructive: true,
+        separatorBefore: true,
+      },
+      ...navigationItems,
+    ],
+  };
+});
+
+function getNavigationItems() {
+  const navigationItems: MenuItem[] = [];
+  const artistId = props.song.artistId;
+
+  if (artistId) {
+    navigationItems.push({
+      id: "go-to-artist",
+      label: "Go to artist",
+      icon: UserRound,
+      action: () => navigate({ name: "artist", params: { artistId } }),
+      disabled: false,
       separatorBefore: true,
-    },
-  ],
-}));
+    });
+  }
+
+  navigationItems.push({
+    id: "go-to-album",
+    label: "Go to album",
+    icon: Disc3,
+    action: () => navigate({ name: "album", params: { albumId: props.song.albumId } }),
+    disabled: false,
+    separatorBefore: navigationItems.length === 0,
+  });
+  return navigationItems;
+}
+
+async function navigate(to: RouteLocationRaw) {
+  const failure = await router.push(to);
+  if (failure && !isNavigationFailure(failure, NavigationFailureType.duplicated)) {
+    throw failure;
+  }
+  emit("navigate");
+}
 
 watch(
   () => props.open,
@@ -90,7 +134,9 @@ watch(
 );
 
 async function run(action: () => Promise<unknown>) {
-  if (busy.value) return;
+  if (busy.value) {
+    return;
+  }
   busy.value = true;
   error.value = null;
   try {
