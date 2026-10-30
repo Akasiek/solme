@@ -88,7 +88,7 @@ onMounted(() => {
     </p>
     <p class="sr-only" role="status">{{ announcement }}</p>
 
-    <div v-if="queue.length > 0" ref="queueList" class="min-h-0 flex-1 overflow-y-auto px-2 py-3">
+    <div v-if="queue.length > 0" ref="queueList" class="min-h-0 flex-1 overflow-y-auto px-0 py-3">
       <p v-if="queueError" class="mx-2 mb-2 rounded bg-red-950/40 px-3 py-2 font-sans text-xs text-red-300">
         The queue could not be refreshed.
       </p>

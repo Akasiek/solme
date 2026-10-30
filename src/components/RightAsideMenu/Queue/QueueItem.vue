@@ -56,7 +56,7 @@ const moveWithKeyboard = (event: KeyboardEvent) => {
       :aria-label="`Reorder ${song.title}, position ${index + 1} of ${songCount}`"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       title="Drag to reorder, or use Alt + Arrow Up / Down"
-      class="ml-1 grid w-7 shrink-0 cursor-grab touch-none place-items-center self-stretch rounded text-zinc-500 select-none hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
+      class="ml-1 grid w-5 shrink-0 cursor-grab touch-none place-items-center self-stretch rounded text-zinc-500 select-none hover:text-zinc-200 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none active:cursor-grabbing disabled:cursor-default disabled:opacity-30"
       @pointerdown="emit('reorderStart', $event, index)"
       @lostpointercapture="emit('reorderCancel')"
       @keydown="moveWithKeyboard"
@@ -69,7 +69,7 @@ const moveWithKeyboard = (event: KeyboardEvent) => {
       type="button"
       @click="invoke('player_skip_to_queue_position', { position: index })"
       :aria-current="isCurrent ? 'true' : undefined"
-      class="grid min-w-0 flex-1 grid-cols-[2.75rem_minmax(0,1fr)_3rem] items-center rounded-md py-2 pr-2 text-left transition-colors focus-visible:bg-zinc-800 focus-visible:outline-none"
+      class="grid min-w-0 flex-1 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 rounded-md py-2 pr-2 text-left transition-colors focus-visible:bg-zinc-800 focus-visible:outline-none"
     >
       <span class="size-9 overflow-hidden rounded bg-zinc-900">
         <ArtworkImage
@@ -91,13 +91,14 @@ const moveWithKeyboard = (event: KeyboardEvent) => {
       </span>
       <span class="text-right text-xs text-zinc-500 tabular-nums">{{ formatTime(song.durationSeconds) }}</span>
     </button>
+
     <button
       type="button"
       :aria-label="`${song.title} actions`"
-      class="mr-1 grid size-7 shrink-0 place-items-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
+      class="mr-1 grid size-5 h-full shrink-0 place-items-center rounded text-zinc-500 hover:bg-zinc-800 hover:text-zinc-100 focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
       @click="contextMenu = { x: $event.clientX, y: $event.clientY }"
     >
-      <Ellipsis class="size-4" aria-hidden="true" />
+      <Ellipsis class="size-3.5" aria-hidden="true" />
     </button>
     <SongContextMenu
       variant="queue"
