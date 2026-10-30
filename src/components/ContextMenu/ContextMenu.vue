@@ -12,13 +12,19 @@ const emit = defineEmits<{ close: [] }>();
 const menu = ref<HTMLElement>();
 const position = ref({ left: 0, top: 0 });
 const viewportPadding = 8;
+let previousFocus: HTMLElement | null = null;
 
 const close = () => {
-  if (props.open) emit("close");
+  if (!props.open) {
+    return;
+  }
+  emit("close");
 };
 
 const updatePosition = async () => {
-  if (!props.open) return;
+  if (!props.open) {
+    return;
+  }
 
   await nextTick();
   const width = menu.value?.offsetWidth ?? 0;
@@ -29,7 +35,8 @@ const updatePosition = async () => {
     top: Math.max(viewportPadding, Math.min(props.y, window.innerHeight - height - viewportPadding)),
   };
 
-  menu.value?.focus({ preventScroll: true });
+  const firstItem = menu.value?.querySelector<HTMLElement>('[role="menuitem"]:not(:disabled)');
+  (firstItem ?? menu.value)?.focus({ preventScroll: true });
 };
 
 const closeOnOutsidePointer = (event: PointerEvent) => {
@@ -40,6 +47,33 @@ const closeOnEscape = (event: KeyboardEvent) => {
   if (event.key === "Escape") close();
 };
 
+const navigate = (event: KeyboardEvent) => {
+  if (event.key === "Tab") {
+    close();
+    return;
+  }
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  const items = Array.from(menu.value?.querySelectorAll<HTMLElement>('[role="menuitem"]:not(:disabled)') ?? []);
+  if (!items.length) return;
+  event.preventDefault();
+  const current = items.indexOf(document.activeElement as HTMLElement);
+  let next = current + 1;
+  if (event.key === "ArrowUp") next = current - 1;
+  if (event.key === "Home") next = 0;
+  if (event.key === "End") next = items.length - 1;
+  items[(next + items.length) % items.length]?.focus();
+};
+
+watch(
+  () => props.open,
+  (open) => {
+    if (open) {
+      previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    } else if (previousFocus?.isConnected) {
+      previousFocus.focus({ preventScroll: true });
+    }
+  },
+);
 watch(() => [props.open, props.x, props.y], updatePosition);
 
 onMounted(() => {
@@ -67,7 +101,9 @@ onBeforeUnmount(() => {
       :aria-label="ariaLabel"
       class="fixed z-50 min-w-48 rounded-md border border-zinc-700 bg-zinc-900 p-2 font-sans text-zinc-100 shadow-2xl shadow-black/50 outline-none"
       :style="{ left: `${position.left}px`, top: `${position.top}px` }"
-      @contextmenu.prevent
+      @contextmenu.prevent.stop
+      @click.stop
+      @keydown="navigate"
     >
       <slot :close="close" />
     </div>

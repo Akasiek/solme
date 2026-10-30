@@ -641,11 +641,6 @@ impl MusicServer for FailoverMusicServer {
             .await
     }
 
-    async fn public_album_artwork(&self, album_id: &str) -> Result<Option<String>, String> {
-        self.with_failover(|server| async move { server.public_album_artwork(album_id).await })
-            .await
-    }
-
     async fn artist_artwork(
         &self,
         artist_id: &str,

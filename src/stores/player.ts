@@ -9,7 +9,7 @@ import type { PlayerStatus } from "@/types.ts";
 
 export const usePlayerStore = defineStore("player", () => {
   const { updateStatus, ...playbackState } = createPlayerPlayback();
-  const { refreshQueue, ...queueState } = createPlayerQueue();
+  const { refreshQueue, ...queueState } = createPlayerQueue((status) => applyStatus(status));
   const { loadLyrics, prefetchLyrics, ...lyricsState } = createPlayerLyrics();
   const isListening = ref(false);
   let startPromise: Promise<void> | null = null;

@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use tauri::State;
 
-use crate::{
-    audio::{PlayerService, PlayerStatus},
-    library::CachedSong,
-};
+use crate::audio::{PlayerService, PlayerStatus, QueueSnapshot};
 
 #[tauri::command]
 pub async fn player_play_album(
@@ -94,6 +91,45 @@ pub fn get_player_status(player: State<'_, Arc<PlayerService>>) -> Result<Player
 }
 
 #[tauri::command]
-pub fn get_player_queue(player: State<'_, Arc<PlayerService>>) -> Result<Vec<CachedSong>, String> {
-    player.queue()
+pub fn get_player_queue(player: State<'_, Arc<PlayerService>>) -> Result<QueueSnapshot, String> {
+    player.queue_snapshot()
+}
+
+#[tauri::command]
+pub async fn player_move_queue_entry(
+    from: usize,
+    to: usize,
+    expected_revision: String,
+    expected_current_index: Option<usize>,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player
+        .move_queue_entry(from, to, &expected_revision, expected_current_index)
+        .await
+}
+
+#[tauri::command]
+pub async fn player_queue_song(
+    album_id: String,
+    song_id: String,
+    next: bool,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.queue_song(&album_id, &song_id, next).await
+}
+
+#[tauri::command]
+pub async fn player_play_queue_entry(
+    entry_id: String,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.play_queue_entry(&entry_id).await
+}
+
+#[tauri::command]
+pub async fn player_remove_queue_entry(
+    entry_id: String,
+    player: State<'_, Arc<PlayerService>>,
+) -> Result<(), String> {
+    player.remove_queue_entry(&entry_id).await
 }

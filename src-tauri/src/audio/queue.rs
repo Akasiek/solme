@@ -1,58 +1,110 @@
-use std::sync::{Arc, Mutex, MutexGuard};
+use std::collections::{HashMap, HashSet};
 
+use super::{backend::AudioPlaylist, models::PlayerStatus};
 use crate::library::CachedSong;
 
-#[derive(Clone, Default)]
+/// Metadata and temporary load intent. Native playlist order belongs to MPV;
+/// playback commands and synchronization belong to Audio.
+#[derive(Default)]
 pub(super) struct PlayerQueue {
-    songs: Arc<Mutex<Vec<CachedSong>>>,
+    metadata: HashMap<i64, CachedSong>,
+    unbound: Option<(String, CachedSong)>,
+    pending: Option<PendingLoad>,
+    generation: u64,
+}
+
+pub(super) struct PendingLoad {
+    pub songs: Vec<CachedSong>,
+    pub start_index: usize,
+    pub generation: u64,
+}
+
+#[derive(Clone, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct QueueSnapshot {
+    pub songs: Vec<CachedSong>,
+    pub entry_ids: Vec<String>,
+    pub revision: String,
+    pub status: PlayerStatus,
 }
 
 impl PlayerQueue {
-    fn lock(&self) -> Result<MutexGuard<'_, Vec<CachedSong>>, String> {
-        self.songs
-            .lock()
-            .map_err(|_| "Player queue lock was poisoned".to_string())
+    pub fn pending(&self) -> Option<&PendingLoad> {
+        self.pending.as_ref()
     }
 
-    pub fn snapshot(&self) -> Result<Vec<CachedSong>, String> {
-        Ok(self.lock()?.clone())
-    }
-
-    pub fn current_and_len(
-        &self,
-        index: Option<usize>,
-    ) -> Result<(Option<CachedSong>, usize), String> {
-        let songs = self.lock()?;
-        let current_song = index.and_then(|index| songs.get(index)).cloned();
-        Ok((current_song, songs.len()))
-    }
-
-    pub fn len(&self) -> Result<usize, String> {
-        Ok(self.lock()?.len())
-    }
-
-    pub fn replace(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        *self.lock()? = songs;
-        Ok(())
-    }
-
-    pub fn append(&self, songs: Vec<CachedSong>) -> Result<(), String> {
-        self.lock()?.extend(songs);
-        Ok(())
-    }
-
-    pub fn insert(&self, position: usize, songs: Vec<CachedSong>) -> Result<(), String> {
-        let mut queue = self.lock()?;
-        if position > queue.len() {
-            return Err("Queue insertion position is out of bounds".to_string());
+    pub fn begin_loading(
+        &mut self,
+        songs: Vec<CachedSong>,
+        start_index: usize,
+    ) -> Result<u64, String> {
+        if start_index >= songs.len() {
+            return Err("Queue start index is out of bounds".to_string());
         }
-        queue.splice(position..position, songs);
-        Ok(())
+
+        self.generation += 1;
+        let generation = self.generation;
+
+        self.pending = Some(PendingLoad {
+            songs,
+            start_index,
+            generation,
+        });
+
+        Ok(generation)
     }
 
-    pub fn clear(&self) -> Result<(), String> {
-        self.lock()?.clear();
-        Ok(())
+    pub fn cancel_loading(&mut self, generation: u64) {
+        if self
+            .pending
+            .as_ref()
+            .is_some_and(|pending| pending.generation == generation)
+        {
+            self.finish_loading();
+        }
+    }
+
+    pub fn finish_loading(&mut self) {
+        self.pending = None;
+    }
+
+    pub fn expect_entry(&mut self, source: &str, song: CachedSong) {
+        self.unbound = Some((source.to_string(), song));
+    }
+
+    pub fn resolve(&mut self, playlist: &AudioPlaylist) -> Result<Vec<CachedSong>, String> {
+        for entry in &playlist.entries {
+            if self.metadata.contains_key(&entry.id) {
+                continue;
+            }
+            let song = match self.unbound.take() {
+                Some((source, song)) if source == entry.source => song,
+                candidate => {
+                    self.unbound = candidate;
+                    return Err(format!("Unrecognized playlist entry {}", entry.id));
+                }
+            };
+            self.metadata.insert(entry.id, song);
+        }
+
+        let live = playlist
+            .entries
+            .iter()
+            .map(|entry| entry.id)
+            .collect::<HashSet<_>>();
+        self.metadata.retain(|id, _| live.contains(id));
+
+        self.unbound = None;
+        playlist
+            .entries
+            .iter()
+            .map(|entry| {
+                self.metadata
+                    .get(&entry.id)
+                    .cloned()
+                    .ok_or_else(|| format!("Missing metadata for playlist entry {}", entry.id))
+            })
+            .collect()
     }
 }
 
@@ -69,81 +121,25 @@ impl PreparedQueue {
         if songs.len() != sources.len() {
             return Err("Queue metadata and sources are misaligned".to_string());
         }
-
         Ok(Self { songs, sources })
     }
 
-    pub fn sources(&self) -> &[String] {
-        &self.sources
-    }
-
-    pub fn into_songs(self) -> Vec<CachedSong> {
+    pub fn selected(&self, index: usize) -> Result<(&CachedSong, &str), String> {
         self.songs
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::{PlayerQueue, PreparedQueue};
-    use crate::library::CachedSong;
-
-    #[test]
-    fn rejects_misaligned_metadata_and_sources() {
-        let error = PreparedQueue::new(
-            vec![song("song-1"), song("song-2")],
-            vec!["source-1".to_string()],
-        )
-        .err()
-        .unwrap();
-
-        assert_eq!(error, "Queue metadata and sources are misaligned");
+            .get(index)
+            .zip(self.sources.get(index))
+            .map(|(song, source)| (song, source.as_str()))
+            .ok_or_else(|| "Queue start index is out of bounds".to_string())
     }
 
-    #[test]
-    fn keeps_current_song_and_length_in_one_snapshot() {
-        let queue = PlayerQueue::default();
-        queue.replace(vec![song("song-1"), song("song-2")]).unwrap();
-
-        let (current_song, length) = queue.current_and_len(Some(1)).unwrap();
-
-        assert_eq!(current_song.unwrap().remote_id, "song-2");
-        assert_eq!(length, 2);
+    pub fn entries(&self) -> impl Iterator<Item = (&CachedSong, &str)> {
+        self.songs
+            .iter()
+            .zip(&self.sources)
+            .map(|(song, source)| (song, source.as_str()))
     }
 
-    #[test]
-    fn inserts_songs_at_requested_position() {
-        let queue = PlayerQueue::default();
-        queue.replace(vec![song("song-1"), song("song-4")]).unwrap();
-
-        queue
-            .insert(1, vec![song("song-2"), song("song-3")])
-            .unwrap();
-
-        assert_eq!(
-            queue
-                .snapshot()
-                .unwrap()
-                .iter()
-                .map(|song| song.remote_id.as_str())
-                .collect::<Vec<_>>(),
-            ["song-1", "song-2", "song-3", "song-4"]
-        );
-    }
-
-    fn song(id: &str) -> CachedSong {
-        CachedSong {
-            remote_id: id.to_string(),
-            album_id: "album-1".to_string(),
-            artist_id: Some("artist-1".to_string()),
-            title: id.to_string(),
-            artist_name: "Artist".to_string(),
-            album_name: "Album".to_string(),
-            artwork_path: None,
-            track_number: Some(1),
-            disc_number: Some(1),
-            duration_seconds: 180,
-            favorite: false,
-            rating: None,
-        }
+    pub fn into_entries(self) -> impl Iterator<Item = (CachedSong, String)> {
+        self.songs.into_iter().zip(self.sources)
     }
 }
